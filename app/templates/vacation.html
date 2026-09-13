@@ -3,7 +3,7 @@
 {% block content %}
 <article class="vac">
   <header class="vac__head">
-    <p class="crumb"><a href="/">← Vacations</a></p>
+    <p class="crumb"><a href="/">← Bulletin météo</a></p>
     <h1>{{ vacation.title or (vacation.started_at | when) }}</h1>
     <p class="meta">
       {% if vacation.is_buddy %}<span class="badge">Buddy call</span>{% endif %}

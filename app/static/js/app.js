@@ -4,6 +4,7 @@
 
   document.querySelectorAll(".js-countdown[data-iso]").forEach((el) => {
     const target = new Date(el.dataset.iso);
+    const pad = (n) => String(n).padStart(2, "0");
     const tick = () => {
       const ms = target.getTime() - Date.now();
       if (ms <= 0) {
@@ -14,10 +15,11 @@
       const d = Math.floor(s / 86400);
       const h = Math.floor((s % 86400) / 3600);
       const m = Math.floor((s % 3600) / 60);
-      el.textContent = (d ? `${d} j ` : "") + `${String(h).padStart(2, "0")} h ${String(m).padStart(2, "0")} min`;
+      const sec = s % 60;
+      el.textContent = (d ? `${d} j ` : "") + `${pad(h)}:${pad(m)}:${pad(sec)}`;
     };
     tick();
-    setInterval(tick, 30000);
+    setInterval(tick, 1000);
   });
 
   const hasToken = !!token();

@@ -1,60 +1,93 @@
 {% extends "base.html" %}
 {% block title %} · Flotte &amp; SDR{% endblock %}
-{% block extra_head %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-{% endblock %}
+{% block body_class %}globe-page{% endblock %}
 {% block content %}
-<section class="intro">
-  <h1>Position moyenne de la flotte</h1>
-  <p>
-    Les KiwiSDR du bulletin sont ceux les plus proches de ce centroïde (ce que la flotte entend).
-    Les accusés s’écoutent aussi depuis un Kiwi en France et un vers Tahiti.
-    Le <strong>buddy call</strong> ({{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz à {{ buddy_time_utc }} TU)
-    vise le centroïde des skippers choisis, avec des Kiwi en NVIS et en saut 1 hop — pas seulement le plus proche.
-  </p>
-</section>
+<div class="globe-app">
+  <div class="globe-stage">
+    <div id="ggr-globe" class="ggr-globe" role="region" aria-label="Globe 3D flotte GGR et KiwiSDR"></div>
+  </div>
+  <aside class="globe-rail" id="globe-dock">
+    <header class="globe-rail__brand">
+      <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
+      <nav class="globe-rail__nav">
+        <a href="/">Bulletin météo</a>
+        <a href="/flotte" aria-current="page">Flotte</a>
+        <a href="/reglages">Réglages</a>
+        <a href="/a-propos">À propos</a>
+      </nav>
+    </header>
 
-<div class="fleet-box">
-  <p class="qrg__v">{{ fleet.fmt }}</p>
-  <p class="meta">{{ fleet.label }} · source {{ fleet.source }} · {{ fleet.n_boats }} bateaux</p>
-  {% if fleet.warning %}<p class="err">{{ fleet.warning }}</p>{% endif %}
-</div>
-{% if buddy_aim %}
-<div class="fleet-box">
-  <p class="qrg__v">{{ buddy_aim.fmt }}</p>
-  <p class="meta">{{ buddy_aim.label }} · buddy call {{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz</p>
-  {% if buddy_aim.warning %}<p class="err">{{ buddy_aim.warning }}</p>{% endif %}
-</div>
-{% endif %}
+    <div class="globe-rail__qrg" aria-label="Fréquences">
+      <div class="qrg">
+        <span class="qrg__k">TX {{ club_callsign }}</span>
+        <span class="qrg__v">{{ tx_mhz }} MHz</span>
+        <span class="qrg__h">± {{ qrg_tolerance_khz }} kHz · {{ time_utc }} TU</span>
+      </div>
+      <div class="qrg">
+        <span class="qrg__k">Prochain bulletin</span>
+        <span class="qrg__v js-countdown" id="countdown" data-iso="{{ bulletin_iso }}">{{ bulletin_label }} TU</span>
+        {% if recording %}<span class="live">Enregistrement</span>{% endif %}
+      </div>
+      <div class="qrg">
+        <span class="qrg__k">Buddy call {{ buddy_time_utc }} TU</span>
+        <span class="qrg__v">{{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz</span>
+        <span class="qrg__h">{{ buddy_skippers_short }}{% if buddy_include_fleet %} + flotte{% endif %}</span>
+      </div>
+      <div class="qrg">
+        <span class="qrg__k">Prochain buddy call</span>
+        <span class="qrg__v js-countdown" data-iso="{{ buddy_iso }}">{{ buddy_label }} TU</span>
+      </div>
+    </div>
 
-<figure class="ggr-map-fig">
-  <div id="ggr-map" class="ggr-map" role="region" aria-label="Carte des bateaux GGR et des KiwiSDR"></div>
-  <figcaption class="ggr-map-cap">
-    Vue type <strong>Yellowbrick</strong> : bateaux (cap) et KiwiSDR retenus.
-    Noms basculables. <a href="https://yb.tl/{{ fleet.race_id or 'ggr2026' }}" rel="noreferrer">Tracker officiel</a>
-  </figcaption>
-  <ul class="ggr-map-legend">
-    <li><span class="dot dot--boat"></span> Bateau (cap)</li>
-    <li><span class="dot dot--cent"></span> Centroïde flotte</li>
-    <li><span class="dot dot--buddy"></span> Centroïde buddy</li>
-    <li><span class="dot dot--sdr"></span> KiwiSDR</li>
-    <li>
-      <label class="ggr-map-toggle">
-        <input type="checkbox" id="ggr-toggle-noms" checked>
-        Afficher les noms
+    <div class="globe-dock__tabs" role="tablist">
+      <button type="button" class="is-on" data-tab="sel">Sélection</button>
+      <button type="button" data-tab="vac">Bulletin<br>météo</button>
+      <button type="button" data-tab="buddy">Buddy<br>call</button>
+    </div>
+    <div class="globe-panel" data-panel="sel" id="globe-sel">
+      <p class="hint">Cliquer un bateau, un Kiwi ou un bulletin météo. Molette pour zoomer.</p>
+    </div>
+    <div class="globe-panel" data-panel="vac" hidden>
+      <div id="globe-player" class="globe-player" hidden>
+        <p class="globe-player__title" id="globe-player-title"></p>
+        <p class="globe-player__cap">Waterfall</p>
+        <video id="globe-video" controls playsinline preload="metadata"></video>
+        <p class="hint" id="globe-wf-msg" hidden></p>
+        <p><a id="globe-wf" href="#" hidden>Télécharger le waterfall</a></p>
+        <label class="globe-player__chan" id="globe-chan-lab">
+          Canal
+          <select id="globe-chan"></select>
+        </label>
+        <p class="globe-player__cap">Audio</p>
+        <audio id="globe-audio" controls preload="metadata"></audio>
+        <p class="hint" id="globe-audio-msg" hidden></p>
+        <p><a id="globe-open-vac" href="#">Ouvrir la fiche</a></p>
+      </div>
+      <ul class="globe-vacs" id="globe-vacs"></ul>
+    </div>
+    <div class="globe-panel" data-panel="buddy" hidden>
+      <p class="hint">Centroïde buddy call ({{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz · {{ buddy_time_utc }} TU).</p>
+      <label class="settings__check">
+        <input type="checkbox" id="globe-include-fleet" {% if buddy_include_fleet %}checked{% endif %}>
+        Inclure le reste de la flotte
       </label>
-    </li>
-  </ul>
-</figure>
-<script type="application/json" id="ggr-map-data">{{ {
-  "centroid": {"lat": fleet.lat, "lon": fleet.lon, "label": fleet.label, "fmt": fleet.fmt},
-  "buddy": buddy_aim or {},
-  "boats": fleet.boats or [],
-  "kiwis": kiwis or [],
-  "buddy_kiwis": buddy_kiwis or []
-} | tojson }}</script>
+      <ul class="skipper-list" id="globe-skippers"></ul>
+      <p class="settings__actions">
+        <button type="button" class="btn" id="globe-save-buddy">Sauver le centroïde</button>
+      </p>
+      <p class="settings-msg" id="globe-buddy-msg" hidden></p>
+    </div>
 
+    {% if fleet.warning %}<p class="err">{{ fleet.warning }}</p>{% endif %}
+    {% if buddy_aim and buddy_aim.warning %}<p class="err">{{ buddy_aim.warning }}</p>{% endif %}
+
+    <p class="ggr-map-cap">
+      <a href="https://yb.tl/{{ fleet.race_id or 'ggr2026' }}" rel="noreferrer">Tracker Yellowbrick</a>
+      · fond <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">© OpenStreetMap</a>
+    </p>
+
+    <details class="globe-tables">
+      <summary>Tableaux bateaux et KiwiSDR</summary>
 {% if fleet.boats %}
 <table class="tbl">
   <thead>
@@ -63,7 +96,7 @@
   <tbody>
     {% for b in fleet.boats %}
     <tr>
-      <td>{{ b.name }}{% if buddy_aim and b.name in buddy_aim.skipper_names %} <span class="badge">buddy</span>{% endif %}</td>
+      <td>{{ b.name }}{% if buddy_aim and b.name in buddy_aim.skipper_names %} <span class="badge">buddy call</span>{% endif %}</td>
       <td>{{ b.sail or '—' }}</td>
       <td>{{ '%.3f'|format(b.lat) }}, {{ '%.3f'|format(b.lon) }}</td>
     </tr>
@@ -110,9 +143,27 @@
     {% endfor %}
   </tbody>
 </table>
+    </details>
+  </aside>
+</div>
+
+<script type="application/json" id="ggr-globe-data">{{ {
+  "centroid": {"lat": fleet.lat, "lon": fleet.lon, "label": fleet.label, "fmt": fleet.fmt},
+  "buddy": buddy_aim or {},
+  "boats": fleet.boats or [],
+  "kiwis": kiwis or [],
+  "buddy_kiwis": buddy_kiwis or [],
+  "vacations": globe_vacations or [],
+  "skippers": buddy_skippers,
+  "include_fleet": buddy_include_fleet,
+  "qrg": {
+    "buddy_main_khz": buddy_main_khz,
+    "buddy_alt_khz": buddy_alt_khz,
+    "buddy_time_utc": buddy_time_utc
+  }
+} | tojson }}</script>
 {% endblock %}
 {% block extra_js %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="/static/js/flotte-map.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
+<script src="/static/js/globe.js?v={{ version }}"></script>
 {% endblock %}

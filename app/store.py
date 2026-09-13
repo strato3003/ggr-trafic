@@ -35,6 +35,50 @@ def _decorate(meta: dict[str, Any]) -> dict[str, Any]:
     return meta
 
 
+def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
+    """Carte légère pour le globe 3D : position, pistes audio, pas tout le metadata."""
+    decorated = _decorate(dict(meta))
+    fleet = decorated.get("fleet") or {}
+    aim = decorated.get("buddy_aim") or {}
+    try:
+        lat = float(aim.get("lat") if aim.get("lat") is not None else fleet.get("lat"))
+        lon = float(aim.get("lon") if aim.get("lon") is not None else fleet.get("lon"))
+    except (TypeError, ValueError):
+        lat = lon = None
+    channels = []
+    for ch in decorated.get("channels") or []:
+        if not (ch.get("audio") or ch.get("video") or ch.get("thumb")):
+            continue
+        kiwi = ch.get("kiwi") or {}
+        channels.append(
+            {
+                "id": ch.get("id"),
+                "label": ch.get("label"),
+                "freq_khz": ch.get("freq_khz"),
+                "audio": ch.get("audio"),
+                "video": ch.get("video"),
+                "thumb": ch.get("thumb"),
+                "kiwi": kiwi.get("name"),
+                "site_label": ch.get("site_label"),
+            }
+        )
+    tx = decorated.get("tx") or {}
+    return {
+        "id": decorated.get("id"),
+        "title": decorated.get("title"),
+        "started_at": decorated.get("started_at"),
+        "status": decorated.get("status"),
+        "is_buddy": bool(decorated.get("is_buddy")),
+        "is_test": bool(decorated.get("is_test")),
+        "lat": lat,
+        "lon": lon,
+        "fmt": aim.get("fmt") or fleet.get("fmt") or decorated.get("fleet_fmt"),
+        "thumb": decorated.get("thumb"),
+        "video": tx.get("video"),
+        "channels": channels[:12],
+    }
+
+
 def list_vacations(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     root = vacations_root(cfg)
     if not root.exists():

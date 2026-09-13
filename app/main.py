@@ -214,6 +214,7 @@ async def flotte_page(request: Request):
         kiwis=kiwis,
         buddy_aim=aim,
         buddy_kiwis=buddy_kiwis,
+        globe_vacations=[store.globe_vacation(v) for v in store.list_vacations(cfg)],
     )
 
 

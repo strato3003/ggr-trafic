@@ -4,7 +4,7 @@
 <article class="prose">
   <h1>À propos — {{ app_name }} {{ version }}</h1>
   <p>
-    <strong>GGR Vacations</strong> archive les vacations HF entre le radio-club
+    <strong>GGR Vacations</strong> archive les bulletins météo HF entre le radio-club
     <strong>{{ club_callsign }}</strong> et les bateaux de la flotte Golden Globe Race.
     Le club émet un bulletin météo tous les jours à <strong>{{ time_utc }} TU</strong> sur
     <strong>{{ tx_mhz }} MHz USB</strong> (QRG nominale ± {{ qrg_tolerance_khz }} kHz) et écoute les
@@ -22,7 +22,7 @@
   <h2>Fonctionnement</h2>
   <ul>
     <li>Position moyenne de la flotte via le tracker Yellowbrick GGR 2026.</li>
-    <li>Choix des KiwiSDR : bulletin = proximité flotte (12–17 MHz) ; buddy call = couverture 4483 et 6516 kHz + NVIS / saut 1 hop à 12:00 TU.</li>
+    <li>Globe 3D (flotte, Kiwi, bulletins météo) : cliquer pour régler le centroïde buddy call et écouter les archives.</li>
     <li>Screencast de l’interface SDR (waterfall / VFO) muxé avec l’audio USB 12 kHz.</li>
     <li>WAV des deux QRG d’accusé en parallèle, depuis trois Kiwi : près de la flotte, en France, vers Tahiti.</li>
     <li>Replay dans cette interface, comme si l’on était devant le récepteur.</li>
@@ -35,5 +35,6 @@
     <li>Liste des récepteurs : rx.linkfanel.net (agrégation kiwisdr.com).</li>
   </ul>
   <p>Licence MIT — code source du dépôt <code>ggr-vacations</code>.</p>
+  <p>Développé par JNoel F4IAE.</p>
 </article>
 {% endblock %}

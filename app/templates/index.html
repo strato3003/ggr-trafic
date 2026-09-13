@@ -2,7 +2,7 @@
 {% block title %} · Accueil{% endblock %}
 {% block content %}
 <section class="intro">
-  <h1>Archives des vacations radio</h1>
+  <h1>Archives des bulletins météo</h1>
   <p>
     Chaque jour à <strong>{{ time_utc }} TU</strong>, le radio-club <strong>{{ club_callsign }}</strong>
     émet le bulletin météo à destination des skippers du Golden Globe Race.
@@ -44,6 +44,6 @@
   {% endfor %}
 </ul>
 {% else %}
-<p class="empty">Aucune vacation enregistrée pour le moment. Le premier passage est planifié à {{ time_utc }} TU (démarrage {{ schedule_lead }} min avant).</p>
+<p class="empty">Aucun bulletin météo enregistré pour le moment. Le premier passage est planifié à {{ time_utc }} TU (démarrage {{ schedule_lead }} min avant).</p>
 {% endif %}
 {% endblock %}

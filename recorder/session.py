@@ -23,6 +23,7 @@ from recorder.kiwi_wf import HUNT_CF_KHZ, HUNT_HI_KHZ, HUNT_LO_KHZ, HUNT_ZOOM, h
 log = logging.getLogger(__name__)
 LOCK_NAME = ".recording.lock"
 RECORDING_GRACE_S = 180
+HUNT_BUDGET_S = 20.0
 ORPHAN_ERROR = "Enregistrement interrompu (processus arrêté avant la fin)"
 
 
@@ -374,7 +375,9 @@ async def run_vacation(
 
         tx_kiwi = assignment.get("tx") or ranked[0]
         try:
-            await _follow_tx_qrg(cfg, tx_kiwi, channels)
+            await asyncio.wait_for(_follow_tx_qrg(cfg, tx_kiwi, channels), timeout=HUNT_BUDGET_S)
+        except TimeoutError:
+            log.warning("Suivi QRG TX trop long (>%ss) — accord nominal", int(HUNT_BUDGET_S))
         except Exception:
             log.exception("Suivi QRG TX impossible — accord nominal")
 

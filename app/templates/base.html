@@ -7,14 +7,14 @@
   <link rel="stylesheet" href="/static/css/app.css?v={{ version }}">
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <header class="mast">
     <div class="mast__brand">
       <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
-      <p class="tag">Vacations HF · {{ club_callsign }} · flotte Golden Globe Race</p>
+      <p class="tag">Bulletins météo HF · {{ club_callsign }} · flotte Golden Globe Race</p>
     </div>
     <nav class="nav">
-      <a href="/">Vacations</a>
+      <a href="/">Bulletin météo</a>
       <a href="/flotte">Flotte &amp; SDR</a>
       <a href="/reglages">Réglages</a>
       <a href="/a-propos">À propos</a>
