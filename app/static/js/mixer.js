@@ -121,13 +121,16 @@
         img[x + (ROWS - 1 - y) * COLS] = db;
       }
     }
-    let p90 = -80;
     const sorted = Array.from(img).sort((a, b) => a - b);
-    p90 = sorted[Math.floor(sorted.length * 0.92)] || -40;
-    const lo = p90 - 35;
-    const hi = p90 + 5;
+    const p25 = sorted[Math.floor(sorted.length * 0.25)] || -80;
+    const p99 = sorted[Math.floor(sorted.length * 0.99)] || -20;
+    const lo = p25;
+    const hi = Math.max(p99, lo + 12);
     const span = Math.max(8, hi - lo);
-    for (let i = 0; i < img.length; i++) img[i] = Math.max(0, Math.min(1, (img[i] - lo) / span));
+    for (let i = 0; i < img.length; i++) {
+      const u = Math.max(0, Math.min(1, (img[i] - lo) / span));
+      img[i] = Math.pow(u, 0.72);
+    }
     return img;
   }
 
