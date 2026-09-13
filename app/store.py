@@ -56,6 +56,18 @@ def _decorate(meta: dict[str, Any]) -> dict[str, Any]:
     meta["tx"] = tx
     meta["is_test"] = meta.get("reason") in ("test-20m", "test-hunt", "manual-qrg")
     meta["is_buddy"] = str(meta.get("reason") or "").startswith("buddy")
+    meta["mixer_tracks"] = [
+        {
+            "id": ch.get("id"),
+            "src": ch.get("audio"),
+            "freq_khz": ch.get("freq_khz"),
+            "place": ch.get("place"),
+            "site_label": ch.get("site_label"),
+            "label": ch.get("label"),
+        }
+        for ch in (meta.get("channels") or [])
+        if ch.get("audio")
+    ]
     return meta
 
 

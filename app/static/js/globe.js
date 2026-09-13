@@ -377,7 +377,11 @@
     if (!playerBox || !audioEl || !chanEl) return;
     playerBox.hidden = false;
     if (playerTitle) playerTitle.textContent = v.title || v.id;
-    if (openVac) openVac.href = "/vacations/" + encodeURIComponent(v.id);
+    if (openVac) {
+      const hasMix = (v.channels || []).some((c) => c.audio);
+      openVac.href =
+        "/vacations/" + encodeURIComponent(v.id) + (hasMix ? "#mix" : "");
+    }
     const chans = v.channels || [];
     if (chanLab) chanLab.classList.toggle("is-off", !chans.length);
     if (chans.length) {

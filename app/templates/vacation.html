@@ -21,8 +21,35 @@
     </p>
   </header>
 
+  {% if vacation.mixer_tracks %}
+  <section class="mix" id="mix" data-vid="{{ vacation.id }}">
+    <h2>Table de mixage</h2>
+    <p class="hint">Uniquement les Kiwi qui ont de l’audio. Spectrogramme USB empilé (0–2,7 kHz) : mute les voix inutiles pour t’appesantir sur un QSO, ou laisse tout ouvert pour balayer les bribes.</p>
+    <div class="mix__body" id="ggr-mix">
+      <div class="mix__strips" id="mix-strips"></div>
+      <div class="mix__stage" id="mix-stage">
+        <canvas id="mix-wf" aria-label="Spectrogrammes audio synchronisés"></canvas>
+        <div class="mix__head" id="mix-head"></div>
+      </div>
+    </div>
+    <div class="mix__transport">
+      <button type="button" class="btn" id="mix-play" aria-pressed="false">Lecture</button>
+      <span class="mix__clock" id="mix-time">00:00 / 00:00</span>
+      <label class="mix__seek">
+        Timeline
+        <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
+      </label>
+    </div>
+    <p class="hint" id="mix-status">Préparation du mixage…</p>
+  </section>
+  <script type="application/json" id="ggr-mix-data">{{ vacation.mixer_tracks | tojson }}</script>
+  {% endif %}
+
   {% if vacation.channels %}
   <nav class="chan-jump" aria-label="Canaux d’écoute">
+    {% if vacation.mixer_tracks %}
+    <a href="#mix" class="chan-jump__a">Table de mixage · {{ vacation.mixer_tracks | length }} voix</a>
+    {% endif %}
     {% for ch in vacation.channels %}
     <a href="#chan-{{ ch.id }}" class="chan-jump__a{% if not ch.has_audio %} is-mute{% endif %}">
       {{ '%.0f'|format(ch.freq_khz) }} kHz
@@ -33,7 +60,7 @@
   </nav>
   {% endif %}
   {% if vacation.is_buddy %}
-  <p class="hint">Le waterfall n’est filmé que sur <strong>4483 kHz</strong> (premier Kiwi). <strong>6516 kHz</strong> est en audio, via les liens ci-dessus.</p>
+  <p class="hint">Le screencast Kiwi n’est filmé que sur <strong>4483 kHz</strong> (premier Kiwi). Pour 4483 et 6516 ensemble, utiliser la <a href="#mix">table de mixage</a>.</p>
   {% endif %}
 
   {% if vacation.tx and vacation.tx.video %}
@@ -83,4 +110,9 @@
   <p class="err">Erreur : {{ vacation.error }}</p>
   {% endif %}
 </article>
+{% endblock %}
+{% block extra_js %}
+{% if vacation.mixer_tracks %}
+<script src="/static/js/mixer.js?v={{ version }}"></script>
+{% endif %}
 {% endblock %}

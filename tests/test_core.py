@@ -278,6 +278,27 @@ def test_channel_place_and_globe_keeps_mute_channels():
     assert card["channels"][1]["place"] == "Montmorillon 86500 FRANCE"
 
 
+def test_mixer_tracks_only_channels_with_audio():
+    from app.store import _decorate
+
+    meta = _decorate(
+        {
+            "channels": [
+                {
+                    "id": "nvis-main",
+                    "audio": "audio-nvis-main.wav",
+                    "freq_khz": 4483.0,
+                    "kiwi": {"loc": "Amarante, Portugal"},
+                },
+                {"id": "far-alt", "freq_khz": 6516.0, "kiwi": {"loc": "Borås"}},
+            ]
+        }
+    )
+    assert [t["id"] for t in meta["mixer_tracks"]] == ["nvis-main"]
+    assert meta["mixer_tracks"][0]["place"] == "Amarante, Portugal"
+    assert meta["mixer_tracks"][0]["src"] == "audio-nvis-main.wav"
+
+
 def test_finalize_pending_promotes_orphan_with_audio(tmp_path):
     import json
 
