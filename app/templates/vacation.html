@@ -24,13 +24,9 @@
   {% if vacation.mixer_tracks %}
   <section class="mix" id="mix" data-vid="{{ vacation.id }}">
     <h2>Table de mixage</h2>
-    <p class="hint">Uniquement les Kiwi qui ont de l’audio. Spectrogramme USB empilé (0–2,7 kHz) : mute les voix inutiles pour t’appesantir sur un QSO, ou laisse tout ouvert pour balayer les bribes.</p>
+    <p class="hint">Uniquement les Kiwi qui ont de l’audio. Waterfall USB (0–2,7 kHz, temps vers le bas, couleurs Kiwi) : une colonne par voie, mute et fader comme une table de mixage.</p>
     <div class="mix__body" id="ggr-mix">
-      <div class="mix__strips" id="mix-strips"></div>
-      <div class="mix__stage" id="mix-stage">
-        <canvas id="mix-wf" aria-label="Spectrogrammes audio synchronisés"></canvas>
-        <div class="mix__head" id="mix-head"></div>
-      </div>
+      <div class="mix__desk" id="mix-strips"></div>
     </div>
     <div class="mix__transport">
       <button type="button" class="btn" id="mix-play" aria-pressed="false">Lecture</button>

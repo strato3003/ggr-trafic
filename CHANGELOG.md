@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 0.3.4 — 2026-09-14
+
+- Globe flotte : cercle autour du centroïde, liaisons SDR en pointillés 2 px, distances km sur la ligne (milliers collés) et libellés `sdr, <ville>`.
+- Table de mixage : waterfall USB vertical (couleurs Kiwi), une colonne par voie avec fader / mute, et démarrage audio après reprise de l’AudioContext.
+
 ## 0.3.3 — 2026-09-13
 
 - Spectrogramme de la table de mixage : contraste calé sur les percentiles 25–99 (au lieu d’un tapis de bruit) pour lire la phonie USB.

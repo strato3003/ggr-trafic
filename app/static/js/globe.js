@@ -113,22 +113,52 @@
     return [toDeg(p2), lon2];
   }
 
-  function coverArc(bearings) {
-    if (!bearings.length) return { start: 0, span: 24 };
-    const s = bearings.map((b) => ((b % 360) + 360) % 360).sort((a, b) => a - b);
-    let maxGap = 0;
-    let gapAt = 0;
-    for (let i = 0; i < s.length; i++) {
-      const nxt = i + 1 < s.length ? s[i + 1] : s[0] + 360;
-      const gap = nxt - s[i];
-      if (gap > maxGap) {
-        maxGap = gap;
-        gapAt = i;
-      }
+  function fleetCenter() {
+    const c = data.centroid || {};
+    if (Number.isFinite(c.lat) && Number.isFinite(c.lon)) {
+      return { lat: c.lat, lon: c.lon };
     }
-    const start = s[(gapAt + 1) % s.length];
-    const span = Math.max(12, Math.min(140, 360 - maxGap + 10));
-    return { start, span };
+    return null;
+  }
+
+  function fleetRingKm(center) {
+    if (boats.length) {
+      const maxD = Math.max(...boats.map((b) => haversineKm(center.lat, center.lon, b.lat, b.lon)));
+      // Entoure la flotte : écart max au centroïde + 15 %, plancher 40 km pour rester lisible.
+      return Math.max(40, maxD * 1.15);
+    }
+    // Repli sans écartement bateaux : 300 km, portée NVIS typique 4–7 MHz (zone nvis ≤ 850 km).
+    return 300;
+  }
+
+  function circleCoords(lat, lon, rKm, steps) {
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const p = destPoint(lat, lon, 360 - (360 * i) / steps, rKm);
+      pts.push([p[0], p[1]]);
+    }
+    return pts;
+  }
+
+  function labelAlongDeg(brg) {
+    // Texte parallèle à la ligne (bearing depuis le nord) ; rester à l'endroit.
+    let a = brg - 90;
+    const n = ((a % 360) + 360) % 360;
+    if (n > 90 && n < 270) a += 180;
+    return a;
+  }
+
+  function geodesicCoords(lat1, lon1, lat2, lon2) {
+    const d = haversineKm(lat1, lon1, lat2, lon2);
+    const brg = bearingDeg(lat1, lon1, lat2, lon2);
+    const steps = Math.max(16, Math.min(64, Math.round(d / 80) || 16));
+    const pts = [[lat1, lon1]];
+    for (let i = 1; i < steps; i++) {
+      const p = destPoint(lat1, lon1, brg, (d * i) / steps);
+      pts.push([p[0], p[1]]);
+    }
+    pts.push([lat2, lon2]);
+    return pts;
   }
 
   function points() {
@@ -141,13 +171,18 @@
         inBuddy: boatInBuddy(b.name),
       });
     });
-    (data.kiwis || []).forEach((k) => {
-      if (!Number.isFinite(k.lat) || !Number.isFinite(k.lon)) return;
-      rows.push({ ...k, lng: k.lon, kind: "kiwi" });
-    });
+    const seenSdr = new Set();
+    const sdrKey = (k) => String(k.id || k.host || k.lat.toFixed(3) + "," + k.lon.toFixed(3));
     (data.buddy_kiwis || []).forEach((k) => {
       if (!Number.isFinite(k.lat) || !Number.isFinite(k.lon)) return;
+      seenSdr.add(sdrKey(k));
       rows.push({ ...k, lng: k.lon, kind: "buddy_kiwi" });
+    });
+    (data.kiwis || []).forEach((k) => {
+      if (!Number.isFinite(k.lat) || !Number.isFinite(k.lon)) return;
+      if (seenSdr.has(sdrKey(k))) return;
+      seenSdr.add(sdrKey(k));
+      rows.push({ ...k, lng: k.lon, kind: "kiwi" });
     });
     const c = data.centroid || {};
     if (Number.isFinite(c.lat) && Number.isFinite(c.lon)) {
@@ -165,6 +200,7 @@
         name: v.title || v.id,
       });
     });
+    kiwiKmPoints().forEach((p) => rows.push(p));
     return rows;
   }
 
@@ -172,6 +208,16 @@
     const wrap = document.createElement("div");
     wrap.className = "globe-mark globe-mark--" + d.kind + (d.kind === "boat" && d.inBuddy ? " is-buddy" : "");
     wrap.style.cssText = "width:12px;height:12px;margin:0;padding:0;overflow:visible;";
+    if (d.kind === "link_km") {
+      const km = document.createElement("span");
+      km.className = "globe-mark__km";
+      km.textContent = d.name || "";
+      const rot = Number.isFinite(d.alongDeg) ? d.alongDeg : 0;
+      km.style.transform = "translate(-50%,-50%) rotate(" + rot + "deg)";
+      wrap.appendChild(km);
+      wrap.title = d.name || "";
+      return wrap;
+    }
     const icon = document.createElement("span");
     icon.className = "globe-mark__icon";
     if (d.kind === "boat") {
@@ -182,34 +228,19 @@
       icon.style.background = d.is_buddy ? "#d4a84b" : "#d45c3a";
     }
     wrap.appendChild(icon);
-    if ((d.kind === "boat" && d.inBuddy) || d.kind === "buddy_kiwi") {
+    if ((d.kind === "boat" && d.inBuddy) || d.kind === "kiwi" || d.kind === "buddy_kiwi") {
       const name = document.createElement("span");
       name.className = "globe-mark__name";
       name.style.cssText = "position:absolute;left:14px;top:50%;transform:translateY(-50%);white-space:nowrap;";
-      name.textContent = d.kind === "buddy_kiwi" ? d.site_label || d.loc || d.name || "Kiwi" : d.name || "";
+      name.textContent = d.kind === "kiwi" || d.kind === "buddy_kiwi" ? sdrLabel(d) : d.name || "";
       wrap.appendChild(name);
     }
-    wrap.title = d.name || d.label || d.kind;
+    wrap.title = d.kind === "kiwi" || d.kind === "buddy_kiwi" ? sdrLabel(d) : d.name || d.label || d.kind;
     icon.addEventListener("click", (ev) => {
       ev.stopPropagation();
       onPointClick(d);
     });
     return wrap;
-  }
-
-  function arcs() {
-    const buddy = data.buddy || {};
-    if (!Number.isFinite(buddy.lat) || !Number.isFinite(buddy.lon)) return [];
-    return (data.buddy_kiwis || [])
-      .filter((k) => Number.isFinite(k.lat) && Number.isFinite(k.lon))
-      .map((k) => ({
-        startLat: buddy.lat,
-        startLng: buddy.lon,
-        endLat: k.lat,
-        endLng: k.lon,
-        color: k.prop_zone === "nvis" ? "rgba(61,186,122,0.7)" : "rgba(110,201,224,0.55)",
-        label: k.site_label || k.name,
-      }));
   }
 
   function paths() {
@@ -226,10 +257,34 @@
         return {
           coords: pts,
           color: b.colour || "#c9a227",
+          stroke: 1,
         };
       })
       .filter(Boolean)
-      .concat(coneArcs());
+      .concat(fleetRingPaths())
+      .concat(kiwiLinkPaths());
+  }
+
+  function sdrCity(d) {
+    const loc = String(d && d.loc ? d.loc : "").trim();
+    if (loc) {
+      const city = loc.split(",")[0].trim();
+      if (city) return city;
+    }
+    const raw = String(d && d.name ? d.name : "").trim();
+    if (!raw) return "";
+    if (raw.includes(" | ")) {
+      const tail = raw.split(" | ").pop().trim().split(",")[0].trim();
+      if (tail) return tail.replace(/\s+\d{4,5}\b.*$/, "").trim() || tail;
+    }
+    const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 2) return parts[parts.length - 2];
+    return "";
+  }
+
+  function sdrLabel(d) {
+    const city = sdrCity(d);
+    return city ? "sdr, " + city : "sdr";
   }
 
   function sdrSites() {
@@ -247,43 +302,82 @@
     return out;
   }
 
-  function sectorArc(lat0, lon0, startBrg, span, rKm, steps) {
-    const pts = [];
-    for (let i = 0; i <= steps; i++) {
-      const p = destPoint(lat0, lon0, startBrg + (span * i) / steps, rKm);
-      pts.push([p[0], p[1]]);
-    }
-    return pts;
+  function fleetRingPaths() {
+    const center = fleetCenter();
+    if (!center) return [];
+    return [
+      {
+        coords: circleCoords(center.lat, center.lon, fleetRingKm(center), 72),
+        color: "rgba(244,230,195,0.55)",
+        stroke: 1,
+      },
+    ];
   }
 
-  function coneArcs() {
-    if (!boats.length) return [];
+  // Tirets SDR : ~20 km / trou 16 km. pathStroke 2 = 2 px écran (Line2), pas arcStroke.
+  const SDR_DASH_KM = 20;
+  const SDR_GAP_KM = 16;
+  const SDR_PATH_ALT = 0.0018;
+
+  function geodesicDashed(lat1, lon1, lat2, lon2, color) {
+    const d = haversineKm(lat1, lon1, lat2, lon2);
+    const brg = bearingDeg(lat1, lon1, lat2, lon2);
+    if (!Number.isFinite(d) || d < 1) return [];
+    const out = [];
+    let along = 0;
+    while (along < d - 0.2) {
+      const dashEnd = Math.min(along + SDR_DASH_KM, d);
+      const a = destPoint(lat1, lon1, brg, along);
+      const b = destPoint(lat1, lon1, brg, dashEnd);
+      out.push({
+        coords: [
+          [a[0], a[1], SDR_PATH_ALT],
+          [b[0], b[1], SDR_PATH_ALT],
+        ],
+        color,
+        stroke: 2,
+      });
+      along = dashEnd + SDR_GAP_KM;
+    }
+    return out;
+  }
+
+  function kiwiLinkPaths() {
+    const center = fleetCenter();
+    if (!center) return [];
     const rows = [];
-    const n = 11;
     sdrSites().forEach((k) => {
-      const bearings = boats.map((b) => bearingDeg(k.lat, k.lon, b.lat, b.lon));
-      const dists = boats.map((b) => haversineKm(k.lat, k.lon, b.lat, b.lon));
-      const rMax = Math.max(...dists, 80) * 1.12;
-      const { start, span } = coverArc(bearings);
-      const steps = Math.max(18, Math.round(span / 2));
       const nvis = k.prop_zone === "nvis" || k._kind === "kiwi";
-      const rgb = nvis ? "61,186,122" : "110,201,224";
-      let sumW = 0;
-      for (let i = 1; i <= n; i++) sumW += i;
-      let r = 0;
-      for (let i = 1; i <= n; i++) {
-        r += (i / sumW) * rMax;
-        rows.push({
-          coords: sectorArc(k.lat, k.lon, start, span, r, steps),
-          color: `rgba(${rgb},0.62)`,
-        });
-      }
-      const left = destPoint(k.lat, k.lon, start, rMax);
-      const right = destPoint(k.lat, k.lon, start + span, rMax);
-      rows.push({ coords: [[k.lat, k.lon], [left[0], left[1]]], color: `rgba(${rgb},0.4)` });
-      rows.push({ coords: [[k.lat, k.lon], [right[0], right[1]]], color: `rgba(${rgb},0.4)` });
+      // Hex : Line2 three-globe parse mal les rgba() (traits invisibles).
+      const color = nvis ? "#3dba7a" : "#6ec9e0";
+      geodesicDashed(center.lat, center.lon, k.lat, k.lon, color).forEach((p) => rows.push(p));
     });
     return rows;
+  }
+
+  function kiwiKmPoints() {
+    const center = fleetCenter();
+    if (!center) return [];
+    return sdrSites().map((k) => {
+      const km = haversineKm(center.lat, center.lon, k.lat, k.lon);
+      const brg = bearingDeg(center.lat, center.lon, k.lat, k.lon);
+      const mid = destPoint(center.lat, center.lon, brg, km / 2);
+      return {
+        lat: mid[0],
+        lon: mid[1],
+        lng: mid[1],
+        kind: "link_km",
+        name: Math.round(km) + " km",
+        alongDeg: labelAlongDeg(brg),
+      };
+    });
+  }
+
+  function fleetPolygons() {
+    const center = fleetCenter();
+    if (!center) return [];
+    const ring = circleCoords(center.lat, center.lon, fleetRingKm(center), 72).map(([lat, lon]) => [lon, lat]);
+    return [{ geometry: { type: "Polygon", coordinates: [ring] } }];
   }
 
   function fleetView() {
@@ -526,6 +620,8 @@
     if (!globe) return;
     globe.htmlElementsData(points());
     if (typeof globe.pathsData === "function") globe.pathsData(paths());
+    if (typeof globe.polygonsData === "function") globe.polygonsData(fleetPolygons());
+    if (typeof globe.arcsData === "function") globe.arcsData([]);
   }
 
   function initGlobe() {
@@ -548,20 +644,14 @@
       .htmlAltitude(0)
       .htmlElement(markerEl)
       .htmlTransitionDuration(0)
-      .arcsData(arcs())
-      .arcColor("color")
-      .arcAltitudeAutoScale(0.1)
-      .arcStroke(null)
-      .arcDashLength(0)
-      .arcDashGap(0)
-      .arcDashAnimateTime(0)
+      .arcsData([])
       .pathsData(paths())
       .pathPoints("coords")
       .pathPointLat((p) => p[0])
       .pathPointLng((p) => p[1])
-      .pathPointAlt(0)
+      .pathPointAlt((p) => (Array.isArray(p) && p.length > 2 ? p[2] : 0))
       .pathColor((d) => d.color)
-      .pathStroke(null)
+      .pathStroke((d) => (d && d.stroke != null ? d.stroke : 1))
       .pathTransitionDuration(0);
 
     if (typeof globe.globeTileEngineUrl === "function") {
@@ -575,6 +665,25 @@
 
     if (typeof globe.pathResolution === "function") {
       globe.pathResolution(0.35);
+    }
+
+    if (typeof globe.polygonsData === "function") {
+      globe.polygonsData(fleetPolygons());
+      if (typeof globe.polygonGeoJsonGeometry === "function") {
+        globe.polygonGeoJsonGeometry("geometry");
+      }
+      if (typeof globe.polygonCapColor === "function") {
+        globe.polygonCapColor(() => "rgba(244,230,195,0.20)");
+      }
+      if (typeof globe.polygonSideColor === "function") {
+        globe.polygonSideColor(() => "rgba(244,230,195,0.08)");
+      }
+      if (typeof globe.polygonStrokeColor === "function") {
+        globe.polygonStrokeColor(() => "rgba(244,230,195,0.45)");
+      }
+      if (typeof globe.polygonAltitude === "function") {
+        globe.polygonAltitude(0.001);
+      }
     }
 
     if (typeof globe.htmlOcclude === "function") {

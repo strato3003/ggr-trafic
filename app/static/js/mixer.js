@@ -16,22 +16,17 @@
     "/media/" + encodeURIComponent(vacId) + "/" + encodeURIComponent(file);
 
   const statusEl = document.getElementById("mix-status");
-  const canvas = document.getElementById("mix-wf");
-  const headEl = document.getElementById("mix-head");
-  const stripsEl = document.getElementById("mix-strips");
+  const deskEl = document.getElementById("mix-strips");
   const playBtn = document.getElementById("mix-play");
   const timeEl = document.getElementById("mix-time");
   const seekEl = document.getElementById("mix-seek");
-  const stageEl = document.getElementById("mix-stage");
-  if (!canvas || !stripsEl || !playBtn || !seekEl) return;
+  if (!deskEl || !playBtn || !seekEl) return;
 
-  const COLS = 960;
-  const ROWS = 56;
+  const TIME = 420;
+  const FREQ = 128;
   const FFT = 512;
-  const BAND_H = 72;
-  const TINTS = ["#3dba7a", "#c9a227", "#5ec8ff", "#d45c3a", "#b07cff", "#7ad0b0"];
+  const WF_H = 288;
 
-  const ctx2d = canvas.getContext("2d");
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const tracks = [];
   let duration = 0;
@@ -107,25 +102,23 @@
 
   function spectrogram(channel, sampleRate) {
     const n = channel.length;
-    const img = new Float32Array(COLS * ROWS);
+    const img = new Float32Array(TIME * FREQ);
     if (n < FFT) return img;
     const nyquist = sampleRate / 2;
     const fMax = Math.min(2700, nyquist);
     const binMax = Math.max(2, Math.floor((fMax / nyquist) * (FFT / 2)));
-    for (let x = 0; x < COLS; x++) {
-      const start = Math.min(n - FFT, Math.floor((x / COLS) * (n - FFT)));
+    for (let t = 0; t < TIME; t++) {
+      const start = Math.min(n - FFT, Math.floor((t / TIME) * (n - FFT)));
       const mag = fftMag(channel, start, FFT);
-      for (let y = 0; y < ROWS; y++) {
-        const bin = 1 + Math.floor((y / ROWS) * (binMax - 1));
-        const db = 20 * Math.log10(mag[bin] + 1e-9);
-        img[x + (ROWS - 1 - y) * COLS] = db;
+      const row = t * FREQ;
+      for (let f = 0; f < FREQ; f++) {
+        const bin = 1 + Math.floor((f / FREQ) * (binMax - 1));
+        img[row + f] = 20 * Math.log10(mag[bin] + 1e-9);
       }
     }
     const sorted = Array.from(img).sort((a, b) => a - b);
-    const p25 = sorted[Math.floor(sorted.length * 0.25)] || -80;
-    const p99 = sorted[Math.floor(sorted.length * 0.99)] || -20;
-    const lo = p25;
-    const hi = Math.max(p99, lo + 12);
+    const lo = sorted[Math.floor(sorted.length * 0.25)] || -80;
+    const hi = Math.max(sorted[Math.floor(sorted.length * 0.99)] || -20, lo + 12);
     const span = Math.max(8, hi - lo);
     for (let i = 0; i < img.length; i++) {
       const u = Math.max(0, Math.min(1, (img[i] - lo) / span));
@@ -134,43 +127,45 @@
     return img;
   }
 
-  function pixelColor(t, tint, out) {
+  function kiwiColor(t, out) {
     const u = Math.max(0, Math.min(1, t));
     let r;
     let g;
     let b;
-    if (u < 0.25) {
-      const k = u / 0.25;
-      r = 4 + 8 * k;
-      g = 10 + 30 * k;
-      b = 18 + 70 * k;
-    } else if (u < 0.55) {
-      const k = (u - 0.25) / 0.3;
-      r = 12 + 20 * k;
-      g = 40 + 150 * k;
-      b = 88 + 80 * k;
-    } else if (u < 0.8) {
-      const k = (u - 0.55) / 0.25;
-      r = 32 + 170 * k;
-      g = 190 - 20 * k;
-      b = 168 - 120 * k;
+    if (u < 0.13) {
+      const k = u / 0.13;
+      r = 0;
+      g = 0;
+      b = 8 + 72 * k;
+    } else if (u < 0.32) {
+      const k = (u - 0.13) / 0.19;
+      r = 0;
+      g = 8 + 28 * k;
+      b = 80 + 145 * k;
+    } else if (u < 0.5) {
+      const k = (u - 0.32) / 0.18;
+      r = 0;
+      g = 36 + 184 * k;
+      b = 225 - 55 * k;
+    } else if (u < 0.68) {
+      const k = (u - 0.5) / 0.18;
+      r = 16 + 48 * k;
+      g = 220 - 10 * k;
+      b = 170 - 152 * k;
+    } else if (u < 0.84) {
+      const k = (u - 0.68) / 0.16;
+      r = 64 + 176 * k;
+      g = 210 + 30 * k;
+      b = 18;
     } else {
-      const k = (u - 0.8) / 0.2;
-      r = 202 + 50 * k;
-      g = 170 + 70 * k;
-      b = 48 + 180 * k;
+      const k = (u - 0.84) / 0.16;
+      r = 240 + 15 * k;
+      g = 240 + 15 * k;
+      b = 18 + 237 * k;
     }
-    out[0] = r * 0.62 + tint[0] * 0.38;
-    out[1] = g * 0.62 + tint[1] * 0.38;
-    out[2] = b * 0.62 + tint[2] * 0.38;
-  }
-
-  function tintRgb(hex) {
-    return [
-      parseInt(hex.slice(1, 3), 16),
-      parseInt(hex.slice(3, 5), 16),
-      parseInt(hex.slice(5, 7), 16),
-    ];
+    out[0] = r;
+    out[1] = g;
+    out[2] = b;
   }
 
   function nowT() {
@@ -178,47 +173,46 @@
     return Math.min(duration, t0 + (audioCtx.currentTime - startedAt));
   }
 
-  function resizeCanvas() {
-    const n = Math.max(tracks.length, 1);
-    const cssW = Math.max(320, (stageEl && stageEl.clientWidth) || canvas.clientWidth || 640);
-    const cssH = n * BAND_H;
+  function resizeCanvas(tr) {
+    const canvas = tr.canvas;
+    if (!canvas) return;
+    const cssW = Math.max(96, canvas.clientWidth || 140);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.floor(cssW * dpr);
-    canvas.height = Math.floor(cssH * dpr);
-    canvas.style.width = cssW + "px";
-    canvas.style.height = cssH + "px";
+    canvas.height = Math.floor(WF_H * dpr);
+    canvas.style.height = WF_H + "px";
   }
 
-  function draw() {
-    const n = tracks.length;
-    if (!n) return;
+  function drawTrack(tr) {
+    const canvas = tr.canvas;
+    if (!canvas) return;
+    const ctx2d = canvas.getContext("2d");
     const w = canvas.width;
     const h = canvas.height;
     if (!w || !h) return;
     const idata = ctx2d.createImageData(w, h);
     const px = idata.data;
     const rgb = [0, 0, 0];
-    const bandPx = Math.floor(h / n);
-    for (let i = 0; i < n; i++) {
-      const tr = tracks[i];
-      const img = tr.spec;
-      const tint = tintRgb(TINTS[i % TINTS.length]);
-      const dim = tr.muted ? 0.28 : 1;
-      const y0 = i * bandPx;
+    const img = tr.spec;
+    const dim = tr.muted ? 0.22 : 1;
+    for (let row = 0; row < h; row++) {
+      const t = Math.min(TIME - 1, Math.floor((row / h) * TIME));
+      const base = t * FREQ;
       for (let col = 0; col < w; col++) {
-        const x = Math.min(COLS - 1, Math.floor((col / w) * COLS));
-        for (let row = 0; row < bandPx; row++) {
-          const y = Math.min(ROWS - 1, Math.floor((row / bandPx) * ROWS));
-          pixelColor(img[x + y * COLS] * dim, tint, rgb);
-          const off = ((y0 + row) * w + col) * 4;
-          px[off] = rgb[0];
-          px[off + 1] = rgb[1];
-          px[off + 2] = rgb[2];
-          px[off + 3] = 255;
-        }
+        const f = Math.min(FREQ - 1, Math.floor((col / w) * FREQ));
+        kiwiColor(img[base + f] * dim, rgb);
+        const off = (row * w + col) * 4;
+        px[off] = rgb[0];
+        px[off + 1] = rgb[1];
+        px[off + 2] = rgb[2];
+        px[off + 3] = 255;
       }
     }
     ctx2d.putImageData(idata, 0, 0);
+  }
+
+  function draw() {
+    tracks.forEach(drawTrack);
     updateHead();
   }
 
@@ -226,7 +220,9 @@
     if (!duration) return;
     const t = nowT();
     const pct = Math.max(0, Math.min(1, t / duration));
-    if (headEl) headEl.style.left = pct * 100 + "%";
+    tracks.forEach((tr) => {
+      if (tr.head) tr.head.style.top = pct * 100 + "%";
+    });
     if (!dragging) seekEl.value = String(t);
     if (timeEl) timeEl.textContent = fmtTime(t) + " / " + fmtTime(duration);
     seekEl.max = String(duration);
@@ -248,11 +244,14 @@
     const when = audioCtx.currentTime;
     tracks.forEach((tr) => {
       if (!tr.buffer) return;
-      if (offset >= tr.buffer.duration) return;
+      const maxOff = Math.max(0, tr.buffer.duration - 0.05);
+      const off = Math.min(Math.max(0, offset), maxOff);
+      if (off >= tr.buffer.duration) return;
+      applyGain(tr);
       const src = audioCtx.createBufferSource();
       src.buffer = tr.buffer;
       src.connect(tr.gain);
-      src.start(when, offset);
+      src.start(when, off);
       sources.push(src);
     });
     startedAt = when;
@@ -294,26 +293,35 @@
     updateHead();
   }
 
-  canvas.addEventListener("pointerdown", (ev) => {
-    if (!duration) return;
-    resumeAfterDrag = playing;
-    dragging = true;
-    canvas.setPointerCapture(ev.pointerId);
-    previewSeek(pointerTime(ev));
-  });
-  canvas.addEventListener("pointermove", (ev) => {
-    if (!dragging) return;
-    previewSeek(pointerTime(ev));
-  });
-  canvas.addEventListener("pointerup", () => {
-    dragging = false;
-    if (resumeAfterDrag) startSources(t0);
-    resumeAfterDrag = false;
-  });
-  canvas.addEventListener("pointercancel", () => {
-    dragging = false;
-    resumeAfterDrag = false;
-  });
+  function pointerTime(ev, canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+    return y * duration;
+  }
+
+  function bindCanvasSeek(tr) {
+    const canvas = tr.canvas;
+    canvas.addEventListener("pointerdown", (ev) => {
+      if (!duration) return;
+      resumeAfterDrag = playing;
+      dragging = true;
+      canvas.setPointerCapture(ev.pointerId);
+      previewSeek(pointerTime(ev, canvas));
+    });
+    canvas.addEventListener("pointermove", (ev) => {
+      if (!dragging) return;
+      previewSeek(pointerTime(ev, canvas));
+    });
+    canvas.addEventListener("pointerup", () => {
+      dragging = false;
+      if (resumeAfterDrag) startSources(t0);
+      resumeAfterDrag = false;
+    });
+    canvas.addEventListener("pointercancel", () => {
+      dragging = false;
+      resumeAfterDrag = false;
+    });
+  }
 
   seekEl.addEventListener("pointerdown", () => {
     resumeAfterDrag = playing;
@@ -330,60 +338,79 @@
   });
 
   function applyGain(tr) {
-    tr.gain.gain.value = tr.muted ? 0 : tr.volume;
+    const vol = tr.muted ? 0 : Number.isFinite(tr.volume) ? tr.volume : 1;
+    tr.gain.gain.value = vol;
   }
 
-  function renderStrips() {
-    stripsEl.innerHTML = tracks
-      .map((tr, i) => {
+  function renderDesk() {
+    const stage = document.getElementById("mix-stage");
+    if (stage) stage.hidden = true;
+    deskEl.classList.add("mix__desk");
+    deskEl.innerHTML = tracks
+      .map((tr) => {
         const qrg = Number.isFinite(tr.freq_khz) ? Math.round(tr.freq_khz) + " kHz" : "";
         const where = tr.place || tr.site_label || tr.label || tr.id;
         return (
-          '<div class="mix__strip" data-id="' +
-          tr.id +
-          '" style="--tint:' +
-          TINTS[i % TINTS.length] +
+          '<div class="mix__ch" data-id="' +
+          esc(tr.id) +
           '">' +
-          '<button type="button" class="mix__mute" data-act="mute" aria-pressed="false">Muet</button>' +
+          '<div class="mix__wf-wrap">' +
+          '<canvas class="mix__wf" aria-label="Waterfall USB ' +
+          esc(qrg) +
+          " " +
+          esc(where) +
+          '"></canvas>' +
+          '<div class="mix__head"></div>' +
+          "</div>" +
+          '<p class="mix__axis">0 Hz · USB · 2,7 kHz</p>' +
+          '<div class="mix__ch-ctrl">' +
           '<div class="mix__meta"><strong>' +
           esc(qrg) +
           "</strong><span>" +
           esc(where) +
           "</span></div>" +
-          '<label class="mix__vol">Volume <input type="range" min="0" max="150" value="100" data-act="vol"></label>' +
-          "</div>"
+          '<button type="button" class="mix__mute" data-act="mute" aria-pressed="false">Mute</button>' +
+          '<label class="mix__fader"><span>Vol</span><input type="range" min="0" max="150" value="100" step="1" data-act="vol"></label>' +
+          "</div></div>"
         );
       })
       .join("");
-    stripsEl.querySelectorAll(".mix__strip").forEach((el, i) => {
+    deskEl.querySelectorAll(".mix__ch").forEach((el, i) => {
       const tr = tracks[i];
+      tr.canvas = el.querySelector("canvas");
+      tr.head = el.querySelector(".mix__head");
+      bindCanvasSeek(tr);
       el.querySelector('[data-act="mute"]').addEventListener("click", () => {
         tr.muted = !tr.muted;
         const btn = el.querySelector('[data-act="mute"]');
-        btn.textContent = "Muet";
         btn.setAttribute("aria-pressed", tr.muted ? "true" : "false");
         el.classList.toggle("is-mute", tr.muted);
         applyGain(tr);
-        draw();
+        drawTrack(tr);
       });
-      el.querySelector('[data-act="vol"]').addEventListener("input", (ev) => {
-        tr.volume = Number(ev.target.value) / 100;
+      const vol = el.querySelector('[data-act="vol"]');
+      vol.addEventListener("input", (ev) => {
+        const v = Number(ev.target.value);
+        tr.volume = Number.isFinite(v) ? v / 100 : 1;
         applyGain(tr);
       });
+      applyGain(tr);
     });
   }
 
-  function pointerTime(ev) {
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-    return x * duration;
+  function playToggle() {
+    const go = () => {
+      if (playing) pauseAt(nowT());
+      else startSources(duration - t0 < 0.08 ? 0 : t0);
+    };
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume().then(go);
+      return;
+    }
+    go();
   }
 
-  playBtn.addEventListener("click", async () => {
-    await audioCtx.resume();
-    if (playing) pauseAt(nowT());
-    else startSources(t0 >= duration ? 0 : t0);
-  });
+  playBtn.addEventListener("click", playToggle);
 
   window.addEventListener("keydown", (ev) => {
     if (ev.code !== "Space") return;
@@ -393,7 +420,7 @@
   });
 
   window.addEventListener("resize", () => {
-    resizeCanvas();
+    tracks.forEach(resizeCanvas);
     draw();
   });
 
@@ -413,10 +440,12 @@
         site_label: row.site_label,
         label: row.label,
         buffer: null,
-        spec: new Float32Array(COLS * ROWS),
+        spec: new Float32Array(TIME * FREQ),
         gain,
         muted: false,
         volume: 1,
+        canvas: null,
+        head: null,
       };
       try {
         const res = await fetch(media(row.src));
@@ -442,12 +471,12 @@
     seekEl.max = String(duration);
     seekEl.step = "0.05";
     seekEl.value = "0";
-    renderStrips();
-    resizeCanvas();
+    renderDesk();
+    tracks.forEach(resizeCanvas);
     draw();
     statusEl.textContent =
       tracks.length +
-      " voix · spectrogramme USB 0–2,7 kHz · mute pour isoler une conversation.";
+      " voies · waterfall USB 0–2,7 kHz (temps vers le bas) · mute / volume par Kiwi.";
     updateHead();
   }
 
