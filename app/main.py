@@ -177,7 +177,7 @@ async def vacation_page(request: Request, vacation_id: str):
 async def flotte_page(request: Request):
     cfg = load_config()
     try:
-        fleet = await fetch_fleet(cfg)
+        fleet = await fetch_fleet(cfg, with_wx=True)
         aim = buddy_aim(fleet, cfg)
         try:
             kiwis = await fetch_ranked_kiwis(cfg, fleet["lat"], fleet["lon"], limit=8)

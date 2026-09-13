@@ -44,28 +44,29 @@
       <button type="button" data-tab="vac">Bulletin<br>météo</button>
       <button type="button" data-tab="buddy">Buddy<br>call</button>
     </div>
+    <div id="globe-player" class="globe-player" hidden>
+      <p class="globe-player__title" id="globe-player-title"></p>
+      <p class="globe-player__cap">Waterfall</p>
+      <video id="globe-video" controls playsinline preload="metadata"></video>
+      <p class="hint" id="globe-wf-msg" hidden></p>
+      <p><a id="globe-wf" href="#" hidden>Télécharger le waterfall</a></p>
+      <label class="globe-player__chan" id="globe-chan-lab">
+        Canal (QRG · Kiwi)
+        <select id="globe-chan"></select>
+      </label>
+      <p class="globe-player__cap">Audio</p>
+      <audio id="globe-audio" controls preload="metadata"></audio>
+      <p class="hint" id="globe-audio-msg" hidden></p>
+      <p><a id="globe-open-vac" href="#">Ouvrir la fiche</a></p>
+    </div>
     <div class="globe-panel" data-panel="sel" id="globe-sel">
       <p class="hint">Cliquer un bateau, un Kiwi ou un bulletin météo. Molette pour zoomer.</p>
     </div>
     <div class="globe-panel" data-panel="vac" hidden>
-      <div id="globe-player" class="globe-player" hidden>
-        <p class="globe-player__title" id="globe-player-title"></p>
-        <p class="globe-player__cap">Waterfall</p>
-        <video id="globe-video" controls playsinline preload="metadata"></video>
-        <p class="hint" id="globe-wf-msg" hidden></p>
-        <p><a id="globe-wf" href="#" hidden>Télécharger le waterfall</a></p>
-        <label class="globe-player__chan" id="globe-chan-lab">
-          Canal
-          <select id="globe-chan"></select>
-        </label>
-        <p class="globe-player__cap">Audio</p>
-        <audio id="globe-audio" controls preload="metadata"></audio>
-        <p class="hint" id="globe-audio-msg" hidden></p>
-        <p><a id="globe-open-vac" href="#">Ouvrir la fiche</a></p>
-      </div>
       <ul class="globe-vacs" id="globe-vacs"></ul>
     </div>
     <div class="globe-panel" data-panel="buddy" hidden>
+      <ul class="globe-vacs" id="globe-buddy-vacs"></ul>
       <p class="hint">Centroïde buddy call ({{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz · {{ buddy_time_utc }} TU).</p>
       <label class="settings__check">
         <input type="checkbox" id="globe-include-fleet" {% if buddy_include_fleet %}checked{% endif %}>

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import struct
+import time
 import unicodedata
 from datetime import datetime, timezone
 from typing import Any
@@ -135,12 +137,144 @@ def _heading_deg(moments: list[dict[str, Any]]) -> float | None:
     return None
 
 
+def _sog_kn(moments: list[dict[str, Any]]) -> float | None:
+    """Vitesse fond (kn) entre les deux derniers points GPS distincts."""
+    ordered = sorted(moments, key=lambda m: m.get("at") or 0)
+    if len(ordered) < 2:
+        return None
+    last = ordered[-1]
+    for prev in reversed(ordered[:-1]):
+        dt = float(last.get("at") or 0) - float(prev.get("at") or 0)
+        if dt <= 0:
+            continue
+        dist_km = haversine_km(prev["lat"], prev["lon"], last["lat"], last["lon"])
+        if dist_km < 0.05:
+            continue
+        return round((dist_km / 1.852) / (dt / 3600.0), 1)
+    return None
+
+
+def _nm(metres: Any) -> float | None:
+    try:
+        val = float(metres)
+    except (TypeError, ValueError):
+        return None
+    return round(val / 1852.0, 1)
+
+
+def _gps_at(epoch: Any) -> str | None:
+    try:
+        ts = int(epoch)
+    except (TypeError, ValueError):
+        return None
+    if ts <= 0:
+        return None
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d %H:%M TU")
+
+
+def _leaderboard_by_id(payload: dict[str, Any] | None) -> dict[int, dict[str, Any]]:
+    best: list[dict[str, Any]] = []
+    for tag in (payload or {}).get("tags") or []:
+        teams = [t for t in (tag.get("teams") or []) if isinstance(t, dict) and "id" in t]
+        if len(teams) > len(best):
+            best = teams
+    return {int(t["id"]): t for t in best}
+
+
+def parse_yb_grib2(buf: bytes, epoch0: int) -> list[dict[str, Any]]:
+    """Décode le GRIB2 Yellowbrick (PredictWind) : vent kn + direction °."""
+    if not buf:
+        return []
+    n = buf[0]
+    offset = 1
+    end = len(buf)
+    grids: list[dict[str, Any]] = []
+    try:
+        for _ in range(n):
+            if offset + 5 > end:
+                break
+            offset += 4
+            n_grids = buf[offset]
+            offset += 1
+            for _g in range(n_grids):
+                if offset + 19 > end:
+                    return grids
+                at = struct.unpack(">i", buf[offset : offset + 4])[0] + int(epoch0)
+                offset += 4
+                lat0 = struct.unpack(">i", buf[offset : offset + 4])[0] / 1e5
+                offset += 4
+                lon0 = struct.unpack(">i", buf[offset : offset + 4])[0] / 1e5
+                offset += 4
+                space = buf[offset] / 100.0
+                offset += 1
+                ncols = struct.unpack(">H", buf[offset : offset + 2])[0]
+                offset += 2
+                npts = struct.unpack(">I", buf[offset : offset + 4])[0]
+                offset += 4
+                need = npts * 2
+                if offset + need > end:
+                    return grids
+                dirs = [2 * buf[offset + 2 * i] for i in range(npts)]
+                spds = [3 * buf[offset + 2 * i + 1] / 10.0 for i in range(npts)]
+                offset += need
+                grids.append(
+                    {
+                        "at": at,
+                        "lat": lat0,
+                        "lon": lon0,
+                        "space": space,
+                        "ncols": max(int(ncols), 1),
+                        "dirs": dirs,
+                        "spds": spds,
+                    }
+                )
+    except (struct.error, IndexError):
+        return grids
+    return grids
+
+
+def _wind_at(
+    grids: list[dict[str, Any]], lat: float, lon: float, at: int | None
+) -> tuple[float, float] | None:
+    """Vent GRIB le plus proche (kn, °) à l’heure GPS du bateau."""
+    if not grids:
+        return None
+    target = int(at or 0)
+    slot = min((int(g["at"]) for g in grids), key=lambda t: abs(t - target) if target else t)
+    best_d = 1e18
+    best: tuple[float, float] | None = None
+    for g in grids:
+        if int(g["at"]) != slot:
+            continue
+        ncols = int(g["ncols"])
+        space = float(g["space"] or 1)
+        for idx, spd in enumerate(g["spds"]):
+            row, col = divmod(idx, ncols)
+            glat = float(g["lat"]) + space * row
+            glon = ((float(g["lon"]) + space * col + 540) % 360) - 180
+            dlat = glat - lat
+            dlon = ((glon - lon + 180) % 360) - 180
+            dist2 = dlat * dlat + dlon * dlon
+            if dist2 < best_d:
+                best_d = dist2
+                best = (round(float(spd), 1), int(g["dirs"][idx]) % 360)
+    if best is None or best_d > 9:
+        return None
+    return best
+
+
+_grib_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_GRIB_TTL_S = 3600.0
+
+
 def _track_tail(moments: list[dict[str, Any]], limit: int = 36) -> list[list[float]]:
     ordered = sorted(moments, key=lambda m: m.get("at") or 0)[-limit:]
     return [[float(m["lat"]), float(m["lon"])] for m in ordered]
 
 
-async def fetch_fleet(cfg: dict[str, Any], client: Any | None = None) -> dict[str, Any]:
+async def fetch_fleet(
+    cfg: dict[str, Any], client: Any | None = None, *, with_wx: bool = False
+) -> dict[str, Any]:
     """Retourne le centroïde de la flotte en course, avec repli configuré."""
     import httpx
 
@@ -168,12 +302,46 @@ async def fetch_fleet(cfg: dict[str, Any], client: Any | None = None) -> dict[st
     try:
         setup_url = f"https://yb.tl/JSON/{race_id}/RaceSetup"
         pos_url = f"https://{host}/BIN/{race_id}/AllPositions3"
-        setup_resp, pos_resp = await client.get(setup_url), await client.get(pos_url)
+        lb_url = f"https://{host}/JSON/{race_id}/Leaderboard"
+        setup_resp, pos_resp, lb_resp = await asyncio.gather(
+            client.get(setup_url),
+            client.get(pos_url),
+            client.get(lb_url),
+            return_exceptions=True,
+        )
+        if isinstance(setup_resp, Exception) or isinstance(pos_resp, Exception):
+            raise setup_resp if isinstance(setup_resp, Exception) else pos_resp
         setup_resp.raise_for_status()
         pos_resp.raise_for_status()
         setup = setup_resp.json()
         teams_meta = {int(t["id"]): t for t in setup.get("teams") or [] if "id" in t}
         parsed = parse_positions3(pos_resp.content)
+        lb_by: dict[int, dict[str, Any]] = {}
+        if not isinstance(lb_resp, Exception):
+            try:
+                lb_resp.raise_for_status()
+                lb_by = _leaderboard_by_id(lb_resp.json())
+            except Exception:
+                log.warning("Leaderboard Yellowbrick indisponible")
+        grids: list[dict[str, Any]] = []
+        if with_wx:
+            try:
+                epoch0 = int(setup.get("start") or 0)
+                day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                grib_key = f"{race_id}:{day}"
+                now_m = time.monotonic()
+                hit = _grib_cache.get(grib_key)
+                if hit and now_m - hit[0] < _GRIB_TTL_S:
+                    grids = hit[1]
+                else:
+                    grib_resp = await client.get(
+                        f"https://{host}/BIN/{race_id}/Grib2/{day}", timeout=12.0
+                    )
+                    grib_resp.raise_for_status()
+                    grids = parse_yb_grib2(grib_resp.content, epoch0)
+                    _grib_cache[grib_key] = (now_m, grids)
+            except Exception:
+                log.warning("GRIB Yellowbrick indisponible")
         boats: list[dict[str, Any]] = []
         points: list[tuple[float, float]] = []
         for team in parsed:
@@ -181,21 +349,44 @@ async def fetch_fleet(cfg: dict[str, Any], client: Any | None = None) -> dict[st
             meta = teams_meta.get(tid) or {"id": tid, "name": f"Bateau {tid}", "status": "RACING"}
             if not _is_racing_team(meta, skip_from):
                 continue
-            fix = _latest_fix(team.get("moments") or [])
+            moments = team.get("moments") or []
+            fix = _latest_fix(moments)
             if not fix:
                 continue
+            lb = lb_by.get(tid) or {}
+            vmg_kmh = lb.get("vmgR")
+            try:
+                vmg_kn = round(float(vmg_kmh) / 1.852, 1) if vmg_kmh is not None else None
+            except (TypeError, ValueError):
+                vmg_kn = None
+            wind = _wind_at(grids, float(fix["lat"]), float(fix["lon"]), fix.get("at")) if grids else None
+            finish_at = lb.get("eFinishR")
             boats.append(
                 {
                     "id": tid,
                     "name": meta.get("name"),
                     "sail": meta.get("sail"),
-                    "status": meta.get("status"),
+                    "status": meta.get("status") or lb.get("status"),
+                    "country": meta.get("country"),
+                    "flag": meta.get("flag"),
+                    "model": meta.get("model"),
+                    "owner": meta.get("owner"),
                     "colour": _team_colour(meta),
                     "lat": fix["lat"],
                     "lon": fix["lon"],
-                    "heading": _heading_deg(team.get("moments") or []),
-                    "track": _track_tail(team.get("moments") or []),
+                    "heading": _heading_deg(moments),
+                    "sog_kn": _sog_kn(moments),
+                    "track": _track_tail(moments),
                     "at": fix.get("at"),
+                    "gps_at": _gps_at(fix.get("at")),
+                    "dtf_nm": _nm(fix.get("dtf") if fix.get("dtf") is not None else lb.get("dtf")),
+                    "d24_nm": _nm(lb.get("d24")),
+                    "dmg_nm": _nm(lb.get("dmg")),
+                    "vmg_kn": vmg_kn,
+                    "rank": lb.get("rankR"),
+                    "finish_at": _gps_at(finish_at) if finish_at else None,
+                    "wind_kn": wind[0] if wind else None,
+                    "wind_deg": wind[1] if wind else None,
                 }
             )
             points.append((fix["lat"], fix["lon"]))

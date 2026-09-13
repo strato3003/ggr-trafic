@@ -67,6 +67,23 @@ h2 { font-size: 1.15rem; margin-top: 2rem; }
 
 .player video { width: 100%; background: #000; border: 1px solid var(--line); }
 .player__cap { color: var(--muted); font-size: 0.85rem; }
+.chan-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.9rem;
+}
+.chan-jump__a {
+  display: inline-block;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--foam);
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+.chan-jump__a:hover { border-color: var(--brass); color: var(--brass); }
+.chan-jump__a.is-mute { color: var(--muted); opacity: 0.7; }
 .chan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
 .chan { background: var(--panel); padding: 1rem; border: 1px solid var(--line); }
 .chan audio { width: 100%; margin-top: 0.6rem; }
@@ -248,6 +265,15 @@ body.globe-page .wrap {
 }
 .globe-dock__tabs button.is-on { color: var(--bg); background: var(--brass); border-color: var(--brass); }
 .globe-dock h3 { margin: 0.35rem 0 0.4rem; font-size: 1.02rem; }
+.globe-yb {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0.18rem 0;
+  font-size: 0.82rem;
+}
+.globe-yb span { color: var(--muted); }
+.globe-yb strong { font-weight: 600; text-align: right; }
 .globe-vacs { list-style: none; padding: 0; margin: 0.5rem 0 0; }
 .globe-vacs li { margin: 0 0 0.35rem; }
 .globe-vac {

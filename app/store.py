@@ -14,6 +14,28 @@ from recorder.config import data_dir, load_config
 _VACATION_ID = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._-]{0,80}$")
 
 
+def channel_place(ch: dict[str, Any]) -> str:
+    """Emplacement lisible du Kiwi (ville / locator), pas seulement le rôle NVIS/hop."""
+    kiwi = ch.get("kiwi") or {}
+    loc = kiwi.get("loc") or ch.get("loc")
+    if isinstance(loc, str) and loc.strip():
+        return loc.strip()
+    name = str(kiwi.get("name") or "").strip()
+    if " | " in name:
+        tail = name.rsplit(" | ", 1)[-1].strip()
+        if tail:
+            return tail
+    parts = [p.strip() for p in name.split(",") if p.strip()]
+    if len(parts) >= 3:
+        return ", ".join(parts[-2:])
+    if name:
+        return name
+    fmt = kiwi.get("fmt")
+    if fmt:
+        return str(fmt)
+    return str(ch.get("site_label") or "")
+
+
 def vacations_root(cfg: dict[str, Any] | None = None) -> Path:
     return data_dir(cfg) / "vacations"
 
@@ -22,6 +44,8 @@ def _decorate(meta: dict[str, Any]) -> dict[str, Any]:
     thumb = None
     tx = None
     for ch in meta.get("channels") or []:
+        ch["place"] = channel_place(ch)
+        ch["has_audio"] = bool(ch.get("audio"))
         if ch.get("id") == "tx":
             tx = ch
         if ch.get("thumb") and not thumb:
@@ -47,8 +71,6 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
         lat = lon = None
     channels = []
     for ch in decorated.get("channels") or []:
-        if not (ch.get("audio") or ch.get("video") or ch.get("thumb")):
-            continue
         kiwi = ch.get("kiwi") or {}
         channels.append(
             {
@@ -59,6 +81,9 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
                 "video": ch.get("video"),
                 "thumb": ch.get("thumb"),
                 "kiwi": kiwi.get("name"),
+                "loc": kiwi.get("loc"),
+                "place": ch.get("place"),
+                "has_audio": bool(ch.get("has_audio")),
                 "site_label": ch.get("site_label"),
             }
         )

@@ -19,6 +19,7 @@
 
   const selEl = document.getElementById("globe-sel");
   const vacsEl = document.getElementById("globe-vacs");
+  const buddyVacsEl = document.getElementById("globe-buddy-vacs");
   const skipEl = document.getElementById("globe-skippers");
   const msgEl = document.getElementById("globe-buddy-msg");
   const includeEl = document.getElementById("globe-include-fleet");
@@ -335,13 +336,13 @@
     });
   }
 
-  function renderVacList() {
-    if (!vacsEl) return;
-    if (!vacations.length) {
-      vacsEl.innerHTML = "<li class=\"hint\">Aucun bulletin météo avec position.</li>";
+  function fillVacList(root, rows, emptyText) {
+    if (!root) return;
+    if (!rows.length) {
+      root.innerHTML = `<li class="hint">${esc(emptyText)}</li>`;
       return;
     }
-    vacsEl.innerHTML = vacations
+    root.innerHTML = rows
       .map((v) => {
         const when = (v.started_at || "").replace("T", " ").slice(0, 16);
         const tag = v.is_buddy ? "Buddy call" : v.is_test ? "Test" : "Bulletin météo";
@@ -351,7 +352,7 @@
         );
       })
       .join("");
-    vacsEl.querySelectorAll(".globe-vac").forEach((btn) => {
+    root.querySelectorAll(".globe-vac").forEach((btn) => {
       btn.addEventListener("click", () => {
         const v = vacations.find((x) => x.id === btn.getAttribute("data-vid"));
         if (v) playVacation(v);
@@ -359,19 +360,34 @@
     });
   }
 
+  function renderVacList() {
+    fillVacList(
+      vacsEl,
+      vacations.filter((v) => !v.is_buddy),
+      "Aucun bulletin météo avec position."
+    );
+    fillVacList(
+      buddyVacsEl,
+      vacations.filter((v) => v.is_buddy),
+      "Aucun buddy call avec position."
+    );
+  }
+
   function playVacation(v) {
     if (!playerBox || !audioEl || !chanEl) return;
     playerBox.hidden = false;
     if (playerTitle) playerTitle.textContent = v.title || v.id;
     if (openVac) openVac.href = "/vacations/" + encodeURIComponent(v.id);
-    const chans = (v.channels || []).filter((c) => c && (c.audio || c.video || c.thumb));
+    const chans = v.channels || [];
     if (chanLab) chanLab.classList.toggle("is-off", !chans.length);
     if (chans.length) {
       chanEl.innerHTML = chans
-        .map(
-          (c, i) =>
-            `<option value="${i}">${esc(c.label || c.id)} ${c.freq_khz ? "· " + c.freq_khz + " kHz" : ""}</option>`
-        )
+        .map((c, i) => {
+          const qrg = Number.isFinite(c.freq_khz) ? Math.round(c.freq_khz) + " kHz" : "";
+          const where = c.place || c.loc || c.site_label || c.kiwi || c.label || c.id || "";
+          const audio = c.has_audio || c.audio ? "audio" : "pas d’audio";
+          return `<option value="${i}">${esc([qrg, where, audio].filter(Boolean).join(" · "))}</option>`;
+        })
         .join("");
     } else {
       chanEl.innerHTML = "";
@@ -390,12 +406,10 @@
         audioMsg.hidden = !!audioFile;
         audioMsg.textContent = audioFile
           ? ""
-          : v.status === "error"
-            ? "Pas d’audio : cette vacation est en erreur."
-            : "Pas de piste audio pour cette vacation.";
+          : (ch.place || ch.loc || "ce Kiwi") + " : pas d’audio.";
       }
-      const vid = ch.video || v.video;
-      const thumb = ch.thumb || v.thumb;
+      const vid = ch.video || null;
+      const thumb = ch.thumb || null;
       if (videoEl) {
         if (vid) {
           videoEl.src = mediaUrl(v.id, vid);
@@ -403,8 +417,7 @@
           else videoEl.removeAttribute("poster");
         } else {
           videoEl.removeAttribute("src");
-          if (thumb) videoEl.poster = mediaUrl(v.id, thumb);
-          else videoEl.removeAttribute("poster");
+          videoEl.removeAttribute("poster");
         }
         videoEl.load();
       }
@@ -419,12 +432,18 @@
       }
       if (wfMsg) {
         wfMsg.hidden = !!vid;
-        wfMsg.textContent = vid ? "" : "Pas de waterfall pour cette vacation.";
+        const where = ch.place || ch.loc || (Number.isFinite(ch.freq_khz) ? Math.round(ch.freq_khz) + " kHz" : "ce canal");
+        wfMsg.textContent = vid
+          ? ""
+          : audioFile
+            ? "Pas de waterfall sur " + where + " (audio seul)."
+            : "Pas d’audio ni de waterfall · " + where;
       }
     };
     chanEl.onchange = applyChan;
     applyChan();
-    const tab = document.querySelector('.globe-dock__tabs [data-tab="vac"]');
+    const tabName = v.is_buddy ? "buddy" : "vac";
+    const tab = document.querySelector('.globe-dock__tabs [data-tab="' + tabName + '"]');
     if (tab) tab.click();
     if (Number.isFinite(v.lat) && globe) {
       globe.pointOfView({ lat: v.lat, lng: v.lon, altitude: 1.6 }, 900);
@@ -435,11 +454,31 @@
     if (!d) return;
     if (d.kind === "boat") {
       const on = boatInBuddy(d.name);
+      const yb = (label, val) =>
+        val == null || val === "" ? "" : `<div class="globe-yb"><span>${esc(label)}</span><strong>${esc(val)}</strong></div>`;
+      const kn = (x) => (Number.isFinite(x) ? String(x).replace(".", ",") + " kn" : null);
+      const nm = (x) => (Number.isFinite(x) ? String(x).replace(".", ",") + " NM" : null);
+      const deg = (x) => (Number.isFinite(x) ? String(Math.round(x)).padStart(3, "0") + "°" : null);
+      const sog = kn(d.sog_kn);
+      const spd = sog && deg(d.heading) ? sog + " @ " + deg(d.heading) : sog;
+      const wind = kn(d.wind_kn);
+      const vent = wind && deg(d.wind_deg) ? wind + " @ " + deg(d.wind_deg) : wind;
       showSel(
         `<p class="badge">Skipper</p><h3>${esc(d.name)}</h3>` +
-          (d.sail ? `<p>Voile ${esc(d.sail)}</p>` : "") +
-          `<p class="meta">${Number(d.lat).toFixed(3)}, ${Number(d.lon).toFixed(3)}` +
-          `${Number.isFinite(d.heading) ? " · cap " + Math.round(d.heading) + "°" : ""}</p>` +
+          (d.owner || d.model || d.sail
+            ? `<p class="meta">${esc([d.owner, d.model, d.sail ? "voile " + d.sail : ""].filter(Boolean).join(" · "))}</p>`
+            : "") +
+          (d.country ? `<p class="meta">${esc(d.country)}</p>` : "") +
+          yb("GPS", d.gps_at) +
+          yb("Vitesse", spd) +
+          yb("Vent", vent) +
+          yb("DTF", nm(d.dtf_nm)) +
+          yb("24 h", nm(d.d24_nm)) +
+          yb("DMG", nm(d.dmg_nm)) +
+          yb("VMG", kn(d.vmg_kn)) +
+          yb("Rang", d.rank != null ? String(d.rank) : null) +
+          yb("Arrivée est.", d.finish_at) +
+          (d.status && d.status !== "RACING" ? yb("Statut", d.status) : "") +
           `<p class="settings__actions"><button type="button" class="btn" id="globe-toggle-skip">` +
           `${on ? "Retirer du centroïde buddy call" : "Ajouter au centroïde buddy call"}</button></p>`
       );

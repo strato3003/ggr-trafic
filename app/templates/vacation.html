@@ -21,6 +21,21 @@
     </p>
   </header>
 
+  {% if vacation.channels %}
+  <nav class="chan-jump" aria-label="Canaux d’écoute">
+    {% for ch in vacation.channels %}
+    <a href="#chan-{{ ch.id }}" class="chan-jump__a{% if not ch.has_audio %} is-mute{% endif %}">
+      {{ '%.0f'|format(ch.freq_khz) }} kHz
+      · {{ ch.place or ch.site_label or ch.id }}
+      · {% if ch.has_audio %}audio{% else %}pas d’audio{% endif %}
+    </a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+  {% if vacation.is_buddy %}
+  <p class="hint">Le waterfall n’est filmé que sur <strong>4483 kHz</strong> (premier Kiwi). <strong>6516 kHz</strong> est en audio, via les liens ci-dessus.</p>
+  {% endif %}
+
   {% if vacation.tx and vacation.tx.video %}
   <div class="player">
     <video id="sdr-video" controls playsinline poster="{% if vacation.tx.thumb %}/media/{{ vacation.id }}/{{ vacation.tx.thumb }}{% endif %}">
@@ -34,12 +49,16 @@
     <h2>Canaux</h2>
     <div class="chan-grid">
       {% for ch in vacation.channels or [] %}
-      <div class="chan">
+      <div class="chan" id="chan-{{ ch.id }}">
         <h3>{{ ch.label }}</h3>
         <p class="qrg__v">{{ '%.4f'|format(ch.freq_khz) }} kHz USB</p>
+        <p class="meta">
+          <span class="badge">{% if ch.has_audio %}audio{% else %}pas d’audio{% endif %}</span>
+          {% if ch.place %}<strong>{{ ch.place }}</strong>{% endif %}
+          {% if ch.site_label %} · {{ ch.site_label }}{% endif %}
+        </p>
         {% if ch.kiwi %}
         <p class="meta">
-          {% if ch.site_label %}<span class="badge">{{ ch.site_label }}</span>{% endif %}
           {{ ch.kiwi.name }}
           {% if ch.kiwi.fmt %} · {{ ch.kiwi.fmt }}{% endif %}
           {% if ch.kiwi.prop_zone %} · {{ ch.kiwi.prop_zone }}{% endif %}
@@ -49,6 +68,8 @@
         {% endif %}
         {% if ch.audio %}
         <audio controls src="/media/{{ vacation.id }}/{{ ch.audio }}" data-sync="1"></audio>
+        {% else %}
+        <p class="hint">Pas d’audio sur ce Kiwi ({{ ch.place or ch.site_label or ch.id }}).</p>
         {% endif %}
         {% if ch.video and ch.id != 'tx' %}
         <p><a href="/media/{{ vacation.id }}/{{ ch.video }}">Télécharger le screencast</a></p>

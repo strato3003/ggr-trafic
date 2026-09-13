@@ -5,7 +5,7 @@ from __future__ import annotations
 import struct
 from datetime import datetime, timezone
 
-from recorder.fleet import parse_positions3, _heading_deg, _team_colour
+from recorder.fleet import parse_positions3, _heading_deg, _team_colour, _sog_kn, _nm, _gps_at, parse_yb_grib2, _wind_at
 from recorder.geo import centroid, fmt_latlon, haversine_km, initial_bearing
 from recorder.kiwi_audio import ImaAdpcmDecoder, wav_from_snd_frames, _pcm_from_snd, _ws_uris
 from recorder.kiwi_list import parse_kiwi_directory, score_kiwi
@@ -58,6 +58,38 @@ def test_scheduler_cron_is_1759_with_one_minute_lead():
     from recorder.scheduler import _lead
 
     assert _lead({"schedule": {"time_utc": "18:00", "lead_minutes": 1}}) == (17, 59)
+
+
+def test_sog_and_gps_at_from_fixes():
+    moments = [
+        {"lat": 46.50, "lon": -1.80, "at": 1_789_286_422 - 3600},
+        {"lat": 46.56, "lon": -1.80, "at": 1_789_286_422},
+    ]
+    sog = _sog_kn(moments)
+    assert sog is not None
+    assert 3.0 < sog < 4.0
+    assert _gps_at(1_789_286_422) == "2026-09-13 08:00 TU"
+    assert _nm(1852) == 1.0
+    assert _nm(None) is None
+
+
+def test_yb_grib2_nearest_wind():
+    buf = bytearray()
+    buf.append(1)
+    buf += struct.pack(">I", 1)
+    buf.append(1)
+    buf += struct.pack(">i", 0)
+    buf += struct.pack(">i", int(46.5 * 1e5))
+    buf += struct.pack(">i", int(-1.8 * 1e5))
+    buf.append(100)
+    buf += struct.pack(">H", 1)
+    buf += struct.pack(">I", 1)
+    buf.append(15)
+    buf.append(40)
+    grids = parse_yb_grib2(bytes(buf), 1_788_697_800)
+    assert len(grids) == 1
+    wind = _wind_at(grids, 46.5, -1.8, 1_788_697_800)
+    assert wind == (12.0, 30)
 
 
 def test_heading_from_two_fixes():
@@ -203,6 +235,47 @@ def test_delete_vacation_refuses_running(tmp_path):
     )
     assert delete_vacation("2026-09-11T0910Z", cfg) == "enregistrement en cours"
     assert folder.exists()
+
+
+def test_channel_place_and_globe_keeps_mute_channels():
+    from app.store import channel_place, globe_vacation
+
+    assert channel_place({"kiwi": {"loc": "Amarante, Portugal"}}) == "Amarante, Portugal"
+    assert (
+        channel_place({"kiwi": {"name": "0-30 MHz SDR, CT2HMR, Amarante, Portugal"}})
+        == "Amarante, Portugal"
+    )
+    assert (
+        channel_place({"kiwi": {"name": "SAL 30 | Montmorillon 86500 FRANCE"}})
+        == "Montmorillon 86500 FRANCE"
+    )
+    card = globe_vacation(
+        {
+            "id": "2026-09-13T1159Z-buddy",
+            "reason": "buddy",
+            "started_at": "2026-09-13T11:59:00+00:00",
+            "fleet": {"lat": 40.0, "lon": -10.0, "fmt": "40.000°N 10.000°W"},
+            "channels": [
+                {
+                    "id": "nvis-alt",
+                    "freq_khz": 6516.0,
+                    "audio": "audio-nvis-alt.wav",
+                    "kiwi": {"name": "0-30 MHz SDR, CT2HMR, Amarante, Portugal"},
+                    "site_label": "proche / NVIS",
+                },
+                {
+                    "id": "hop-alt",
+                    "freq_khz": 6516.0,
+                    "kiwi": {"name": "SAL 30 | Montmorillon 86500 FRANCE"},
+                    "site_label": "saut 1 hop",
+                },
+            ],
+        }
+    )
+    assert card["is_buddy"] is True
+    assert [c["has_audio"] for c in card["channels"]] == [True, False]
+    assert card["channels"][0]["place"] == "Amarante, Portugal"
+    assert card["channels"][1]["place"] == "Montmorillon 86500 FRANCE"
 
 
 def test_finalize_pending_promotes_orphan_with_audio(tmp_path):
@@ -651,3 +724,37 @@ def test_assign_buddy_kiwis_nvis_and_hop_not_just_nearest():
     assert "hop-east" in names or "hop-west" in names
     assert "dead-zone" not in names or len(names) >= 3
     assert roles["nvis"]["name"] == "nvis"
+
+
+def test_buddy_channels_record_both_qrgs():
+    from recorder.session import _buddy_channels
+
+    cfg = {
+        "buddy": {
+            "main": {"freq_khz": 4483.0, "label": "Buddy call 4483 kHz", "zoom": 12},
+            "alternate": {"freq_khz": 6516.0, "label": "Buddy call 6516 kHz (secours)", "zoom": 12},
+        }
+    }
+    roles = {
+        "nvis": {"name": "kiwi-nvis", "site_label": "proche / NVIS", "free_slots": 3},
+        "hop": {"name": "kiwi-hop", "site_label": "saut 1 hop", "free_slots": 1},
+    }
+    rows = _buddy_channels(cfg, roles)
+    assert [c["id"] for c in rows] == ["nvis-main", "nvis-alt", "hop-main"]
+    assert [c["freq_khz"] for c in rows] == [4483.0, 6516.0, 4483.0]
+    assert rows[0]["screencast"] is True
+    assert rows[1]["screencast"] is False
+    assert rows[2]["screencast"] is False
+
+
+def test_kiwi_tune_url_sets_wf_colormap():
+    from recorder.kiwi_list import kiwi_tune_url
+
+    url = kiwi_tune_url(
+        {"url": "http://kiwi.example:8073/"},
+        4483.0,
+        mode="usb",
+        zoom=12,
+    )
+    assert url.startswith("http://kiwi.example:8073/?f=4483.00usbz12")
+    assert "wfm=-110,-40" in url

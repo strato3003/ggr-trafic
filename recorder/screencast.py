@@ -67,6 +67,30 @@ SND_HOOK_JS = """
 """
 
 
+# Playwright n’a pas de localStorage Kiwi : le panneau « Welcome / readme »
+# s’affiche à chaque session et recouvre une grande partie du waterfall.
+KIWI_STORAGE_JS = """
+try { localStorage.setItem('readme', 'seen2'); } catch (e) {}
+try { localStorage.setItem('news', 'seen'); } catch (e) {}
+"""
+
+# Après quelques secondes de WF, Auto Scale recale min/max sur le bruit réel.
+PREPARE_KIWI_JS = """
+() => {
+  const hideIfOpen = (id) => {
+    const el = document.getElementById(id);
+    if (!el || el.offsetParent === null) return;
+    if (el.offsetWidth < 40 || el.offsetHeight < 40) return;
+    const vis = document.getElementById(id + '-vis');
+    if (vis) vis.click();
+  };
+  hideIfOpen('id-readme');
+  hideIfOpen('id-news');
+  if (typeof wf_autoscale_cb === 'function') wf_autoscale_cb();
+}
+"""
+
+
 OVERLAY_JS = """
 () => {
   if (document.getElementById('ggr-overlay')) return;
@@ -189,6 +213,7 @@ async def record_screencast(
             record_video_size={"width": vp["width"], "height": vp["height"]},
             ignore_https_errors=True,
         )
+        await context.add_init_script(KIWI_STORAGE_JS)
         if snd_wav is not None:
             await context.expose_function("ggrSndBatch", _on_snd_batch)
             await context.add_init_script(SND_HOOK_JS)
@@ -201,6 +226,10 @@ async def record_screencast(
                 html = json.dumps(_overlay_html(overlay))
                 await page.evaluate(f"window.__GGR_OVERLAY_HTML = {html};")
                 await page.evaluate(OVERLAY_JS)
+            try:
+                await page.evaluate(PREPARE_KIWI_JS)
+            except Exception:
+                pass
             snd_frames.clear()
             rec_t0 = time.monotonic()
             info["audio_delay_s"] = round(max(0.0, rec_t0 - video_t0), 3)
@@ -221,6 +250,10 @@ async def record_screencast(
                             html = json.dumps(_overlay_html(overlay))
                             await page.evaluate(f"window.__GGR_OVERLAY_HTML = {html};")
                             await page.evaluate(OVERLAY_JS)
+                        try:
+                            await page.evaluate(PREPARE_KIWI_JS)
+                        except Exception:
+                            pass
                     await _hold_page(page, dwell)
             else:
                 await _hold_page(page, duration_s)

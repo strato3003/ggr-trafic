@@ -1,5 +1,5 @@
 # Configuration GGR Vacations — F6KUF / flotte Golden Globe Race
-version: "0.3.0"
+version: "0.3.1"
 
 club:
   callsign: F6KUF
@@ -44,11 +44,12 @@ buddy:
   main:
     freq_khz: 4483.0
     label: "Buddy call 4483 kHz"
-    zoom: 10
+    # Zoom 12 → ~7,3 kHz : la USB 2,4 kHz reste lisible (z10 ≈ 29 kHz la noie).
+    zoom: 12
   alternate:
     freq_khz: 6516.0
     label: "Buddy call 6516 kHz (secours)"
-    zoom: 10
+    zoom: 12
   centroid:
     # Noms Yellowbrick RaceSetup (ggr2026). Le centroïde est celui de ces skippers,
     # ou de toute la flotte en course si include_fleet est vrai.

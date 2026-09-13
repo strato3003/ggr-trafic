@@ -475,7 +475,16 @@ async def fetch_ranked_kiwis(
     return ranked
 
 
+# Colormap WF Kiwi (URL ``wfm=min,max``). Les défauts station sont souvent
+# −140 / −10 dB : une USB faible reste audible (AGC) mais invisible sur le WF.
+WF_MIN_DB = -110
+WF_MAX_DB = -40
+
+
 def kiwi_tune_url(kiwi: dict[str, Any], freq_khz: float, mode: str = "usb", zoom: int = 10) -> str:
     """URL KiwiSDR pré-accordée (QRG kHz + mode USB + zoom waterfall)."""
     base = kiwi["url"].rstrip("/")
-    return f"{base}/?f={freq_khz:.2f}{mode}z{int(zoom)}"
+    return (
+        f"{base}/?f={freq_khz:.2f}{mode}z{int(zoom)}"
+        f"&wfm={int(WF_MIN_DB)},{int(WF_MAX_DB)}"
+    )

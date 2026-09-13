@@ -23,6 +23,25 @@ from recorder.kiwi_wf import HUNT_CF_KHZ, HUNT_HI_KHZ, HUNT_LO_KHZ, HUNT_ZOOM, h
 log = logging.getLogger(__name__)
 LOCK_NAME = ".recording.lock"
 RECORDING_GRACE_S = 180
+
+
+def _kiwi_snap(kiwi: dict[str, Any] | None, **extra: Any) -> dict[str, Any]:
+    kiwi = kiwi or {}
+    out = {
+        "name": kiwi.get("name"),
+        "url": kiwi.get("url"),
+        "loc": kiwi.get("loc"),
+        "fmt": kiwi.get("fmt"),
+        "snr_hf": kiwi.get("snr_hf"),
+        "site_km": kiwi.get("site_km") if kiwi.get("site_km") is not None else kiwi.get("distance_km"),
+        "distance_km": kiwi.get("distance_km"),
+        "prop_zone": kiwi.get("prop_zone"),
+        "site_label": kiwi.get("site_label"),
+    }
+    out.update(extra)
+    return {k: v for k, v in out.items() if v is not None or k in extra}
+
+
 HUNT_BUDGET_S = 20.0
 ORPHAN_ERROR = "Enregistrement interrompu (processus arrêté avant la fin)"
 
@@ -278,14 +297,7 @@ async def run_manual_qrg(
             "screencast_raw": "screencast-tx.webm",
             "audio_file": "audio-tx.wav",
             "hunt": hunt_info,
-            "kiwi": {
-                "name": kiwi.get("name"),
-                "url": kiwi.get("url"),
-                "distance_km": kiwi.get("distance_km"),
-                "fmt": kiwi.get("fmt"),
-                "snr_hf": kiwi.get("snr_hf"),
-                "site_km": kiwi.get("distance_km"),
-            },
+            "kiwi": _kiwi_snap(kiwi, site_km=kiwi.get("distance_km")),
         }
         if isinstance(raw, dict) and isinstance(raw.get("audio_delay_s"), (int, float)):
             ch_out["audio_delay_s"] = round(float(raw["audio_delay_s"]), 3)
@@ -353,16 +365,7 @@ async def run_vacation(
             fleet_lon=float(fleet["lon"]),
             cfg=cfg,
         )
-        meta["kiwi_roles"] = {
-            role: {
-                "name": kiwi.get("name"),
-                "url": kiwi.get("url"),
-                "fmt": kiwi.get("fmt"),
-                "site_km": kiwi.get("site_km"),
-                "snr_hf": kiwi.get("snr_hf"),
-            }
-            for role, kiwi in roles.items()
-        }
+        meta["kiwi_roles"] = {role: _kiwi_snap(kiwi) for role, kiwi in roles.items()}
         ack_sites = [
             {"id": sid, "label": roles[sid].get("site_label") or sid}
             for sid in ("fleet", "france", "tahiti")
@@ -402,14 +405,7 @@ async def run_vacation(
                 continue
             ch_out = {
                 **ch,
-                "kiwi": {
-                    "name": kiwi.get("name"),
-                    "url": kiwi.get("url"),
-                    "distance_km": kiwi.get("distance_km"),
-                    "fmt": kiwi.get("fmt"),
-                    "snr_hf": kiwi.get("snr_hf"),
-                    "site_km": kiwi.get("site_km"),
-                },
+                "kiwi": _kiwi_snap(kiwi),
             }
             wav = session_dir / f"audio-{ch['id']}.wav"
             ch_out["audio_file"] = str(wav.name)
@@ -601,18 +597,7 @@ async def run_buddy_call(
         roles = assign_buddy_kiwis(ranked, lat=float(aim["lat"]), lon=float(aim["lon"]), cfg=cfg)
         if not roles:
             raise RuntimeError("Aucun KiwiSDR couvrant 4483 et 6516 kHz vers le centroïde buddy")
-        meta["kiwi_roles"] = {
-            role: {
-                "name": kiwi.get("name"),
-                "url": kiwi.get("url"),
-                "fmt": kiwi.get("fmt"),
-                "site_km": kiwi.get("site_km"),
-                "snr_hf": kiwi.get("snr_hf"),
-                "prop_zone": kiwi.get("prop_zone"),
-                "site_label": kiwi.get("site_label"),
-            }
-            for role, kiwi in roles.items()
-        }
+        meta["kiwi_roles"] = {role: _kiwi_snap(kiwi) for role, kiwi in roles.items()}
         channels = _buddy_channels(cfg, roles)
         assignment = {ch["id"]: roles[str(ch["site"])] for ch in channels if str(ch.get("site")) in roles}
         minutes = (
@@ -635,15 +620,7 @@ async def run_buddy_call(
                 continue
             ch_out = {
                 **ch,
-                "kiwi": {
-                    "name": kiwi.get("name"),
-                    "url": kiwi.get("url"),
-                    "distance_km": kiwi.get("distance_km"),
-                    "fmt": kiwi.get("fmt"),
-                    "snr_hf": kiwi.get("snr_hf"),
-                    "site_km": kiwi.get("site_km"),
-                    "prop_zone": kiwi.get("prop_zone"),
-                },
+                "kiwi": _kiwi_snap(kiwi),
             }
             wav = session_dir / f"audio-{ch['id']}.wav"
             ch_out["audio_file"] = str(wav.name)
@@ -809,13 +786,7 @@ async def run_test_20m(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
             "zoom": 8,
             "screencast": True,
             "screencast_raw": "screencast-tx.webm",
-            "kiwi": {
-                "name": kiwi.get("name"),
-                "url": kiwi.get("url"),
-                "distance_km": kiwi.get("distance_km"),
-                "fmt": kiwi.get("fmt"),
-                "snr_hf": kiwi.get("snr_hf"),
-            },
+            "kiwi": _kiwi_snap(kiwi),
         }
         meta["channels"].append(ch_out)
         meta["raw_results"] = [
@@ -940,13 +911,7 @@ async def run_test_hunt(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
             "zoom": HUNT_RECORD_ZOOM,
             "screencast": True,
             "screencast_raw": "screencast-tx.webm",
-            "kiwi": {
-                "name": used.get("name"),
-                "url": used.get("url"),
-                "distance_km": used.get("distance_km"),
-                "fmt": used.get("fmt"),
-                "snr_hf": used.get("snr_hf"),
-            },
+            "kiwi": _kiwi_snap(used),
         }
         if isinstance(raw.get("audio_delay_s"), (int, float)):
             ch_out["audio_delay_s"] = round(float(raw["audio_delay_s"]), 3)
