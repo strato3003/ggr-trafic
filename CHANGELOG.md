@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 0.3.6 — 2026-09-14
+
+- Globe : légendes distance / azimut sur les pointillés à la même taille que les noms de skippers.
+
 ## 0.3.5 — 2026-09-14
 
 - Globe : jusqu’à 5 QTH d’émission du bulletin, pointillé vers le centroïde flotte avec distance et azimut d’antenne (vrai nord).
