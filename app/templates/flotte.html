@@ -43,11 +43,12 @@
       <button type="button" class="is-on" data-tab="sel">Sélection</button>
       <button type="button" data-tab="vac">Bulletin<br>météo</button>
       <button type="button" data-tab="buddy">Buddy<br>call</button>
+      <button type="button" data-tab="tx">Émission</button>
     </div>
     <div id="globe-player" class="globe-player" hidden>
       <p class="globe-player__title" id="globe-player-title"></p>
       <p class="globe-player__cap">Waterfall</p>
-      <video id="globe-video" controls playsinline preload="metadata"></video>
+      <video id="globe-video" playsinline preload="metadata"></video>
       <p class="hint" id="globe-wf-msg" hidden></p>
       <p><a id="globe-wf" href="#" hidden>Télécharger le waterfall</a></p>
       <label class="globe-player__chan" id="globe-chan-lab">
@@ -55,12 +56,12 @@
         <select id="globe-chan"></select>
       </label>
       <p class="globe-player__cap">Audio</p>
-      <audio id="globe-audio" controls preload="metadata"></audio>
+      <audio id="globe-audio" preload="metadata"></audio>
       <p class="hint" id="globe-audio-msg" hidden></p>
       <p><a id="globe-open-vac" href="#">Ouvrir la fiche</a></p>
     </div>
     <div class="globe-panel" data-panel="sel" id="globe-sel">
-      <p class="hint">Cliquer un bateau, un Kiwi ou un bulletin météo. Molette pour zoomer.</p>
+      <p class="hint">Cliquer un bateau, un Kiwi, un QTH d’émission ou un bulletin. Molette pour zoomer.</p>
     </div>
     <div class="globe-panel" data-panel="vac" hidden>
       <ul class="globe-vacs" id="globe-vacs"></ul>
@@ -77,6 +78,15 @@
         <button type="button" class="btn" id="globe-save-buddy">Sauver le centroïde</button>
       </p>
       <p class="settings-msg" id="globe-buddy-msg" hidden></p>
+    </div>
+    <div class="globe-panel" data-panel="tx" hidden>
+      <p class="hint">Jusqu’à 5 QTH d’émission du bulletin. Pointillé vers le centroïde : distance et azimut d’antenne (vrai nord, 000–359°).</p>
+      <ul class="tx-list" id="globe-tx-list"></ul>
+      <p class="settings__actions">
+        <button type="button" class="btn" id="globe-tx-place">Poser un QTH sur le globe</button>
+        <button type="button" class="btn" id="globe-save-tx">Sauver les QTH</button>
+      </p>
+      <p class="settings-msg" id="globe-tx-msg" hidden></p>
     </div>
 
     {% if fleet.warning %}<p class="err">{{ fleet.warning }}</p>{% endif %}
@@ -127,6 +137,25 @@
   </tbody>
 </table>
 
+<h2>QTH d’émission bulletin</h2>
+<table class="tbl">
+  <thead>
+    <tr><th>Station</th><th>Position</th><th>Distance</th><th>Azimut antenne</th></tr>
+  </thead>
+  <tbody>
+    {% for s in tx_sites or [] %}
+    <tr>
+      <td>{{ s.label }}</td>
+      <td>{{ '%.4f'|format(s.lat) }}, {{ '%.4f'|format(s.lon) }}</td>
+      <td>{% if s.distance_km is defined %}{{ s.distance_km }} km{% else %}—{% endif %}</td>
+      <td>{% if s.azimuth_deg is defined %}{{ '%03d'|format(s.azimuth_deg) }}°{% else %}—{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="meta">Aucun QTH d’émission. Les ajouter dans Réglages ou l’onglet Émission.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
 <h2>KiwiSDR bulletin (12–17 MHz, proximité flotte)</h2>
 <table class="tbl">
   <thead>
@@ -155,6 +184,7 @@
   "kiwis": kiwis or [],
   "buddy_kiwis": buddy_kiwis or [],
   "vacations": globe_vacations or [],
+  "tx_sites": tx_sites or [],
   "skippers": buddy_skippers,
   "include_fleet": buddy_include_fleet,
   "qrg": {

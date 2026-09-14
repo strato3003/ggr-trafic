@@ -12,6 +12,16 @@
   if (!Array.isArray(spec) || !spec.length) return;
 
   const vacId = root.getAttribute("data-vid") || "";
+  const startMs = (function parseStart() {
+    const iso = root.getAttribute("data-started") || "";
+    if (iso) {
+      const t = Date.parse(iso);
+      if (Number.isFinite(t)) return t;
+    }
+    const m = String(vacId).match(/^(\d{4}-\d{2}-\d{2}T)(\d{2})(\d{2})Z/);
+    if (m) return Date.parse(m[1] + m[2] + ":" + m[3] + ":00Z");
+    return NaN;
+  })();
   const media = (file) =>
     "/media/" + encodeURIComponent(vacId) + "/" + encodeURIComponent(file);
 
@@ -27,16 +37,14 @@
   const FFT = 512;
   const WF_H = 288;
 
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const tracks = [];
   let duration = 0;
   let playing = false;
   let t0 = 0;
-  let startedAt = 0;
-  let sources = [];
   let dragging = false;
   let resumeAfterDrag = false;
   let raf = 0;
+  let tickTimer = 0;
 
   function esc(s) {
     return String(s || "")
@@ -45,20 +53,26 @@
       .replace(/"/g, "&quot;");
   }
 
-  function fmtTime(s) {
-    s = Math.max(0, s || 0);
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+  function fmtTu(offsetSec) {
+    const sec = Math.max(0, offsetSec || 0);
+    if (!Number.isFinite(startMs)) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    }
+    const d = new Date(startMs + sec * 1000);
+    const p = (n) => String(n).padStart(2, "0");
+    return p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds()) + " TU";
   }
 
-  function fftMag(src, offset, n) {
+  function fftMag(src, offset, n, scale) {
+    scale = scale || 1;
     const re = new Float32Array(n);
     const im = new Float32Array(n);
     const last = Math.max(n - 1, 1);
     for (let i = 0; i < n; i++) {
       const w = 0.5 * (1 - Math.cos((2 * Math.PI * i) / last));
-      re[i] = (src[offset + i] || 0) * w;
+      re[i] = (src[offset + i] || 0) * scale * w;
     }
     let j = 0;
     for (let i = 0; i < n; i++) {
@@ -100,21 +114,61 @@
     return mag;
   }
 
-  function spectrogram(channel, sampleRate) {
+  function wavMono16(ab) {
+    const dv = new DataView(ab);
+    if (dv.byteLength < 44) return null;
+    const tag = (o) =>
+      String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+    if (tag(0) !== "RIFF" || tag(8) !== "WAVE") return null;
+    let o = 12;
+    let sr = 12000;
+    let bits = 16;
+    let ch = 1;
+    let dataOff = 0;
+    let dataLen = 0;
+    while (o + 8 <= dv.byteLength) {
+      const id = tag(o);
+      const sz = dv.getUint32(o + 4, true);
+      const body = o + 8;
+      if (id === "fmt ") {
+        ch = dv.getUint16(body + 2, true) || 1;
+        sr = dv.getUint32(body + 4, true) || 12000;
+        bits = dv.getUint16(body + 14, true) || 16;
+      } else if (id === "data") {
+        dataOff = body;
+        dataLen = sz;
+        break;
+      }
+      o = body + sz + (sz & 1);
+    }
+    if (!dataOff || bits !== 16) return null;
+    const frame = 2 * Math.max(1, ch);
+    const n = Math.floor(dataLen / frame);
+    if (ch === 1 && dataOff % 2 === 0) {
+      return { samples: new Int16Array(ab.slice(dataOff, dataOff + n * 2)), sampleRate: sr };
+    }
+    const samples = new Int16Array(n);
+    for (let i = 0; i < n; i++) samples[i] = dv.getInt16(dataOff + i * frame, true);
+    return { samples, sampleRate: sr };
+  }
+
+  async function spectrogram(channel, sampleRate, scale) {
     const n = channel.length;
     const img = new Float32Array(TIME * FREQ);
     if (n < FFT) return img;
     const nyquist = sampleRate / 2;
     const fMax = Math.min(2700, nyquist);
     const binMax = Math.max(2, Math.floor((fMax / nyquist) * (FFT / 2)));
+    const sc = scale || 1;
     for (let t = 0; t < TIME; t++) {
       const start = Math.min(n - FFT, Math.floor((t / TIME) * (n - FFT)));
-      const mag = fftMag(channel, start, FFT);
+      const mag = fftMag(channel, start, FFT, sc);
       const row = t * FREQ;
       for (let f = 0; f < FREQ; f++) {
         const bin = 1 + Math.floor((f / FREQ) * (binMax - 1));
         img[row + f] = 20 * Math.log10(mag[bin] + 1e-9);
       }
+      if (t && t % 60 === 0) await new Promise((r) => setTimeout(r, 0));
     }
     const sorted = Array.from(img).sort((a, b) => a - b);
     const lo = sorted[Math.floor(sorted.length * 0.25)] || -80;
@@ -168,9 +222,25 @@
     out[2] = b;
   }
 
+  function masterEl() {
+    return (
+      tracks.find((tr) => tr.el && !tr.el.paused && Number.isFinite(tr.el.currentTime)) ||
+      (tracks[0] && tracks[0].el) ||
+      null
+    );
+  }
+
   function nowT() {
-    if (!playing) return t0;
-    return Math.min(duration, t0 + (audioCtx.currentTime - startedAt));
+    if (playing) {
+      let t = t0;
+      tracks.forEach((tr) => {
+        if (tr.el && Number.isFinite(tr.el.currentTime) && !tr.el.paused) {
+          t = Math.max(t, tr.el.currentTime);
+        }
+      });
+      return duration ? Math.min(duration, t) : t;
+    }
+    return t0;
   }
 
   function resizeCanvas(tr) {
@@ -196,7 +266,7 @@
     const img = tr.spec;
     const dim = tr.muted ? 0.22 : 1;
     for (let row = 0; row < h; row++) {
-      const t = Math.min(TIME - 1, Math.floor((row / h) * TIME));
+      const t = Math.min(TIME - 1, Math.floor(((h - 1 - row) / h) * TIME));
       const base = t * FREQ;
       for (let col = 0; col < w; col++) {
         const f = Math.min(FREQ - 1, Math.floor((col / w) * FREQ));
@@ -221,54 +291,76 @@
     const t = nowT();
     const pct = Math.max(0, Math.min(1, t / duration));
     tracks.forEach((tr) => {
-      if (tr.head) tr.head.style.top = pct * 100 + "%";
+      if (tr.head) tr.head.style.top = (1 - pct) * 100 + "%";
     });
     if (!dragging) seekEl.value = String(t);
-    if (timeEl) timeEl.textContent = fmtTime(t) + " / " + fmtTime(duration);
+    if (timeEl) timeEl.textContent = fmtTu(t) + " · " + fmtTu(duration);
     seekEl.max = String(duration);
+    const startMark = deskEl.querySelector(".mix__tu-start");
+    const endMark = deskEl.querySelector(".mix__tu-end");
+    if (startMark) startMark.textContent = fmtTu(0);
+    if (endMark) endMark.textContent = fmtTu(duration);
   }
 
-  function stopSources() {
-    sources.forEach((s) => {
-      try {
-        s.stop();
-      } catch {
-        /* déjà arrêté */
-      }
-    });
-    sources = [];
+  function seekElTo(tr, off) {
+    if (!tr.el) return;
+    try {
+      const maxOff = Number.isFinite(tr.el.duration) ? Math.max(0, tr.el.duration - 0.05) : off;
+      tr.el.currentTime = Math.min(Math.max(0, off), maxOff);
+    } catch {
+      /* metadata pas encore prête */
+    }
+  }
+
+  function ensureReady(tr, off) {
+    if (!tr.el) return;
+    applyGain(tr);
+    const go = () => {
+      if (!playing) return;
+      tr.el.play().catch(() => {
+        tr.el.addEventListener("canplay", go, { once: true });
+      });
+    };
+    const cur = tr.el.currentTime;
+    if (Number.isFinite(tr.el.duration) && Math.abs((Number.isFinite(cur) ? cur : 0) - off) > 0.15) {
+      tr.el.addEventListener("seeked", go, { once: true });
+      seekElTo(tr, off);
+      setTimeout(() => {
+        if (playing && tr.el.paused) go();
+      }, 400);
+      return;
+    }
+    seekElTo(tr, off);
+    go();
   }
 
   function startSources(offset) {
-    stopSources();
-    const when = audioCtx.currentTime;
-    tracks.forEach((tr) => {
-      if (!tr.buffer) return;
-      const maxOff = Math.max(0, tr.buffer.duration - 0.05);
-      const off = Math.min(Math.max(0, offset), maxOff);
-      if (off >= tr.buffer.duration) return;
-      applyGain(tr);
-      const src = audioCtx.createBufferSource();
-      src.buffer = tr.buffer;
-      src.connect(tr.gain);
-      src.start(when, off);
-      sources.push(src);
-    });
-    startedAt = when;
-    t0 = offset;
+    const off = Math.max(0, offset || 0);
+    t0 = off;
     playing = true;
+    tracks.forEach((tr) => ensureReady(tr, off));
     playBtn.textContent = "Pause";
     playBtn.setAttribute("aria-pressed", "true");
+    cancelAnimationFrame(raf);
+    clearInterval(tickTimer);
     tick();
+    tickTimer = setInterval(tick, 100);
+    raf = requestAnimationFrame(function loop() {
+      tick();
+      if (playing) raf = requestAnimationFrame(loop);
+    });
   }
 
   function pauseAt(t) {
-    t0 = Math.max(0, Math.min(duration, t));
+    t0 = Math.max(0, Math.min(duration || t, t));
     playing = false;
-    stopSources();
+    tracks.forEach((tr) => {
+      if (tr.el) tr.el.pause();
+    });
     playBtn.textContent = "Lecture";
     playBtn.setAttribute("aria-pressed", "false");
     cancelAnimationFrame(raf);
+    clearInterval(tickTimer);
     updateHead();
   }
 
@@ -276,27 +368,34 @@
     if (!playing) return;
     const t = nowT();
     updateHead();
-    if (t >= duration - 0.03) {
-      pauseAt(duration);
-      return;
-    }
-    raf = requestAnimationFrame(tick);
+    if (duration && t >= duration - 0.03) pauseAt(duration);
   }
 
   function previewSeek(t) {
-    t0 = Math.max(0, Math.min(duration, t));
+    t0 = Math.max(0, Math.min(duration || t, t));
     if (playing) {
-      stopSources();
       playing = false;
+      tracks.forEach((tr) => {
+        if (tr.el) tr.el.pause();
+      });
       cancelAnimationFrame(raf);
+      clearInterval(tickTimer);
     }
+    tracks.forEach((tr) => {
+      if (!tr.el) return;
+      try {
+        tr.el.currentTime = t0;
+      } catch {
+        /* ignore */
+      }
+    });
     updateHead();
   }
 
   function pointerTime(ev, canvas) {
     const rect = canvas.getBoundingClientRect();
     const y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
-    return y * duration;
+    return (1 - y) * duration;
   }
 
   function bindCanvasSeek(tr) {
@@ -339,14 +438,24 @@
 
   function applyGain(tr) {
     const vol = tr.muted ? 0 : Number.isFinite(tr.volume) ? tr.volume : 1;
-    tr.gain.gain.value = vol;
+    if (tr.el) {
+      tr.el.muted = !!tr.muted;
+      tr.el.volume = Math.min(1, Math.max(0, vol));
+    }
   }
 
   function renderDesk() {
     const stage = document.getElementById("mix-stage");
     if (stage) stage.hidden = true;
     deskEl.classList.add("mix__desk");
-    deskEl.innerHTML = tracks
+    const scale =
+      '<div class="mix__tu-scale" aria-hidden="true">' +
+      '<span class="mix__tu-end"></span>' +
+      '<span class="mix__tu-start"></span>' +
+      "</div>";
+    deskEl.innerHTML =
+      scale +
+      tracks
       .map((tr) => {
         const qrg = Number.isFinite(tr.freq_khz) ? Math.round(tr.freq_khz) + " kHz" : "";
         const where = tr.place || tr.site_label || tr.label || tr.id;
@@ -399,15 +508,8 @@
   }
 
   function playToggle() {
-    const go = () => {
-      if (playing) pauseAt(nowT());
-      else startSources(duration - t0 < 0.08 ? 0 : t0);
-    };
-    if (audioCtx.state === "suspended") {
-      audioCtx.resume().then(go);
-      return;
-    }
-    go();
+    if (playing) pauseAt(nowT());
+    else startSources(duration && duration - t0 < 0.08 ? 0 : t0);
   }
 
   playBtn.addEventListener("click", playToggle);
@@ -424,59 +526,90 @@
     draw();
   });
 
+  function noteDuration(sec) {
+    if (!Number.isFinite(sec) || sec <= 0) return;
+    duration = Math.max(duration, sec);
+    seekEl.min = "0";
+    seekEl.max = String(duration);
+    seekEl.step = "0.05";
+    playBtn.disabled = false;
+    updateHead();
+  }
+
+  async function loadTrack(tr) {
+    const url = media(tr.src);
+    tr.el = new Audio(url);
+    tr.el.preload = "auto";
+    tr.el.controls = false;
+    tr.el.hidden = true;
+    tr.el.setAttribute("aria-hidden", "true");
+    tr.el.playsInline = true;
+    let bin = document.getElementById("mix-audio-bin");
+    if (!bin) {
+      bin = document.createElement("div");
+      bin.id = "mix-audio-bin";
+      bin.hidden = true;
+      root.appendChild(bin);
+    }
+    bin.appendChild(tr.el);
+    tr.el.addEventListener("loadedmetadata", () => {
+      noteDuration(tr.el.duration);
+      if (!playing) seekElTo(tr, t0);
+    });
+    tr.el.addEventListener("ended", () => {
+      if (playing && masterEl() === tr.el) pauseAt(duration || tr.el.currentTime || 0);
+    });
+    try {
+      const res = await fetch(url, { cache: "force-cache" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const raw = await res.arrayBuffer();
+      const wav = wavMono16(raw);
+      if (wav) {
+        noteDuration(wav.samples.length / wav.sampleRate);
+        tr.spec = await spectrogram(wav.samples, wav.sampleRate, 1 / 32768);
+      }
+    } catch (err) {
+      tr.place = (tr.place || tr.id) + " (échec waterfall)";
+      console.warn("Mixage piste", tr.id, err);
+    }
+    if (tr.canvas) {
+      resizeCanvas(tr);
+      drawTrack(tr);
+    }
+  }
+
   async function load() {
     root.hidden = false;
-    statusEl.textContent = "Chargement des pistes audio…";
-    const master = audioCtx.destination;
-    for (let i = 0; i < spec.length; i++) {
-      const row = spec[i];
-      statusEl.textContent = "Piste " + (i + 1) + " / " + spec.length + "…";
-      const gain = audioCtx.createGain();
-      gain.connect(master);
-      const tr = {
+    spec.forEach((row, i) => {
+      tracks.push({
         id: row.id || String(i),
+        src: row.src,
         freq_khz: row.freq_khz,
         place: row.place,
         site_label: row.site_label,
         label: row.label,
-        buffer: null,
         spec: new Float32Array(TIME * FREQ),
-        gain,
+        el: null,
         muted: false,
         volume: 1,
         canvas: null,
         head: null,
-      };
-      try {
-        const res = await fetch(media(row.src));
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const raw = await res.arrayBuffer();
-        const buf = await audioCtx.decodeAudioData(raw.slice(0));
-        tr.buffer = buf;
-        duration = Math.max(duration, buf.duration);
-        await new Promise((r) => setTimeout(r, 0));
-        tr.spec = spectrogram(buf.getChannelData(0), buf.sampleRate);
-      } catch (err) {
-        tr.place = (tr.place || tr.id) + " (échec chargement)";
-        console.warn("Mixage piste", row.id, err);
-      }
-      tracks.push(tr);
-    }
+      });
+    });
+    renderDesk();
+    tracks.forEach(resizeCanvas);
+    draw();
+    statusEl.textContent = "Waterfall : chargement en parallèle…";
+    playBtn.disabled = true;
+    await Promise.all(tracks.map(loadTrack));
     if (!duration) {
       statusEl.textContent = "Aucune piste audio décodable.";
       playBtn.disabled = true;
       return;
     }
-    seekEl.min = "0";
-    seekEl.max = String(duration);
-    seekEl.step = "0.05";
-    seekEl.value = "0";
-    renderDesk();
-    tracks.forEach(resizeCanvas);
-    draw();
     statusEl.textContent =
       tracks.length +
-      " voies · waterfall USB 0–2,7 kHz (temps vers le bas) · mute / volume par Kiwi.";
+      " voies · waterfall USB 0–2,7 kHz (début en bas, heure TU) · mute / volume par Kiwi.";
     updateHead();
   }
 

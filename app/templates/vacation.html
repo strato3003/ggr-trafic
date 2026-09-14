@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %} · {{ vacation.started_at | when }}{% endblock %}
 {% block content %}
-<article class="vac">
+<article class="vac" data-started="{{ vacation.started_at or '' }}">
   <header class="vac__head">
     <p class="crumb"><a href="/">← Bulletin météo</a></p>
     <h1>{{ vacation.title or (vacation.started_at | when) }}</h1>
@@ -22,17 +22,17 @@
   </header>
 
   {% if vacation.mixer_tracks %}
-  <section class="mix" id="mix" data-vid="{{ vacation.id }}">
+  <section class="mix" id="mix" data-vid="{{ vacation.id }}" data-started="{{ vacation.started_at or '' }}">
     <h2>Table de mixage</h2>
-    <p class="hint">Uniquement les Kiwi qui ont de l’audio. Waterfall USB (0–2,7 kHz, temps vers le bas, couleurs Kiwi) : une colonne par voie, mute et fader comme une table de mixage.</p>
+    <p class="hint">Uniquement les Kiwi qui ont de l’audio. Waterfall USB (0–2,7 kHz, début en bas, heure TU) : une colonne par voie, mute et fader comme une table de mixage.</p>
     <div class="mix__body" id="ggr-mix">
       <div class="mix__desk" id="mix-strips"></div>
     </div>
     <div class="mix__transport">
       <button type="button" class="btn" id="mix-play" aria-pressed="false">Lecture</button>
-      <span class="mix__clock" id="mix-time">00:00 / 00:00</span>
+      <span class="mix__clock" id="mix-time">— TU</span>
       <label class="mix__seek">
-        Timeline
+        Heure TU
         <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
       </label>
     </div>
@@ -61,7 +61,7 @@
 
   {% if vacation.tx and vacation.tx.video %}
   <div class="player">
-    <video id="sdr-video" controls playsinline poster="{% if vacation.tx.thumb %}/media/{{ vacation.id }}/{{ vacation.tx.thumb }}{% endif %}">
+    <video id="sdr-video" playsinline poster="{% if vacation.tx.thumb %}/media/{{ vacation.id }}/{{ vacation.tx.thumb }}{% endif %}">
       <source src="/media/{{ vacation.id }}/{{ vacation.tx.video }}" type="video/mp4">
     </video>
     <p class="player__cap">Replay screencast · {{ vacation.tx.label }} · {{ vacation.tx.kiwi.name if vacation.tx.kiwi else '' }}</p>
@@ -90,7 +90,7 @@
         </p>
         {% endif %}
         {% if ch.audio %}
-        <audio controls src="/media/{{ vacation.id }}/{{ ch.audio }}" data-sync="1"></audio>
+        <audio src="/media/{{ vacation.id }}/{{ ch.audio }}" data-sync="1" preload="metadata"></audio>
         {% else %}
         <p class="hint">Pas d’audio sur ce Kiwi ({{ ch.place or ch.site_label or ch.id }}).</p>
         {% endif %}

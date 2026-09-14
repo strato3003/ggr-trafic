@@ -30,6 +30,85 @@
     n.hidden = hasToken;
   });
 
+  (function bindUtcClocks() {
+    const pad = (n) => String(n).padStart(2, "0");
+    function startMsOf(iso) {
+      const t = Date.parse(iso || "");
+      return Number.isFinite(t) ? t : NaN;
+    }
+    function fmtTu(startMs, sec) {
+      const s = Math.max(0, sec || 0);
+      if (!Number.isFinite(startMs)) {
+        return pad(Math.floor(s / 60)) + ":" + pad(Math.floor(s % 60));
+      }
+      const d = new Date(startMs + s * 1000);
+      return pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds()) + " TU";
+    }
+    function enhanceTuPlayer(media, startMs) {
+      if (!media) return;
+      media.controls = false;
+      media.removeAttribute("controls");
+      media._tuStartMs = startMs;
+      let ui = media.nextElementSibling;
+      if (!ui || !ui.classList.contains("tu-player")) {
+        ui = document.createElement("div");
+        ui.className = "tu-player";
+        ui.innerHTML =
+          '<button type="button" class="tu-player__play" aria-pressed="false">Lecture</button>' +
+          '<span class="media-tu__clock">— TU</span>' +
+          '<label class="tu-player__seek">Heure TU<input type="range" min="0" max="1" step="0.05" value="0"></label>';
+        media.insertAdjacentElement("afterend", ui);
+        const playBtn = ui.querySelector(".tu-player__play");
+        const clock = ui.querySelector(".media-tu__clock");
+        const seek = ui.querySelector("input");
+        let seeking = false;
+        const tick = () => {
+          const t = Number.isFinite(media.currentTime) ? media.currentTime : 0;
+          const dur = Number.isFinite(media.duration) ? media.duration : 0;
+          const origin = media._tuStartMs;
+          clock.textContent = dur ? fmtTu(origin, t) + " · " + fmtTu(origin, dur) : fmtTu(origin, t);
+          if (dur) {
+            seek.max = String(dur);
+            if (!seeking) seek.value = String(t);
+          }
+          const on = !media.paused && !media.ended;
+          playBtn.textContent = on ? "Pause" : "Lecture";
+          playBtn.setAttribute("aria-pressed", on ? "true" : "false");
+        };
+        playBtn.addEventListener("click", () => {
+          if (media.paused) media.play().catch(() => {});
+          else media.pause();
+        });
+        seek.addEventListener("pointerdown", () => {
+          seeking = true;
+        });
+        seek.addEventListener("input", () => {
+          media.currentTime = Number(seek.value) || 0;
+          tick();
+        });
+        seek.addEventListener("change", () => {
+          seeking = false;
+        });
+        ["timeupdate", "loadedmetadata", "seeked", "play", "pause", "ended", "durationchange"].forEach((ev) => {
+          media.addEventListener(ev, tick);
+        });
+        tick();
+      }
+    }
+    window.ggrEnhanceTuPlayer = enhanceTuPlayer;
+    window.ggrFmtTu = fmtTu;
+
+    const host = document.querySelector("article.vac[data-started]");
+    const pageStart = host ? startMsOf(host.getAttribute("data-started")) : NaN;
+    document.querySelectorAll("article.vac audio, article.vac video").forEach((el) => {
+      enhanceTuPlayer(el, pageStart);
+    });
+    document.querySelectorAll(".media-tu__clock").forEach((p) => {
+      if (p.closest(".tu-player")) return;
+      p.remove();
+    });
+  })();
+
   document.querySelectorAll(".js-del-vac").forEach((btn) => {
     btn.addEventListener("click", async (ev) => {
       ev.preventDefault();

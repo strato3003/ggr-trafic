@@ -584,6 +584,56 @@ def test_runtime_settings_override_qrg(tmp_path, monkeypatch):
     assert (tmp_path / "settings.json").is_file()
 
 
+def test_parse_tx_sites_max_five_and_empty_rows():
+    from recorder.config import parse_tx_sites, tx_sites_aim, tx_sites_from_cfg
+
+    assert parse_tx_sites([]) == []
+    assert parse_tx_sites([{}, {"label": "", "lat": "", "lon": ""}]) == []
+    rows = parse_tx_sites(
+        [
+            {"label": "F6KUF", "lat": 46.5025, "lon": -1.7888},
+            {"label": "  ", "lat": -33.9, "lon": 18.4},
+            {"label": "A", "lat": 1, "lon": 1},
+            {"label": "B", "lat": 2, "lon": 2},
+            {"label": "C", "lat": 3, "lon": 3},
+        ]
+    )
+    assert len(rows) == 5
+    assert rows[0]["label"] == "F6KUF"
+    assert rows[1]["label"] == "Émission 2"
+    try:
+        parse_tx_sites(rows + [{"label": "D", "lat": 4, "lon": 4}])
+        raise AssertionError("expected max 5")
+    except ValueError as exc:
+        assert "maximum" in str(exc)
+    aimed = tx_sites_aim({"tx_sites": rows[:1]}, 0.0, 0.0)
+    assert aimed[0]["distance_km"] > 0
+    assert 0 <= aimed[0]["azimuth_deg"] <= 359
+    from recorder.geo import initial_bearing
+
+    assert int(round(initial_bearing(46.5025, -1.7888, 47.5025, -1.7888))) % 360 == 0
+    assert tx_sites_from_cfg({"tx_sites": "nope"}) == []
+
+
+def test_qrg_context_includes_tx_sites():
+    from recorder.config import qrg_context
+
+    qrg = qrg_context(
+        {
+            "radio": {
+                "tx": {"freq_khz": 14135.0},
+                "ack": [{"freq_khz": 16551.0}, {"freq_khz": 12418.0}],
+            },
+            "schedule": {},
+            "buddy": {},
+            "tx_sites": [{"label": "F6KUF", "lat": 46.5025, "lon": -1.7888}],
+        }
+    )
+    assert qrg["tx_sites"][0]["label"] == "F6KUF"
+    assert qrg["tx_sites"][0]["lat"] == 46.5025
+    assert qrg["tx_sites"][0]["lon"] == -1.7888
+
+
 def test_legacy_ack_qrg_migrated_from_settings(tmp_path, monkeypatch):
     import json
 

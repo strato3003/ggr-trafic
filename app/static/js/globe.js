@@ -16,12 +16,19 @@
   const skippers = new Set(data.skippers || []);
   let includeFleet = !!data.include_fleet;
   const vacations = (data.vacations || []).filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lon));
+  const TX_MAX = 5;
+  let txSites = (data.tx_sites || []).filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon)).slice(0, TX_MAX);
+  let placingTx = false;
 
   const selEl = document.getElementById("globe-sel");
   const vacsEl = document.getElementById("globe-vacs");
   const buddyVacsEl = document.getElementById("globe-buddy-vacs");
   const skipEl = document.getElementById("globe-skippers");
   const msgEl = document.getElementById("globe-buddy-msg");
+  const txListEl = document.getElementById("globe-tx-list");
+  const txMsgEl = document.getElementById("globe-tx-msg");
+  const txPlaceBtn = document.getElementById("globe-tx-place");
+  const txSaveBtn = document.getElementById("globe-save-tx");
   const includeEl = document.getElementById("globe-include-fleet");
   const playerBox = document.getElementById("globe-player");
   const playerTitle = document.getElementById("globe-player-title");
@@ -66,6 +73,14 @@
     msgEl.textContent = text;
     msgEl.classList.toggle("err", !ok);
     msgEl.classList.toggle("ok", !!ok);
+  }
+
+  function sayTx(text, ok) {
+    if (!txMsgEl) return;
+    txMsgEl.hidden = false;
+    txMsgEl.textContent = text;
+    txMsgEl.classList.toggle("err", !ok);
+    txMsgEl.classList.toggle("ok", !!ok);
   }
 
   function boatInBuddy(name) {
@@ -200,7 +215,11 @@
         name: v.title || v.id,
       });
     });
+    listedTxSites().forEach((s, i) => {
+      rows.push({ ...s, lng: s.lon, kind: "tx", _idx: i, name: s.label || "Émission" });
+    });
     kiwiKmPoints().forEach((p) => rows.push(p));
+    txKmPoints().forEach((p) => rows.push(p));
     return rows;
   }
 
@@ -208,7 +227,7 @@
     const wrap = document.createElement("div");
     wrap.className = "globe-mark globe-mark--" + d.kind + (d.kind === "boat" && d.inBuddy ? " is-buddy" : "");
     wrap.style.cssText = "width:12px;height:12px;margin:0;padding:0;overflow:visible;";
-    if (d.kind === "link_km") {
+    if (d.kind === "link_km" || d.kind === "tx_km") {
       const km = document.createElement("span");
       km.className = "globe-mark__km";
       km.textContent = d.name || "";
@@ -228,7 +247,7 @@
       icon.style.background = d.is_buddy ? "#d4a84b" : "#d45c3a";
     }
     wrap.appendChild(icon);
-    if ((d.kind === "boat" && d.inBuddy) || d.kind === "kiwi" || d.kind === "buddy_kiwi") {
+    if ((d.kind === "boat" && d.inBuddy) || d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "tx") {
       const name = document.createElement("span");
       name.className = "globe-mark__name";
       name.style.cssText = "position:absolute;left:14px;top:50%;transform:translateY(-50%);white-space:nowrap;";
@@ -262,7 +281,8 @@
       })
       .filter(Boolean)
       .concat(fleetRingPaths())
-      .concat(kiwiLinkPaths());
+      .concat(kiwiLinkPaths())
+      .concat(txLinkPaths());
   }
 
   function sdrCity(d) {
@@ -371,6 +391,92 @@
         alongDeg: labelAlongDeg(brg),
       };
     });
+  }
+
+  function listedTxSites() {
+    return txSites.filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon)).slice(0, TX_MAX);
+  }
+
+  function fmtAz(deg) {
+    const n = ((Math.round(deg) % 360) + 360) % 360;
+    return String(n).padStart(3, "0") + "°";
+  }
+
+  function txAim(s) {
+    const center = fleetCenter();
+    if (!center || !Number.isFinite(s.lat) || !Number.isFinite(s.lon)) return null;
+    const km = haversineKm(s.lat, s.lon, center.lat, center.lon);
+    const az = bearingDeg(s.lat, s.lon, center.lat, center.lon);
+    return { km, az, center };
+  }
+
+  function txLinkPaths() {
+    const center = fleetCenter();
+    if (!center) return [];
+    const rows = [];
+    listedTxSites().forEach((s) => {
+      geodesicDashed(s.lat, s.lon, center.lat, center.lon, "#e8c547").forEach((p) => rows.push(p));
+    });
+    return rows;
+  }
+
+  function txKmPoints() {
+    return listedTxSites()
+      .map((s) => {
+        const aim = txAim(s);
+        if (!aim || !Number.isFinite(aim.km) || aim.km < 1) return null;
+        const mid = destPoint(s.lat, s.lon, aim.az, aim.km / 2);
+        return {
+          lat: mid[0],
+          lon: mid[1],
+          lng: mid[1],
+          kind: "tx_km",
+          name: Math.round(aim.km) + " km · " + fmtAz(aim.az),
+          alongDeg: labelAlongDeg(aim.az),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function setPlacingTx(on) {
+    placingTx = !!on;
+    el.classList.toggle("is-placing-tx", placingTx);
+    if (txPlaceBtn) {
+      txPlaceBtn.classList.toggle("is-placing", placingTx);
+      txPlaceBtn.textContent = placingTx ? "Cliquer le globe… (annuler)" : "Poser un QTH sur le globe";
+    }
+  }
+
+  function renderTxList() {
+    if (!txListEl) return;
+    const rows = listedTxSites();
+    if (!rows.length) {
+      txListEl.innerHTML = "<li class=\"meta\">Aucun QTH. Poser un point sur le globe (max " + TX_MAX + ").</li>";
+      return;
+    }
+    txListEl.innerHTML = rows
+      .map((s, i) => {
+        const aim = txAim(s);
+        const stats = aim
+          ? Math.round(aim.km) + " km · az. " + fmtAz(aim.az)
+          : "centroïde flotte indisponible";
+        return (
+          "<li>" +
+          "<input type=\"text\" maxlength=\"64\" data-tx-label=\"" +
+          i +
+          "\" value=\"" +
+          esc(s.label || "") +
+          "\" aria-label=\"Nom du QTH\">" +
+          "<span class=\"tx-list__aim\">" +
+          esc(stats) +
+          "</span>" +
+          "<button type=\"button\" class=\"btn\" data-tx-del=\"" +
+          i +
+          "\">Retirer</button>" +
+          "</li>"
+        );
+      })
+      .join("");
   }
 
   function fleetPolygons() {
@@ -500,6 +606,9 @@
         audioEl.removeAttribute("src");
       }
       audioEl.load();
+      if (typeof window.ggrEnhanceTuPlayer === "function") {
+        window.ggrEnhanceTuPlayer(audioEl, Date.parse(v.started_at || ""));
+      }
       if (audioMsg) {
         audioMsg.hidden = !!audioFile;
         audioMsg.textContent = audioFile
@@ -518,6 +627,9 @@
           videoEl.removeAttribute("poster");
         }
         videoEl.load();
+      }
+      if (videoEl && typeof window.ggrEnhanceTuPlayer === "function") {
+        window.ggrEnhanceTuPlayer(videoEl, Date.parse(v.started_at || ""));
       }
       if (wfLink) {
         if (vid) {
@@ -608,6 +720,22 @@
     }
     if (d.kind === "vacation") {
       playVacation(d);
+      return;
+    }
+    if (d.kind === "tx") {
+      const aim = txAim(d);
+      const pos = Number.isFinite(d.lat)
+        ? d.lat.toFixed(4) + ", " + d.lon.toFixed(4)
+        : "";
+      showSel(
+        `<p class="badge">Émission bulletin</p><h3>${esc(d.name || d.label || "QTH")}</h3>` +
+          `<p class="meta">${esc(pos)}</p>` +
+          (aim
+            ? `<p>Distance centroïde : <strong>${Math.round(aim.km)} km</strong></p>` +
+              `<p>Azimut antenne (vrai nord) : <strong>${esc(fmtAz(aim.az))}</strong></p>`
+            : "<p class=\"hint\">Centroïde flotte indisponible.</p>")
+      );
+      if (globe && Number.isFinite(d.lat)) globe.pointOfView({ lat: d.lat, lng: d.lon, altitude: 1.6 }, 800);
       return;
     }
     showSel(`<h3>${esc(d.name || d.label || d.kind)}</h3><p class="meta">${esc(d.fmt || "")}</p>`);
@@ -711,6 +839,37 @@
     el.addEventListener("pointerdown", () => {
       globe.controls().autoRotate = false;
     });
+
+    const clickLatLng = (a, b) => {
+      if (a && Number.isFinite(a.lat) && Number.isFinite(a.lng)) return { lat: a.lat, lng: a.lng };
+      if (Number.isFinite(a) && Number.isFinite(b)) return { lat: a, lng: b };
+      return null;
+    };
+    if (typeof globe.onGlobeClick === "function") {
+      globe.onGlobeClick((a, b) => {
+        if (!placingTx) return;
+        const pos = clickLatLng(a, b);
+        if (!pos) return;
+        if (listedTxSites().length >= TX_MAX) {
+          sayTx("Cinq QTH d’émission au maximum.", false);
+          setPlacingTx(false);
+          return;
+        }
+        txSites = listedTxSites().concat([
+          {
+            label: "Émission " + (listedTxSites().length + 1),
+            lat: Math.round(pos.lat * 1e5) / 1e5,
+            lon: Math.round(pos.lng * 1e5) / 1e5,
+          },
+        ]);
+        setPlacingTx(false);
+        renderTxList();
+        refreshGlobe();
+        sayTx("QTH posé. Sauver pour mémoriser.", true);
+        const tab = document.querySelector('.globe-dock__tabs [data-tab="tx"]');
+        if (tab) tab.click();
+      });
+    }
     } catch (err) {
       showSel("<p class=\"err\">Globe 3D : " + esc(err && err.message ? err.message : err) + "</p>");
     }
@@ -770,7 +929,82 @@
     });
   }
 
+  if (txListEl) {
+    txListEl.addEventListener("change", (ev) => {
+      const inp = ev.target.closest("input[data-tx-label]");
+      if (!inp) return;
+      const i = Number(inp.getAttribute("data-tx-label"));
+      if (!Number.isInteger(i) || !txSites[i]) return;
+      txSites[i] = { ...txSites[i], label: String(inp.value || "").trim() || txSites[i].label };
+      refreshGlobe();
+    });
+    txListEl.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button[data-tx-del]");
+      if (!btn) return;
+      const i = Number(btn.getAttribute("data-tx-del"));
+      if (!Number.isInteger(i)) return;
+      txSites = listedTxSites().filter((_, idx) => idx !== i);
+      renderTxList();
+      refreshGlobe();
+    });
+  }
+
+  if (txPlaceBtn) {
+    txPlaceBtn.addEventListener("click", () => {
+      if (placingTx) {
+        setPlacingTx(false);
+        sayTx("Pose annulée.", true);
+        return;
+      }
+      if (listedTxSites().length >= TX_MAX) {
+        sayTx("Cinq QTH d’émission au maximum.", false);
+        return;
+      }
+      setPlacingTx(true);
+      sayTx("Cliquer le globe pour poser un QTH.", true);
+    });
+  }
+
+  if (txSaveBtn) {
+    txSaveBtn.addEventListener("click", async () => {
+      const tok = token();
+      if (!tok) {
+        sayTx("Jeton manquant : coller le jeton dans Réglages.", false);
+        return;
+      }
+      txSaveBtn.disabled = true;
+      sayTx("Sauvegarde…", true);
+      try {
+        const cur = await fetch("/api/settings").then((r) => r.json());
+        const res = await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-Admin-Token": tok },
+          body: JSON.stringify({
+            tx_khz: cur.tx_khz,
+            ack1_khz: cur.ack1_khz,
+            ack2_khz: cur.ack2_khz,
+            qrg_tolerance_khz: cur.qrg_tolerance_khz,
+            lead_minutes: cur.schedule_lead,
+            duration_minutes: cur.duration_minutes,
+            tx_sites: listedTxSites().map((s) => ({ label: s.label, lat: s.lat, lon: s.lon })),
+          }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          sayTx(body.detail || `Erreur ${res.status}`, false);
+          return;
+        }
+        sayTx("QTH d’émission enregistrés.", true);
+      } catch (err) {
+        sayTx(String(err), false);
+      } finally {
+        txSaveBtn.disabled = false;
+      }
+    });
+  }
+
   renderSkippers();
   renderVacList();
+  renderTxList();
   initGlobe();
 })();

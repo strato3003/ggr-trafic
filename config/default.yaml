@@ -1,9 +1,15 @@
 # Configuration GGR Vacations — F6KUF / flotte Golden Globe Race
-version: "0.3.4"
+version: "0.3.5"
 
 club:
   callsign: F6KUF
   name: "Radio-club F6KUF"
+
+# QTH d’émission du bulletin météo (max 5). Pointillé globe → centroïde flotte.
+tx_sites:
+  - label: F6KUF
+    lat: 46.5025
+    lon: -1.7888
 
 # Vacation quotidienne
 schedule:

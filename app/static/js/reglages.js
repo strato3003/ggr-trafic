@@ -48,6 +48,17 @@
         : [];
     const enabledEl = form.elements.namedItem("buddy_enabled");
     const fleetEl = form.elements.namedItem("buddy_include_fleet");
+    const tx_sites = [];
+    for (let i = 0; i < 5; i++) {
+      const labelEl = form.elements.namedItem("tx_label_" + i);
+      const latEl = form.elements.namedItem("tx_lat_" + i);
+      const lonEl = form.elements.namedItem("tx_lon_" + i);
+      tx_sites.push({
+        label: labelEl ? String(labelEl.value || "").trim() : "",
+        lat: latEl && String(latEl.value).trim() !== "" ? Number(latEl.value) : "",
+        lon: lonEl && String(lonEl.value).trim() !== "" ? Number(lonEl.value) : "",
+      });
+    }
     return {
       tx_khz: Number(form.elements.namedItem("tx_khz").value),
       ack1_khz: Number(form.elements.namedItem("ack1_khz").value),
@@ -64,6 +75,7 @@
       buddy_kiwi_count: Number(form.elements.namedItem("buddy_kiwi_count").value),
       buddy_include_fleet: !!(fleetEl && fleetEl.checked),
       buddy_skippers: skippers,
+      tx_sites,
     };
   };
 
@@ -106,7 +118,8 @@
       const data = await saveSettings();
       say(
         "save",
-        `Fréquences mémorisées : ${data.tx_mhz} / ${data.ack1_mhz} / ${data.ack2_mhz} MHz · buddy ${data.buddy_main_khz} / ${data.buddy_alt_khz} kHz à ${data.buddy_time_utc} TU.`,
+        `Fréquences mémorisées : ${data.tx_mhz} / ${data.ack1_mhz} / ${data.ack2_mhz} MHz · buddy ${data.buddy_main_khz} / ${data.buddy_alt_khz} kHz à ${data.buddy_time_utc} TU` +
+          ` · ${(data.tx_sites || []).length} QTH d’émission.`,
         true
       );
     } catch (err) {

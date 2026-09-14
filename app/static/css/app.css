@@ -67,6 +67,39 @@ h2 { font-size: 1.15rem; margin-top: 2rem; }
 
 .player video { width: 100%; background: #000; border: 1px solid var(--line); }
 .player__cap { color: var(--muted); font-size: 0.85rem; }
+.media-tu__clock {
+  margin: 0;
+  font: 500 0.82rem var(--mono);
+  color: var(--brass);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.tu-player {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+  margin: 0.4rem 0 0.2rem;
+}
+.tu-player__play {
+  font: 600 0.78rem var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bg);
+  background: var(--brass);
+  border: 0;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+.tu-player__play[aria-pressed="true"] { background: var(--rx); color: #fff; }
+.tu-player__seek {
+  flex: 1 1 10rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.tu-player__seek input { width: 100%; display: block; margin-top: 0.15rem; }
 .chan-jump {
   display: flex;
   flex-wrap: wrap;
@@ -100,6 +133,7 @@ h2 { font-size: 1.15rem; margin-top: 2rem; }
   overflow: hidden;
 }
 .ggr-globe { width: 100%; height: 100%; }
+.ggr-globe.is-placing-tx { cursor: crosshair; }
 body.globe-page {
   height: 100vh;
   overflow: hidden;
@@ -238,7 +272,17 @@ body.globe-page .wrap {
 }
 .globe-mark--buddy_kiwi .globe-mark__name { border-left: 3px solid #6ec9e0; }
 .globe-mark--kiwi .globe-mark__name { border-left: 3px solid #3dba7a; }
+.globe-mark--tx .globe-mark__icon {
+  width: 9px;
+  height: 9px;
+  background: #e8c547;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.globe-mark--tx .globe-mark__name { border-left: 3px solid #e8c547; }
 .globe-mark--link_km { pointer-events: none; }
+.globe-mark--tx_km { pointer-events: none; }
+.globe-mark--tx_km .globe-mark__km { color: #e8c547; }
 .globe-mark__km {
   position: absolute;
   left: 50%;
@@ -396,6 +440,38 @@ body.globe-page .wrap {
   border: 1px solid var(--line);
   padding: 0.45rem 0.6rem;
 }
+.tx-sites { display: grid; gap: 0.55rem; margin: 0.6rem 0 0; }
+.tx-site {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 0.45rem;
+}
+.tx-site label { margin: 0; }
+.tx-list { list-style: none; padding: 0; margin: 0.45rem 0 0.7rem; }
+.tx-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0 0 0.4rem;
+}
+.tx-list input {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--foam);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 0.28rem 0.4rem;
+  min-width: 0;
+}
+.tx-list__aim {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: #e8c547;
+  white-space: nowrap;
+}
+.tx-list .btn { padding: 0.2rem 0.45rem; font-size: 0.75rem; }
+.btn.is-placing { background: var(--brass); color: var(--bg); border-color: var(--brass); }
 .settings__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .settings__check {
   flex-direction: row !important;
@@ -476,6 +552,23 @@ body.globe-page .wrap {
   overflow-x: auto;
   background: #000;
 }
+.mix__tu-scale {
+  flex: 0 0 5.4rem;
+  height: 18rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.2rem 0.4rem 0.15rem 0.45rem;
+  font: 500 0.62rem var(--mono);
+  color: #d4c4a0;
+  letter-spacing: 0.02em;
+  background: #050b12;
+  border-right: 1px solid #123048;
+  user-select: none;
+  white-space: nowrap;
+}
+.mix__tu-end { text-align: right; }
+.mix__tu-start { text-align: right; }
 .mix__ch {
   flex: 1 1 10rem;
   min-width: 8.75rem;
@@ -571,12 +664,14 @@ body.globe-page .wrap {
 .mix__fader input {
   appearance: slider-vertical;
   -webkit-appearance: slider-vertical;
-  writing-mode: vertical-rl;
+  writing-mode: vertical-lr;
+  direction: rtl;
   width: 1.6rem;
   height: 8.8rem;
   margin: 0;
   accent-color: var(--brass);
   cursor: pointer;
+  transform: scaleY(-1);
 }
 .mix__transport {
   display: flex;
@@ -588,7 +683,7 @@ body.globe-page .wrap {
 .mix__clock {
   font-family: var(--mono);
   color: var(--brass);
-  min-width: 7.5rem;
+  min-width: 14rem;
 }
 .mix__seek {
   flex: 1 1 12rem;
@@ -624,4 +719,6 @@ body.globe-page .wrap {
     border-left: 0;
     border-top: 1px solid var(--line);
   }
+  .tx-site { grid-template-columns: 1fr; }
+  .tx-list li { grid-template-columns: 1fr; }
 }

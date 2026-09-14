@@ -139,6 +139,64 @@ def fmt_mhz(freq_khz: float) -> str:
     return text or "0"
 
 
+TX_SITES_MAX = 5
+
+
+def parse_tx_sites(raw: Any) -> list[dict[str, Any]]:
+    """Jusqu’à 5 QTH d’émission (label + lat/lon). Les lignes vides sont ignorées."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("Liste de points d'émission invalide")
+    out: list[dict[str, Any]] = []
+    for i, row in enumerate(raw):
+        if not isinstance(row, dict):
+            raise ValueError(f"Point d'émission {i + 1} invalide")
+        label = str(row.get("label") or "").strip()
+        lat_raw = row.get("lat")
+        lon_raw = row.get("lon")
+        empty = lat_raw in (None, "") and lon_raw in (None, "") and not label
+        if empty:
+            continue
+        try:
+            lat = float(lat_raw)
+            lon = float(lon_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Coordonnées du point {i + 1} invalides") from exc
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            raise ValueError(f"Coordonnées du point {i + 1} hors plage")
+        if len(out) >= TX_SITES_MAX:
+            raise ValueError(f"{TX_SITES_MAX} points d'émission au maximum")
+        if not label:
+            label = f"Émission {len(out) + 1}"
+        out.append({"label": label[:64], "lat": round(lat, 5), "lon": round(lon, 5)})
+    return out
+
+
+def tx_sites_from_cfg(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    cfg = cfg or {}
+    try:
+        return parse_tx_sites(cfg.get("tx_sites") or [])
+    except ValueError:
+        return []
+
+
+def tx_sites_aim(cfg: dict[str, Any] | None, lat: float | None, lon: float | None) -> list[dict[str, Any]]:
+    """QTH d’émission + distance / azimut (vrai nord) vers le centroïde flotte."""
+    from recorder.geo import haversine_km, initial_bearing
+
+    rows: list[dict[str, Any]] = []
+    for site in tx_sites_from_cfg(cfg):
+        row = dict(site)
+        if lat is None or lon is None:
+            rows.append(row)
+            continue
+        row["distance_km"] = int(round(haversine_km(site["lat"], site["lon"], lat, lon)))
+        row["azimuth_deg"] = int(round(initial_bearing(site["lat"], site["lon"], lat, lon))) % 360
+        rows.append(row)
+    return rows
+
+
 def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     """QRG / horaire exposés à l’UI (valeurs courantes, y compris settings.json)."""
     cfg = cfg or load_config()
@@ -169,6 +227,7 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "ack2_label": (acks[1].get("label") if len(acks) > 1 else None) or ack_label(ack2),
     }
     ctx.update(buddy_context(cfg))
+    ctx["tx_sites"] = tx_sites_from_cfg(cfg)
     return ctx
 
 
@@ -236,4 +295,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
         return pkg_version("ggr-vacations")
     except PackageNotFoundError:
         cfg = cfg or {}
-        return str(cfg.get("version") or "0.3.4")
+        return str(cfg.get("version") or "0.3.5")

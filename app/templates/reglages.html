@@ -89,6 +89,37 @@
   </fieldset>
 
   <fieldset>
+    <legend>Points d’émission du bulletin (max 5)</legend>
+    <p class="hint">
+      QTH d’où part le bulletin météo. Le globe trace un pointillé vers le centroïde
+      de la flotte : distance et azimut d’antenne (vrai nord). Enregistré avec
+      « Sauver les fréquences ».
+    </p>
+    <div class="tx-sites">
+      {% for i in range(5) %}
+      {% set s = (tx_sites or [])[i] if (tx_sites or [])|length > i else {} %}
+      <div class="tx-site">
+        <label>
+          Nom
+          <input name="tx_label_{{ i }}" type="text" maxlength="64" placeholder="indicatif"
+                 value="{{ s.label or '' }}">
+        </label>
+        <label>
+          Latitude
+          <input name="tx_lat_{{ i }}" type="number" step="any" min="-90" max="90"
+                 placeholder="lat" value="{{ s.lat if s.lat is defined else '' }}">
+        </label>
+        <label>
+          Longitude
+          <input name="tx_lon_{{ i }}" type="number" step="any" min="-180" max="180"
+                 placeholder="lon" value="{{ s.lon if s.lon is defined else '' }}">
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <fieldset>
     <legend>3 · Vacation complète (comme à 18:00 TU)</legend>
     <p class="hint">Enregistre <strong>maintenant</strong> le bulletin + les deux ACK
       (flotte, France, Tahiti) pendant la durée indiquée ci-dessus.

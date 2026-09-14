@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 0.3.5 — 2026-09-14
+
+- Globe : jusqu’à 5 QTH d’émission du bulletin, pointillé vers le centroïde flotte avec distance et azimut d’antenne (vrai nord).
+- Lecteurs audio / vidéo et mixeur : horloge et curseur en heure TU ; waterfall mixeur avec t=0 en bas ; fader volume plus fort vers le haut.
+- WAV servis en `audio/wav` avec cache navigateur 24 h.
+
 ## 0.3.4 — 2026-09-14
 
 - Globe flotte : cercle autour du centroïde, liaisons SDR en pointillés 2 px, distances km sur la ligne (milliers collés) et libellés `sdr, <ville>`.

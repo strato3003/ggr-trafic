@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app import store
-from recorder.config import ack_label, fmt_khz, fmt_mhz, load_config, parse_qrg_khz, qrg_context, save_runtime_settings, version
+from recorder.config import ack_label, fmt_khz, fmt_mhz, load_config, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import assign_buddy_kiwis, fetch_ranked_kiwis
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
@@ -215,6 +215,7 @@ async def flotte_page(request: Request):
         buddy_aim=aim,
         buddy_kiwis=buddy_kiwis,
         globe_vacations=[store.globe_vacation(v) for v in store.list_vacations(cfg)],
+        tx_sites=tx_sites_aim(cfg, fleet.get("lat"), fleet.get("lon")),
     )
 
 
@@ -240,7 +241,10 @@ async def media(vacation_id: str, filename: str):
     path = store.media_path(vacation_id, filename, load_config())
     if not path:
         raise HTTPException(404)
-    return FileResponse(path)
+    headers = {"Cache-Control": "public, max-age=86400"}
+    if path.suffix.lower() == ".wav":
+        return FileResponse(path, media_type="audio/wav", headers=headers)
+    return FileResponse(path, headers=headers)
 
 
 @app.get("/api/vacations")
@@ -403,6 +407,11 @@ async def api_settings_put(
         buddy_cfg["centroid"] = cent
         buddy_cfg["kiwi"] = kiwi
         patch["buddy"] = buddy_cfg
+    if "tx_sites" in body:
+        try:
+            patch["tx_sites"] = parse_tx_sites(body.get("tx_sites"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
     new_cfg = save_runtime_settings(patch, cfg)
     scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler is not None:
