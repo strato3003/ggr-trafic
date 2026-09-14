@@ -16,7 +16,7 @@ test-hunt:
 	GGR_DATA_DIR=./data GGR_CONFIG=./config/default.yaml python3 -m recorder.session --test-hunt
 
 image:
-	docker build -t ggr-vacations:local .
+	docker build -t ggr-trafic:local .
 
 apply:
 	cp config/default.yaml k8s/config.yaml

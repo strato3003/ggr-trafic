@@ -1,4 +1,4 @@
-# Configuration GGR Vacations — F6KUF / flotte Golden Globe Race
+# Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
 version: "0.3.7"
 
 club:
@@ -11,7 +11,7 @@ tx_sites:
     lat: 46.5025
     lon: -1.7888
 
-# Vacation quotidienne
+# Trafic quotidien (bulletin 18:00 TU)
 schedule:
   # Heure TU du bulletin météo
   time_utc: "18:00"
@@ -86,7 +86,7 @@ fleet:
 sdr:
   # Liste publique KiwiSDR (JS, virgules finales possibles)
   directory_url: "http://rx.linkfanel.net/kiwisdr_com.js"
-  ident_user: ggr-vacations
+  ident_user: ggr-trafic
   # Places libres minimales pour le screencast TX (navigateur = 1 slot).
   # Les ACK n’ont besoin que d’un flux SND (1 place).
   min_free_slots: 2
@@ -119,7 +119,7 @@ storage:
   retention_days: 14
 
 web:
-  title: "GGR Vacations"
+  title: "GGR Trafic"
   host: "0.0.0.0"
   port: 8080
   # Jeton pour déclencher un enregistrement manuel (POST /api/trafic/record)
@@ -127,4 +127,4 @@ web:
 
 # Hôte Ingress Traefik + Let's Encrypt
 ingress:
-  host: ggr-vacations.k3s.lpb.ovh
+  host: ggr-trafic.k3s.lpb.ovh

@@ -449,6 +449,7 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   border: 1px solid rgba(0, 0, 0, 0.55);
 }
 .globe-mark--buddy_kiwi .globe-mark__icon { background: #6ec9e0; }
+.globe-mark--trafic .globe-mark__icon,
 .globe-mark--vacation .globe-mark__icon {
   width: 8px;
   height: 8px;

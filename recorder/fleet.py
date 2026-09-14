@@ -314,7 +314,7 @@ async def fetch_fleet(
     race_id = fleet_cfg.get("race_id") or "ggr2026"
     host = fleet_cfg.get("tracker_host") or "cf.yb.tl"
     owns_client = client is None
-    client = client or httpx.AsyncClient(timeout=30.0, headers={"User-Agent": "ggr-vacations/0.1"})
+    client = client or httpx.AsyncClient(timeout=30.0, headers={"User-Agent": "ggr-trafic/0.1"})
     try:
         setup_url = f"https://yb.tl/JSON/{race_id}/RaceSetup"
         pos_url = f"https://{host}/BIN/{race_id}/AllPositions3"

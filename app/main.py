@@ -1,4 +1,4 @@
-"""Application web GGR Vacations — catalogue et replay des vacations HF."""
+"""Application web GGR Trafic — catalogue et replay du trafic HF."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ async def lifespan(_app: FastAPI):
         scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="GGR Vacations", version=version(CFG), lifespan=lifespan)
+app = FastAPI(title="GGR Trafic", version=version(CFG), lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 jinja = Environment(
     loader=FileSystemLoader(str(ROOT / "templates")),
@@ -94,7 +94,7 @@ def _ctx(request: Request, **extra):
     schedule = cfg.get("schedule") or {}
     qrg = qrg_context(cfg)
     return {
-        "app_name": (cfg.get("web") or {}).get("title") or "GGR Vacations",
+        "app_name": (cfg.get("web") or {}).get("title") or "GGR Trafic",
         "version": version(cfg),
         "club": club,
         "club_callsign": club.get("callsign") or "F6KUF",
@@ -156,7 +156,7 @@ async def health():
 
 @app.get("/ping", response_class=HTMLResponse)
 async def ping():
-    return HTMLResponse("<!doctype html><p>ggr-vacations ping</p>")
+    return HTMLResponse("<!doctype html><p>ggr-trafic ping</p>")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -169,7 +169,7 @@ async def trafic_page(request: Request, trafic_id: str):
     meta = store.get_vacation(trafic_id, load_config())
     if not meta:
         raise HTTPException(404, "Trafic introuvable")
-    return render(request, "vacation.html", vacation=meta)
+    return render(request, "trafic.html", trafic=meta)
 
 
 @app.get("/vacations/{vacation_id}")
@@ -222,7 +222,7 @@ async def _globe_page(request: Request):
         kiwis=kiwis,
         buddy_aim=aim,
         buddy_kiwis=buddy_kiwis,
-        globe_vacations=[store.globe_vacation(v) for v in store.list_vacations(cfg)],
+        globe_trafics=[store.globe_vacation(v) for v in store.list_vacations(cfg)],
         tx_sites=tx_sites_aim(cfg, fleet.get("lat"), fleet.get("lon")),
         boats=fleet.get("boats") or [],
     )
@@ -238,9 +238,9 @@ async def reglages_redirect():
     return RedirectResponse("/#setup", status_code=302)
 
 
-@app.get("/media/{vacation_id}/{filename}")
-async def media(vacation_id: str, filename: str):
-    path = store.media_path(vacation_id, filename, load_config())
+@app.get("/media/{trafic_id}/{filename}")
+async def media(trafic_id: str, filename: str):
+    path = store.media_path(trafic_id, filename, load_config())
     if not path:
         raise HTTPException(404)
     headers = {"Cache-Control": "public, max-age=86400"}
@@ -468,7 +468,7 @@ async def api_record(
     freq_khz = None
     hunt = True
     tol = None
-    kind = "vacation"
+    kind = "trafic"
     raw = await request.body()
     if raw:
         try:
@@ -476,7 +476,7 @@ async def api_record(
         except json.JSONDecodeError as exc:
             raise HTTPException(400, "JSON invalide") from exc
         if isinstance(body, dict):
-            kind = str(body.get("kind") or "vacation")
+            kind = str(body.get("kind") or "trafic")
             if body.get("duration_minutes") is not None:
                 try:
                     duration = int(body["duration_minutes"])
@@ -530,7 +530,7 @@ async def api_record(
     asyncio.create_task(run_vacation(reason="api", duration_minutes=duration))
     minutes = duration if duration is not None else int((cfg.get("schedule") or {}).get("duration_minutes") or 10)
     return JSONResponse(
-        {"ok": True, "status": "started", "mode": "vacation", "duration_minutes": minutes},
+        {"ok": True, "status": "started", "mode": "trafic", "duration_minutes": minutes},
         status_code=202,
     )
 

@@ -15,7 +15,7 @@
   const boats = (data.boats || []).filter((b) => Number.isFinite(b.lat) && Number.isFinite(b.lon));
   const skippers = new Set(data.skippers || []);
   let includeFleet = !!data.include_fleet;
-  const vacations = (data.vacations || []).filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lon));
+  const trafics = (data.trafics || data.vacations || []).filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lon));
   const TX_MAX = 5;
   let txSites = (data.tx_sites || []).filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon)).slice(0, TX_MAX);
   let placingTx = false;
@@ -276,11 +276,11 @@
     if (Number.isFinite(buddy.lat) && Number.isFinite(buddy.lon)) {
       rows.push({ ...buddy, lng: buddy.lon, kind: "buddy_cent", name: buddy.label || "Centroïde buddy" });
     }
-    vacations.forEach((v) => {
+    trafics.forEach((v) => {
       rows.push({
         ...v,
         lng: v.lon,
-        kind: "vacation",
+        kind: "trafic",
         name: v.title || v.id,
       });
     });
@@ -412,7 +412,7 @@
       icon.style.borderBottomColor = d.inBuddy ? "#e8c547" : d.colour || "#8aa4a8";
       const rot = Number.isFinite(d.heading) ? " rotate(" + d.heading + "deg)" : "";
       icon.style.transform = "translate(-50%,-50%)" + rot;
-    } else if (d.kind === "vacation") {
+    } else if (d.kind === "trafic" || d.kind === "vacation") {
       icon.style.background = d.is_buddy ? "#d4a84b" : "#d45c3a";
     }
     wrap.appendChild(icon);
@@ -731,14 +731,14 @@
       .join("");
     root.querySelectorAll(".globe-vac").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const v = (data.vacations || []).find((x) => x.id === btn.getAttribute("data-vid"));
-        if (v) playVacation(v);
+        const v = (data.trafics || data.vacations || []).find((x) => x.id === btn.getAttribute("data-vid"));
+        if (v) playTrafic(v);
       });
     });
   }
 
   function renderVacList() {
-    const all = data.vacations || [];
+    const all = data.trafics || data.vacations || [];
     fillVacList(
       vacsEl,
       all.filter((v) => !v.is_buddy),
@@ -763,7 +763,7 @@
     }));
   }
 
-  async function playVacation(v) {
+  async function playTrafic(v) {
     setPanelOpen(true);
     showTab("trafic", v.is_buddy ? "buddy" : "meteo");
     document.body.classList.add("kiwi-mix-on");
@@ -857,8 +857,8 @@
       if (globe) globe.pointOfView({ lat: d.lat, lng: d.lng, altitude: 1.5 }, 800);
       return;
     }
-    if (d.kind === "vacation") {
-      playVacation(d);
+    if (d.kind === "trafic" || d.kind === "vacation") {
+      playTrafic(d);
       return;
     }
     if (d.kind === "tx") {
@@ -1469,9 +1469,9 @@
 
   initGlobe();
 
-  const vacQ = new URLSearchParams(location.search).get("vac");
-  if (vacQ) {
-    const found = vacations.find((v) => v.id === vacQ) || (data.vacations || []).find((v) => v.id === vacQ);
-    if (found) playVacation(found);
+  const traficQ = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
+  if (traficQ) {
+    const found = trafics.find((v) => v.id === traficQ) || (data.trafics || data.vacations || []).find((v) => v.id === traficQ);
+    if (found) playTrafic(found);
   }
 })();

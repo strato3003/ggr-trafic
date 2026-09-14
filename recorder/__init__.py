@@ -1,1 +1,1 @@
-"""Enregistrement des vacations HF F6KUF / flotte GGR."""
+"""Enregistrement du trafic HF F6KUF / flotte GGR."""

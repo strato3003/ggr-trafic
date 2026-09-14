@@ -1,9 +1,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ggr-vacations
+  name: ggr-trafic
   labels:
-    app.kubernetes.io/name: ggr-vacations
+    app.kubernetes.io/name: ggr-trafic
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-production
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
@@ -11,16 +11,16 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - ggr-vacations.k3s.lpb.ovh
-      secretName: ggr-vacations-tls
+        - ggr-trafic.k3s.lpb.ovh
+      secretName: ggr-trafic-tls
   rules:
-    - host: ggr-vacations.k3s.lpb.ovh
+    - host: ggr-trafic.k3s.lpb.ovh
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: ggr-vacations
+                name: ggr-trafic
                 port:
                   number: 8080

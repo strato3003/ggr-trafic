@@ -1,1 +1,1 @@
-"""Interface web GGR Vacations."""
+"""Interface web GGR Trafic."""

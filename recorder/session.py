@@ -150,7 +150,7 @@ async def _hunt_usb_around(
     """Blob USB dans ±tolérance autour de nominal (filtre USB au-dessus du VFO)."""
     radio = cfg.get("radio") or {}
     filt = radio.get("usb_filter") or {}
-    ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-vacations"
+    ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-trafic"
     low_hz = int(filt.get("low_hz") or 300)
     high_hz = int(filt.get("high_hz") or 2700)
     return await hunt_usb_signal(
@@ -393,7 +393,7 @@ async def run_vacation(
         meta["duration_minutes"] = int(minutes)
         radio = cfg.get("radio") or {}
         filt = radio.get("usb_filter") or {}
-        ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-vacations"
+        ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-trafic"
         viewport = (cfg.get("sdr") or {}).get("viewport") or {"width": 1280, "height": 800}
         when_label = started.strftime("%Y-%m-%d %H:%M")
 
@@ -609,7 +609,7 @@ async def run_buddy_call(
         meta["duration_minutes"] = int(minutes)
         radio = cfg.get("radio") or {}
         filt = radio.get("usb_filter") or {}
-        ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-vacations"
+        ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-trafic"
         viewport = (cfg.get("sdr") or {}).get("viewport") or {"width": 1280, "height": 800}
         when_label = started.strftime("%Y-%m-%d %H:%M")
         mode = str(buddy.get("mode") or radio.get("mode") or "usb")
@@ -829,7 +829,7 @@ async def run_test_hunt(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     session_dir = root / "vacations" / vid
     session_dir.mkdir(parents=True, exist_ok=True)
     viewport = (cfg.get("sdr") or {}).get("viewport") or {"width": 1280, "height": 800}
-    ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-vacations"
+    ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-trafic"
     filt = (cfg.get("radio") or {}).get("usb_filter") or {}
     low_hz = int(filt.get("low_hz") or 300)
     high_hz = int(filt.get("high_hz") or 2700)

@@ -514,7 +514,7 @@ async def fetch_ranked_kiwis(
     sdr_cfg = cfg.get("sdr") or {}
     url = sdr_cfg.get("directory_url") or "http://rx.linkfanel.net/kiwisdr_com.js"
     owns = client is None
-    client = client or httpx.AsyncClient(timeout=40.0, headers={"User-Agent": "ggr-vacations/0.1"})
+    client = client or httpx.AsyncClient(timeout=40.0, headers={"User-Agent": "ggr-trafic/0.1"})
     try:
         resp = await client.get(url)
         resp.raise_for_status()

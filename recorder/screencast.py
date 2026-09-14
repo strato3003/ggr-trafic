@@ -111,7 +111,7 @@ OVERLAY_JS = """
 
 def _overlay_html(meta: dict[str, Any]) -> str:
     return (
-        f"<span>GGR Vacations · {meta.get('when', '')} TU</span>"
+        f"<span>GGR Trafic · {meta.get('when', '')} TU</span>"
         f"<span>{meta.get('channel', '')} · {meta.get('freq', '')} USB</span>"
         f"<span>{meta.get('kiwi', '')}</span>"
     )

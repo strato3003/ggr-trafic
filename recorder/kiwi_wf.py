@@ -143,7 +143,7 @@ async def hunt_usb_signal(
     *,
     lo_khz: float = HUNT_LO_KHZ,
     hi_khz: float = HUNT_HI_KHZ,
-    ident: str = "ggr-vacations",
+    ident: str = "ggr-trafic",
     timeout_s: float = 12.0,
     low_hz: int = 300,
     high_hz: int = 2700,
@@ -212,7 +212,7 @@ async def _hunt_on_uri(
         compression=None,
         ping_interval=None,
         origin=origin,
-        user_agent_header="ggr-vacations/0.1.9",
+        user_agent_header="ggr-trafic/0.1.9",
     ) as ws:
         await ws.send("SET auth t=kiwi p=")
         last_keep = 0.0
@@ -249,7 +249,7 @@ async def _hunt_on_uri(
                     "wf_setup" in params or params.get("auth") == "kiwi"
                 ):
                     await ws.send(f"SET ident_user={quote(ident, safe='')}")
-                    await ws.send("SET geo=ggr-vacations")
+                    await ws.send("SET geo=ggr-trafic")
                     await ws.send(f"SET zoom={int(zoom)} cf={cf_khz:.3f}")
                     await ws.send("SET maxdb=-10 mindb=-110")
                     await ws.send("SET wf_comp=0")

@@ -292,7 +292,10 @@ def data_dir(cfg: dict[str, Any] | None = None) -> Path:
 def version(cfg: dict[str, Any] | None = None) -> str:
     """Version affichée = paquet installé (pyproject), pas le ConfigMap k3s éventuellement périmé."""
     try:
-        return pkg_version("ggr-vacations")
+        return pkg_version("ggr-trafic")
     except PackageNotFoundError:
-        cfg = cfg or {}
-        return str(cfg.get("version") or "0.3.7")
+        try:
+            return pkg_version("ggr-vacations")
+        except PackageNotFoundError:
+            cfg = cfg or {}
+            return str(cfg.get("version") or "0.3.7")

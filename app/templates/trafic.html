@@ -1,24 +1,24 @@
 {% extends "base.html" %}
-{% block title %} · {{ vacation.started_at | when }}{% endblock %}
+{% block title %} · {{ trafic.started_at | when }}{% endblock %}
 {% block content %}
-<article class="vac" data-started="{{ vacation.started_at or '' }}">
+<article class="vac" data-started="{{ trafic.started_at or '' }}">
   <header class="vac__head">
-    <p class="crumb"><a href="/{% if vacation.is_buddy %}#trafic/buddy{% else %}#trafic{% endif %}">← Trafic</a></p>
-    <h1>{{ vacation.title or (vacation.started_at | when) }}</h1>
+    <p class="crumb"><a href="/{% if trafic.is_buddy %}#trafic/buddy{% else %}#trafic{% endif %}">← Trafic</a></p>
+    <h1>{{ trafic.title or (trafic.started_at | when) }}</h1>
     <p class="meta">
-      {% if vacation.is_buddy %}<span class="badge">Buddy call</span>{% endif %}
-      {% if vacation.is_test %}<span class="badge">{{ vacation.title or 'Test' }}</span>{% endif %}
-      {{ vacation.club.callsign if vacation.club else club_callsign }}
-      · {{ vacation.status }}
+      {% if trafic.is_buddy %}<span class="badge">Buddy call</span>{% endif %}
+      {% if trafic.is_test %}<span class="badge">{{ trafic.title or 'Test' }}</span>{% endif %}
+      {{ trafic.club.callsign if trafic.club else club_callsign }}
+      · {{ trafic.status }}
     </p>
     <p class="vac__actions">
       <button type="button" class="btn btn--danger js-del-vac" hidden
-              data-delete-vacation="{{ vacation.id }}">Supprimer ce trafic</button>
+              data-delete-trafic="{{ trafic.id }}">Supprimer ce trafic</button>
       <span class="hint js-del-need-token">Suppression : coller le jeton dans Setup, puis recharger cette page.</span>
     </p>
   </header>
 
-  <section class="mix" id="mix" data-vid="{{ vacation.id }}" data-started="{{ vacation.started_at or '' }}">
+  <section class="mix" id="mix" data-vid="{{ trafic.id }}" data-started="{{ trafic.started_at or '' }}">
     <h2>Table de mixage</h2>
     <p class="hint">Toutes les voies : sans audio / waterfall, la colonne est grisée. Mute, volume et timeline TU.</p>
     <div class="mix__body" id="ggr-mix">
@@ -34,13 +34,13 @@
     </div>
     <p class="hint" id="mix-status">Préparation du mixage…</p>
   </section>
-  <script type="application/json" id="ggr-mix-data">{{ (vacation.mixer_tracks or []) | tojson }}</script>
+  <script type="application/json" id="ggr-mix-data">{{ (trafic.mixer_tracks or []) | tojson }}</script>
 
-  {% if vacation.error %}
-  <p class="err">Erreur : {{ vacation.error }}</p>
+  {% if trafic.error %}
+  <p class="err">Erreur : {{ trafic.error }}</p>
   {% endif %}
 </article>
 {% endblock %}
 {% block extra_js %}
-<script src="/static/js/mixer.js?v={{ version }}"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi8"></script>
 {% endblock %}

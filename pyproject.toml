@@ -1,11 +1,11 @@
 [project]
-name = "ggr-vacations"
+name = "ggr-trafic"
 version = "0.3.7"
-description = "Enregistrement des vacations HF F6KUF / flotte Golden Globe Race"
+description = "Enregistrement du trafic HF F6KUF / flotte Golden Globe Race"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "GGR Vacations" }]
+authors = [{ name = "GGR Trafic" }]
 dependencies = [
     "apscheduler>=3.10.4",
     "fastapi>=0.115.0",
@@ -23,6 +23,7 @@ dependencies = [
 dev = ["pytest>=8.3.0"]
 
 [project.scripts]
+ggr-trafic = "app.main:run"
 ggr-vacations = "app.main:run"
 ggr-record = "recorder.session:main"
 

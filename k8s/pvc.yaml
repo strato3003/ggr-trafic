@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: ggr-vacations-data
+  name: ggr-trafic-data
   labels:
-    app.kubernetes.io/name: ggr-vacations
+    app.kubernetes.io/name: ggr-trafic
 spec:
   accessModes:
     - ReadWriteOnce

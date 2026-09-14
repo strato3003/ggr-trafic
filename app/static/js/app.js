@@ -113,7 +113,7 @@
     btn.addEventListener("click", async (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      const id = btn.getAttribute("data-delete-vacation");
+      const id = btn.getAttribute("data-delete-trafic") || btn.getAttribute("data-delete-vacation");
       const tok = token();
       if (!id) return;
       if (!tok) {

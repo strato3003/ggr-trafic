@@ -191,7 +191,7 @@ async def _send_rx_setup(
     ar_in: int = 12000,
 ) -> None:
     await ws.send(f"SET ident_user={quote(ident, safe='')}")
-    await ws.send("SET geo=ggr-vacations")
+    await ws.send("SET geo=ggr-trafic")
     await ws.send("SET compression=0")
     await ws.send(f"SET mod={mode} low_cut={low_hz} high_cut={high_hz} freq={freq_khz:.3f}")
     await ws.send("SET agc=1 hang=0 thresh=-20 slope=6 decay=1000 manGain=50")
@@ -215,7 +215,7 @@ async def record_kiwi_wav(
     mode: str = "usb",
     low_hz: int = 300,
     high_hz: int = 2700,
-    ident: str = "ggr-vacations",
+    ident: str = "ggr-trafic",
     on_rssi: Any | None = None,
     freq_plan: list[tuple[float, float]] | None = None,
 ) -> dict[str, Any]:
@@ -297,7 +297,7 @@ async def _record_on_uri(
         compression=None,
         ping_interval=None,
         origin=origin,
-        user_agent_header="ggr-vacations/0.1.9",
+        user_agent_header="ggr-trafic/0.1.9",
     ) as ws:
         await ws.send("SET auth t=kiwi p=")
         while time.monotonic() < deadline:

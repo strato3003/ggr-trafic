@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: ggr-vacations
+namespace: ggr-trafic
 resources:
   - pvc.yaml
   - deployment.yaml
@@ -8,12 +8,12 @@ resources:
   - ingress.yaml
   - redirect.yaml
 configMapGenerator:
-  - name: ggr-vacations-config
+  - name: ggr-trafic-config
     files:
       - config.yaml
 generatorOptions:
   disableNameSuffixHash: true
 images:
-  - name: ggr-vacations
-    newName: ggr-vacations
+  - name: ggr-trafic
+    newName: ggr-trafic
     newTag: local
