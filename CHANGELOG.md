@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 0.3.7 — 2026-09-14
+
+- Globe : bandeau équatorial « GGR 2026 - trafic HF » (or #DEB200, Montserrat 800) pendant l’intro ; 55 % d’opacité ensuite, quasi transparent si la flotte passe sous l’équateur.
+
 ## 0.3.6 — 2026-09-14
 
 - Globe : légendes distance / azimut sur les pointillés à la même taille que les noms de skippers.

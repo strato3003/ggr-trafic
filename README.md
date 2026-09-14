@@ -1,4 +1,4 @@
-# GGR Vacations 0.3.6
+# GGR Vacations 0.3.7
 
 Archives des **vacations HF** entre le radio-club **F6KUF** et les bateaux de la flotte **Golden Globe Race**.
 
