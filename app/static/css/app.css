@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Montserrat:wght@500;800&display=swap");
 
 :root {
   --bg: #081018;
@@ -6,6 +6,7 @@
   --panel: #122233;
   --line: #1e3d52;
   --brass: #c9a227;
+  --ggr-gold: #deb200;
   --foam: #d7ece6;
   --muted: #8aa4a8;
   --rx: #3dba7a;
@@ -280,6 +281,30 @@ body.globe-page .wrap {
   transform: translate(-50%, -50%) rotate(45deg);
 }
 .globe-mark--tx .globe-mark__name { border-left: 3px solid #e8c547; }
+.globe-mark--ggr_banner {
+  pointer-events: none;
+  width: auto;
+  height: auto;
+  overflow: visible;
+}
+.ggr-banner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: Montserrat, sans-serif;
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ggr-gold);
+  background: rgba(10, 12, 14, 0.88);
+  border-top: 2px solid var(--ggr-gold);
+  border-bottom: 2px solid var(--ggr-gold);
+  padding: 0.32rem 0.95rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .globe-mark--link_km { pointer-events: none; }
 .globe-mark--tx_km { pointer-events: none; }
 .globe-mark--tx_km .globe-mark__km { color: #e8c547; }

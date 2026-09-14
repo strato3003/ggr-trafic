@@ -220,6 +220,7 @@
     });
     kiwiKmPoints().forEach((p) => rows.push(p));
     txKmPoints().forEach((p) => rows.push(p));
+    htmlBannerPoints().forEach((p) => rows.push(p));
     return rows;
   }
 
@@ -235,6 +236,14 @@
       km.style.transform = "translate(-50%,-50%) rotate(" + rot + "deg)";
       wrap.appendChild(km);
       wrap.title = d.name || "";
+      return wrap;
+    }
+    if (d.kind === "ggr_banner") {
+      const lab = document.createElement("span");
+      lab.className = "ggr-banner";
+      lab.textContent = d.name || "GGR 2026 — trafic HF";
+      wrap.style.opacity = String(d.opacity != null ? d.opacity : 1);
+      wrap.appendChild(lab);
       return wrap;
     }
     const icon = document.createElement("span");
@@ -744,6 +753,283 @@
 
   let globe = null;
 
+  // Bandeau GGR : or #DEB200 + Montserrat 800 (h1 goldengloberace.com).
+  const GGR_BANNER = "GGR 2026 - trafic HF";
+  const BANNER_HOLD_MS = 2000;
+  const BANNER_INTRO_MS = 7500;
+  const BANNER_OPACITY = 0.55;
+  const BANNER_OPACITY_UNDER = 0.08;
+  const BANNER_FLEET_LAT = 18;
+  const bannerHtml = { on: false, lng0: 0, opacity: BANNER_OPACITY };
+  let bannerStarting = false;
+  let bannerBelt = null;
+  let bannerIntroDone = false;
+  let bannerWatchOn = false;
+
+  function htmlBannerPoints() {
+    if (!bannerHtml.on) return [];
+    const n = 8;
+    const rows = [];
+    for (let i = 0; i < n; i++) {
+      let lng = bannerHtml.lng0 + (360 * i) / n;
+      lng = ((lng + 540) % 360) - 180;
+      rows.push({
+        lat: 0,
+        lon: lng,
+        lng,
+        kind: "ggr_banner",
+        name: GGR_BANNER,
+        opacity: bannerHtml.opacity,
+      });
+    }
+    return rows;
+  }
+
+  function boatsUnderBanner() {
+    const near = (lat) => Number.isFinite(lat) && Math.abs(lat) < BANNER_FLEET_LAT;
+    if (boats.some((b) => near(b.lat))) return true;
+    const c = data.centroid || {};
+    return near(c.lat);
+  }
+
+  function bannerTargetOpacity() {
+    if (!bannerIntroDone) return BANNER_OPACITY;
+    return boatsUnderBanner() ? BANNER_OPACITY_UNDER : BANNER_OPACITY;
+  }
+
+  function applyBannerOpacity(g, belt, snap) {
+    const want = bannerTargetOpacity();
+    const b = belt || bannerBelt;
+    if (b && b.mat) {
+      b.mat.opacity = snap ? want : b.mat.opacity + (want - b.mat.opacity) * 0.16;
+    }
+    const prev = bannerHtml.opacity;
+    bannerHtml.opacity = want;
+    if (bannerHtml.on && g && !b && prev !== want) g.htmlElementsData(points());
+  }
+
+  function watchBannerOpacity(g, belt) {
+    if (bannerWatchOn) return;
+    bannerWatchOn = true;
+    bannerBelt = belt;
+    const tick = () => {
+      applyBannerOpacity(g, belt, false);
+      window.requestAnimationFrame(tick);
+    };
+    window.requestAnimationFrame(tick);
+  }
+
+  function stealGlobeGfx(g) {
+    const scene = typeof g.scene === "function" ? g.scene() : null;
+    if (!scene || typeof scene.traverse !== "function") return null;
+    const gfx = {};
+    scene.traverse((o) => {
+      if (!o || !o.isMesh || !o.geometry) return;
+      if (!gfx.Mesh) gfx.Mesh = o.constructor;
+      if (!gfx.Geo) {
+        let p = o.geometry;
+        for (let i = 0; i < 8 && p; i++) {
+          const n = p.constructor && p.constructor.name;
+          if (n === "BufferGeometry") {
+            gfx.Geo = p.constructor;
+            break;
+          }
+          p = Object.getPrototypeOf(p);
+        }
+        if (!gfx.Geo) gfx.Geo = o.geometry.constructor;
+      }
+      const pos = o.geometry.attributes && o.geometry.attributes.position;
+      if (!gfx.Attr && pos) gfx.Attr = pos.constructor;
+      if (!gfx.Texture && o.material && o.material.map) gfx.Texture = o.material.map.constructor;
+      if (!gfx.sampleMat && o.material && o.material.clone) gfx.sampleMat = o.material;
+    });
+    if (!gfx.Texture && typeof g.globeMaterial === "function") {
+      const gm = g.globeMaterial();
+      if (gm && gm.map) gfx.Texture = gm.map.constructor;
+    }
+    return gfx.Mesh && gfx.Geo && gfx.Attr && gfx.Texture ? gfx : null;
+  }
+
+  function makeBeltGeometry(gfx, radius, height, segs) {
+    const geo = new gfx.Geo();
+    const n = segs + 1;
+    const pos = new Float32Array(n * 2 * 3);
+    const uv = new Float32Array(n * 2 * 2);
+    const h = height / 2;
+    for (let i = 0; i < n; i++) {
+      const t = i / segs;
+      const a = t * Math.PI * 2;
+      const x = Math.cos(a) * radius;
+      const z = Math.sin(a) * radius;
+      const i0 = i * 2;
+      pos[i0 * 3] = x;
+      pos[i0 * 3 + 1] = -h;
+      pos[i0 * 3 + 2] = z;
+      pos[(i0 + 1) * 3] = x;
+      pos[(i0 + 1) * 3 + 1] = h;
+      pos[(i0 + 1) * 3 + 2] = z;
+      uv[i0 * 2] = 1 - t;
+      uv[i0 * 2 + 1] = 0;
+      uv[(i0 + 1) * 2] = 1 - t;
+      uv[(i0 + 1) * 2 + 1] = 1;
+    }
+    const idx = [];
+    for (let i = 0; i < segs; i++) {
+      const a = i * 2;
+      idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
+    geo.setAttribute("position", new gfx.Attr(pos, 3));
+    geo.setAttribute("uv", new gfx.Attr(uv, 2));
+    if (typeof geo.setIndex === "function") geo.setIndex(idx);
+    if (typeof geo.computeVertexNormals === "function") geo.computeVertexNormals();
+    if (typeof geo.computeBoundingSphere === "function") geo.computeBoundingSphere();
+    return geo;
+  }
+
+  function drawGgrBannerCanvas() {
+    const c = document.createElement("canvas");
+    c.width = 4096;
+    c.height = 768;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "rgba(8, 10, 12, 0.92)";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = "#DEB200";
+    ctx.lineWidth = 36;
+    ctx.beginPath();
+    ctx.moveTo(0, 36);
+    ctx.lineTo(c.width, 36);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, c.height - 36);
+    ctx.lineTo(c.width, c.height - 36);
+    ctx.stroke();
+    ctx.fillStyle = "#DEB200";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    if (ctx.letterSpacing !== undefined) ctx.letterSpacing = "8px";
+    const copies = 2;
+    const text = GGR_BANNER.toUpperCase();
+    let fontSize = 200;
+    ctx.font = "800 " + fontSize + "px Montserrat, sans-serif";
+    const slot = c.width / copies;
+    const maxW = slot * 0.78;
+    while (fontSize > 90 && ctx.measureText(text).width > maxW) {
+      fontSize -= 6;
+      ctx.font = "800 " + fontSize + "px Montserrat, sans-serif";
+    }
+    for (let i = 0; i < copies; i++) {
+      ctx.fillText(text, (i + 0.5) * slot, c.height / 2 + 4);
+    }
+    return c;
+  }
+
+  function makeBannerMesh(g) {
+    const gfx = stealGlobeGfx(g);
+    const scene = typeof g.scene === "function" ? g.scene() : null;
+    if (!gfx || !scene) return null;
+    const radius = typeof g.getGlobeRadius === "function" ? g.getGlobeRadius() : 100;
+    const canvas = drawGgrBannerCanvas();
+    const tex = new gfx.Texture(canvas);
+    tex.needsUpdate = true;
+    tex.generateMipmaps = false;
+    if ("minFilter" in tex && "magFilter" in tex) tex.minFilter = tex.magFilter;
+    if ("colorSpace" in tex) tex.colorSpace = "srgb";
+    let mat = null;
+    if (gfx.sampleMat && typeof gfx.sampleMat.clone === "function") {
+      try {
+        mat = gfx.sampleMat.clone();
+      } catch {
+        mat = null;
+      }
+    }
+    if (!mat && typeof g.globeMaterial === "function") {
+      try {
+        mat = g.globeMaterial().clone();
+      } catch {
+        mat = null;
+      }
+    }
+    if (!mat) return null;
+    mat.map = tex;
+    if ("emissiveMap" in mat) mat.emissiveMap = tex;
+    if (mat.emissive && typeof mat.emissive.setHex === "function") mat.emissive.setHex(0xffffff);
+    if ("emissiveIntensity" in mat) mat.emissiveIntensity = 0.85;
+    if (mat.color && typeof mat.color.setHex === "function") mat.color.setHex(0xffffff);
+    mat.transparent = true;
+    mat.opacity = BANNER_OPACITY;
+    mat.depthWrite = false;
+    mat.side = 1;
+    if ("needsUpdate" in mat) mat.needsUpdate = true;
+    const geo = makeBeltGeometry(gfx, radius * 1.08, radius * 0.39, 96);
+    const mesh = new gfx.Mesh(geo, mat);
+    mesh.name = "ggr-eq-banner";
+    mesh.renderOrder = 4;
+    scene.add(mesh);
+    return { mesh, mat };
+  }
+
+  function runBannerAnim(g, belt) {
+    bannerBelt = belt;
+    const start = performance.now();
+    const frame = (now) => {
+      const elapsed = now - start;
+      const t = (elapsed - BANNER_HOLD_MS) / BANNER_INTRO_MS;
+      if (belt) {
+        if (t < 1) belt.mesh.rotation.y = elapsed * 0.00055;
+      } else if (t < 1) {
+        bannerHtml.lng0 = (elapsed * 0.032) % 360;
+        if (g) g.htmlElementsData(points());
+      }
+      applyBannerOpacity(g, belt, true);
+      if (t < 1) {
+        window.requestAnimationFrame(frame);
+      } else {
+        bannerIntroDone = true;
+        watchBannerOpacity(g, belt);
+      }
+    };
+    window.requestAnimationFrame(frame);
+  }
+
+  function startHtmlBanner(g) {
+    bannerHtml.on = true;
+    bannerHtml.opacity = BANNER_OPACITY;
+    if (g) g.htmlElementsData(points());
+    runBannerAnim(g, null);
+  }
+
+  function startGgrEquatorBanner(g, dest) {
+    if (bannerStarting) return;
+    bannerStarting = true;
+    let tries = 0;
+    const beginIntro = () => {
+      if (!dest) return;
+      window.setTimeout(() => {
+        if (g) g.pointOfView(dest, BANNER_INTRO_MS);
+      }, BANNER_HOLD_MS);
+    };
+    const attempt = () => {
+      try {
+        const belt = makeBannerMesh(g);
+        if (belt) {
+          runBannerAnim(g, belt);
+          beginIntro();
+          return;
+        }
+      } catch {
+        /* tuiles / THREE pas encore prêts */
+      }
+      tries += 1;
+      if (tries < 25) {
+        window.setTimeout(attempt, 100);
+        return;
+      }
+      startHtmlBanner(g);
+      beginIntro();
+    };
+    attempt();
+  }
+
   function refreshGlobe() {
     if (!globe) return;
     globe.htmlElementsData(points());
@@ -769,7 +1055,7 @@
       .htmlElementsData(points())
       .htmlLat("lat")
       .htmlLng("lng")
-      .htmlAltitude(0)
+      .htmlAltitude((d) => (d && d.kind === "ggr_banner" ? 0.08 : 0))
       .htmlElement(markerEl)
       .htmlTransitionDuration(0)
       .arcsData([])
@@ -823,12 +1109,18 @@
     }
 
     const dest = fleetView();
-    globe.pointOfView({ lat: dest.lat * 0.35 + 10, lng: dest.lng + 32, altitude: 2.4 }, 0);
+    globe.pointOfView({ lat: 8, lng: dest.lng + 40, altitude: 2.7 }, 0);
     globe.controls().autoRotate = false;
     globe.controls().enableDamping = true;
-    window.setTimeout(() => {
-      if (globe) globe.pointOfView(dest, 4800);
-    }, 450);
+
+    const bootBanner = () => startGgrEquatorBanner(globe, dest);
+    if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);
+    const afterFont = () => bootBanner();
+    if (document.fonts && document.fonts.load) {
+      document.fonts.load("800 200px Montserrat").then(afterFont, afterFont);
+    } else {
+      afterFont();
+    }
 
     const size = () => {
       globe.width(el.clientWidth);
