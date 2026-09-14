@@ -293,10 +293,101 @@
     return rows;
   }
 
+  function fmtLatLon(lat, lon) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
+    const ns = lat >= 0 ? "N" : "S";
+    const ew = lon >= 0 ? "E" : "W";
+    return Math.abs(lat).toFixed(3) + "°" + ns + " " + Math.abs(lon).toFixed(3) + "°" + ew;
+  }
+
+  function skipperTipHtml(d) {
+    const row = (label, val) =>
+      val == null || val === ""
+        ? ""
+        : `<div class="globe-skipper-tip__row"><span>${esc(label)}</span><strong>${esc(val)}</strong></div>`;
+    const kn = (x) => (Number.isFinite(x) ? String(x).replace(".", ",") + " kn" : "");
+    const nm = (x) => (Number.isFinite(x) ? String(x).replace(".", ",") + " NM" : "");
+    const deg = (x) => (Number.isFinite(x) ? String(Math.round(x)).padStart(3, "0") + "°" : "");
+    const vent = [kn(d.wind_kn), deg(d.wind_deg)].filter(Boolean).join(" @ ");
+    const col = d.colour
+      ? `<span class="globe-skipper-tip__swatch" style="background:${esc(d.colour)}"></span>`
+      : "";
+    return (
+      `<header>${col}<div><p class="globe-skipper-tip__kicker">Skipper</p><h3>${esc(d.name || "—")}</h3></div></header>` +
+      `<div class="globe-skipper-tip__grid">` +
+      row("Voile", d.sail) +
+      row("Rang", d.rank != null ? String(d.rank) : "") +
+      row("Statut", d.status) +
+      row("Pavillon", [d.flag, d.country].filter(Boolean).join(" · ")) +
+      row("Bateau", d.model) +
+      row("Propriétaire", d.owner) +
+      row("Position", fmtLatLon(d.lat, d.lon)) +
+      row("Cap", deg(d.heading)) +
+      row("SOG", kn(d.sog_kn)) +
+      row("VMG", kn(d.vmg_kn)) +
+      row("DTF", nm(d.dtf_nm)) +
+      row("24 h", nm(d.d24_nm)) +
+      row("DMG", nm(d.dmg_nm)) +
+      row("GPS", d.gps_at) +
+      row("Arrivée est.", d.finish_at) +
+      row("Vent", vent) +
+      `</div>`
+    );
+  }
+
+  let skipperTipHide = 0;
+
+  function skipperTipEl() {
+    let tip = document.getElementById("globe-skipper-tip");
+    if (tip) return tip;
+    tip = document.createElement("aside");
+    tip.id = "globe-skipper-tip";
+    tip.className = "globe-skipper-tip";
+    tip.hidden = true;
+    const host = document.querySelector(".globe-app") || document.body;
+    host.appendChild(tip);
+    return tip;
+  }
+
+  function placeSkipperTip(ev) {
+    const tip = skipperTipEl();
+    const host = document.querySelector(".globe-app") || document.body;
+    const r = host.getBoundingClientRect();
+    tip.hidden = false;
+    const tw = tip.offsetWidth || 264;
+    const th = tip.offsetHeight || 280;
+    let x = ev.clientX - r.left + 16;
+    let y = ev.clientY - r.top + 16;
+    if (x + tw > r.width - 10) x = ev.clientX - r.left - tw - 14;
+    if (x < 8) x = 8;
+    if (y + th > r.height - 10) y = ev.clientY - r.top - th - 14;
+    if (y < 8) y = 8;
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+  }
+
+  function showSkipperTip(d, ev) {
+    window.clearTimeout(skipperTipHide);
+    const tip = skipperTipEl();
+    tip.innerHTML = skipperTipHtml(d);
+    placeSkipperTip(ev);
+  }
+
+  function hideSkipperTip() {
+    window.clearTimeout(skipperTipHide);
+    skipperTipHide = window.setTimeout(() => {
+      const tip = document.getElementById("globe-skipper-tip");
+      if (tip) tip.hidden = true;
+    }, 80);
+  }
+
   function markerEl(d) {
     const wrap = document.createElement("div");
     wrap.className = "globe-mark globe-mark--" + d.kind + (d.kind === "boat" && d.inBuddy ? " is-buddy" : "");
-    wrap.style.cssText = "width:12px;height:12px;margin:0;padding:0;overflow:visible;";
+    wrap.style.cssText =
+      d.kind === "boat"
+        ? "width:22px;height:22px;margin:0;padding:0;overflow:visible;pointer-events:auto;"
+        : "width:12px;height:12px;margin:0;padding:0;overflow:visible;";
     if (d.kind === "link_km" || d.kind === "tx_km") {
       const km = document.createElement("span");
       km.className = "globe-mark__km";
@@ -332,11 +423,20 @@
       name.textContent = d.kind === "kiwi" || d.kind === "buddy_kiwi" ? sdrLabel(d) : d.name || "";
       wrap.appendChild(name);
     }
-    wrap.title = d.kind === "kiwi" || d.kind === "buddy_kiwi" ? sdrLabel(d) : d.name || d.label || d.kind;
-    icon.addEventListener("click", (ev) => {
+    if (d.kind !== "boat") {
+      wrap.title = d.kind === "kiwi" || d.kind === "buddy_kiwi" ? sdrLabel(d) : d.name || d.label || d.kind;
+    }
+    const pick = (ev) => {
       ev.stopPropagation();
       onPointClick(d);
-    });
+    };
+    icon.addEventListener("click", pick);
+    if (d.kind === "boat") {
+      wrap.addEventListener("click", pick);
+      wrap.addEventListener("mouseenter", (ev) => showSkipperTip(d, ev));
+      wrap.addEventListener("mousemove", (ev) => placeSkipperTip(ev));
+      wrap.addEventListener("mouseleave", hideSkipperTip);
+    }
     return wrap;
   }
 
@@ -1100,8 +1200,9 @@
 
     if (typeof globe.globeTileEngineUrl === "function") {
       globe.globeTileEngineUrl(osmTile);
+      // z trop élevé : tuiles océan de zooms mélangés (taches bleu clair).
       if (typeof globe.globeTileEngineMaxLevel === "function") {
-        globe.globeTileEngineMaxLevel(18);
+        globe.globeTileEngineMaxLevel(6);
       }
     } else {
       globe.globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg");
