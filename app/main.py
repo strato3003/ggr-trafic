@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -161,20 +161,28 @@ async def ping():
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    vacations = store.list_vacations(load_config())
-    return render(request, "index.html", vacations=vacations)
+    return await _globe_page(request)
 
 
-@app.get("/vacations/{vacation_id}", response_class=HTMLResponse)
-async def vacation_page(request: Request, vacation_id: str):
-    meta = store.get_vacation(vacation_id, load_config())
+@app.get("/trafic/{trafic_id}", response_class=HTMLResponse)
+async def trafic_page(request: Request, trafic_id: str):
+    meta = store.get_vacation(trafic_id, load_config())
     if not meta:
-        raise HTTPException(404, "Vacation introuvable")
+        raise HTTPException(404, "Trafic introuvable")
     return render(request, "vacation.html", vacation=meta)
 
 
-@app.get("/flotte", response_class=HTMLResponse)
-async def flotte_page(request: Request):
+@app.get("/vacations/{vacation_id}")
+async def vacation_redirect(vacation_id: str):
+    return RedirectResponse("/trafic/" + vacation_id, status_code=302)
+
+
+@app.get("/flotte")
+async def flotte_redirect():
+    return RedirectResponse("/", status_code=302)
+
+
+async def _globe_page(request: Request):
     cfg = load_config()
     try:
         fleet = await fetch_fleet(cfg, with_wx=True)
@@ -216,24 +224,18 @@ async def flotte_page(request: Request):
         buddy_kiwis=buddy_kiwis,
         globe_vacations=[store.globe_vacation(v) for v in store.list_vacations(cfg)],
         tx_sites=tx_sites_aim(cfg, fleet.get("lat"), fleet.get("lon")),
+        boats=fleet.get("boats") or [],
     )
 
 
-@app.get("/a-propos", response_class=HTMLResponse)
-async def about_page(request: Request):
-    return render(request, "about.html")
+@app.get("/a-propos")
+async def about_redirect():
+    return RedirectResponse("/#apropos", status_code=302)
 
 
-@app.get("/reglages", response_class=HTMLResponse)
-async def reglages_page(request: Request):
-    cfg = load_config()
-    boats = []
-    try:
-        fleet = await fetch_fleet(cfg)
-        boats = fleet.get("boats") or []
-    except Exception:
-        log.exception("Skippers indisponibles pour Réglages")
-    return render(request, "reglages.html", boats=boats)
+@app.get("/reglages")
+async def reglages_redirect():
+    return RedirectResponse("/#setup", status_code=302)
 
 
 @app.get("/media/{vacation_id}/{filename}")
@@ -247,18 +249,49 @@ async def media(vacation_id: str, filename: str):
     return FileResponse(path, headers=headers)
 
 
-@app.get("/api/vacations")
-async def api_vacations():
-    return store.list_vacations(load_config())
-
-
-@app.get("/api/vacations/{vacation_id}")
-async def api_vacation(vacation_id: str):
-    meta = store.get_vacation(vacation_id, load_config())
+def _trafic_meta(vid: str):
+    meta = store.get_vacation(vid, load_config())
     if not meta:
         raise HTTPException(404)
     meta.pop("_dir", None)
     return meta
+
+
+@app.get("/api/trafic")
+@app.get("/api/vacations")
+async def api_trafic():
+    return store.list_vacations(load_config())
+
+
+@app.get("/api/trafic/{trafic_id}")
+async def api_trafic_one(trafic_id: str):
+    return _trafic_meta(trafic_id)
+
+
+@app.get("/api/vacations/{vacation_id}")
+async def api_vacation_one(vacation_id: str):
+    return _trafic_meta(vacation_id)
+
+
+async def _trafic_delete(vid: str, x_admin_token: str | None):
+    cfg = load_config()
+    _require_admin(x_admin_token, cfg)
+    err = store.delete_vacation(vid, cfg)
+    if err == "introuvable":
+        raise HTTPException(404, "Trafic introuvable")
+    if err == "enregistrement en cours":
+        raise HTTPException(409, "Trafic en cours d’enregistrement")
+    if err:
+        raise HTTPException(400, err)
+    return {"ok": True, "deleted": vid}
+
+
+@app.delete("/api/trafic/{trafic_id}")
+async def api_trafic_delete(
+    trafic_id: str,
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    return await _trafic_delete(trafic_id, x_admin_token)
 
 
 @app.delete("/api/vacations/{vacation_id}")
@@ -266,16 +299,16 @@ async def api_vacation_delete(
     vacation_id: str,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
-    cfg = load_config()
-    _require_admin(x_admin_token, cfg)
-    err = store.delete_vacation(vacation_id, cfg)
-    if err == "introuvable":
-        raise HTTPException(404, "Vacation introuvable")
-    if err == "enregistrement en cours":
-        raise HTTPException(409, "Vacation en cours d’enregistrement")
-    if err:
-        raise HTTPException(400, err)
-    return {"ok": True, "deleted": vacation_id}
+    return await _trafic_delete(vacation_id, x_admin_token)
+
+
+@app.post("/api/trafic/{trafic_id}/delete")
+async def api_trafic_delete_post(
+    trafic_id: str,
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    """Alias POST : certains proxys bloquent DELETE."""
+    return await _trafic_delete(trafic_id, x_admin_token)
 
 
 @app.post("/api/vacations/{vacation_id}/delete")
@@ -283,8 +316,7 @@ async def api_vacation_delete_post(
     vacation_id: str,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
-    """Alias POST : certains proxys bloquent DELETE."""
-    return await api_vacation_delete(vacation_id, x_admin_token)
+    return await _trafic_delete(vacation_id, x_admin_token)
 
 
 @app.get("/api/settings")
@@ -422,6 +454,7 @@ async def api_settings_put(
     return qrg
 
 
+@app.post("/api/trafic/record")
 @app.post("/api/vacations/record")
 async def api_record(
     request: Request,

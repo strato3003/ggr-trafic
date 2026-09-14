@@ -1,19 +1,36 @@
-(() => {
-  const root = document.getElementById("mix");
-  const dataEl = document.getElementById("ggr-mix-data");
-  if (!root || !dataEl) return;
+window.GgrMixer = (function () {
+  let handle = null;
 
-  let spec;
-  try {
-    spec = JSON.parse(dataEl.textContent || "[]");
-  } catch {
-    return;
+  function unmount() {
+    if (handle && typeof handle.destroy === "function") handle.destroy();
+    handle = null;
   }
-  if (!Array.isArray(spec) || !spec.length) return;
 
-  const vacId = root.getAttribute("data-vid") || "";
+  function mount(opts) {
+    unmount();
+    handle = boot(opts || {});
+    return handle;
+  }
+
+  function boot(opts) {
+  const root = opts.root || document.getElementById("mix");
+  if (!root) return null;
+  let spec = Array.isArray(opts.tracks) ? opts.tracks : null;
+  if (!spec) {
+    const dataEl = document.getElementById("ggr-mix-data");
+    if (dataEl) {
+      try {
+        spec = JSON.parse(dataEl.textContent || "[]");
+      } catch {
+        spec = [];
+      }
+    }
+  }
+  if (!Array.isArray(spec)) spec = [];
+
+  const vacId = opts.vacId || root.getAttribute("data-vid") || "";
   const startMs = (function parseStart() {
-    const iso = root.getAttribute("data-started") || "";
+    const iso = opts.started || root.getAttribute("data-started") || "";
     if (iso) {
       const t = Date.parse(iso);
       if (Number.isFinite(t)) return t;
@@ -30,7 +47,7 @@
   const playBtn = document.getElementById("mix-play");
   const timeEl = document.getElementById("mix-time");
   const seekEl = document.getElementById("mix-seek");
-  if (!deskEl || !playBtn || !seekEl) return;
+  if (!deskEl || !playBtn || !seekEl) return null;
 
   const TIME = 420;
   const FREQ = 128;
@@ -45,6 +62,8 @@
   let resumeAfterDrag = false;
   let raf = 0;
   let tickTimer = 0;
+  const ac = new AbortController();
+  const sig = { signal: ac.signal };
 
   function esc(s) {
     return String(s || "")
@@ -426,15 +445,15 @@
     resumeAfterDrag = playing;
     dragging = true;
     if (playing) pauseAt(nowT());
-  });
+  }, sig);
   seekEl.addEventListener("input", () => {
     previewSeek(Number(seekEl.value) || 0);
-  });
+  }, sig);
   seekEl.addEventListener("change", () => {
     dragging = false;
     if (resumeAfterDrag) startSources(t0);
     resumeAfterDrag = false;
-  });
+  }, sig);
 
   function applyGain(tr) {
     const vol = tr.muted ? 0 : Number.isFinite(tr.volume) ? tr.volume : 1;
@@ -459,8 +478,11 @@
       .map((tr) => {
         const qrg = Number.isFinite(tr.freq_khz) ? Math.round(tr.freq_khz) + " kHz" : "";
         const where = tr.place || tr.site_label || tr.label || tr.id;
+        const deadCls = tr.dead ? " is-dead is-mute" : "";
         return (
-          '<div class="mix__ch" data-id="' +
+          '<div class="mix__ch' +
+          deadCls +
+          '" data-id="' +
           esc(tr.id) +
           '">' +
           '<div class="mix__wf-wrap">' +
@@ -488,16 +510,21 @@
       const tr = tracks[i];
       tr.canvas = el.querySelector("canvas");
       tr.head = el.querySelector(".mix__head");
+      const muteBtn = el.querySelector('[data-act="mute"]');
+      const vol = el.querySelector('[data-act="vol"]');
+      if (tr.dead) {
+        if (muteBtn) muteBtn.disabled = true;
+        if (vol) vol.disabled = true;
+        return;
+      }
       bindCanvasSeek(tr);
-      el.querySelector('[data-act="mute"]').addEventListener("click", () => {
+      muteBtn.addEventListener("click", () => {
         tr.muted = !tr.muted;
-        const btn = el.querySelector('[data-act="mute"]');
-        btn.setAttribute("aria-pressed", tr.muted ? "true" : "false");
+        muteBtn.setAttribute("aria-pressed", tr.muted ? "true" : "false");
         el.classList.toggle("is-mute", tr.muted);
         applyGain(tr);
         drawTrack(tr);
       });
-      const vol = el.querySelector('[data-act="vol"]');
       vol.addEventListener("input", (ev) => {
         const v = Number(ev.target.value);
         tr.volume = Number.isFinite(v) ? v / 100 : 1;
@@ -512,19 +539,20 @@
     else startSources(duration && duration - t0 < 0.08 ? 0 : t0);
   }
 
-  playBtn.addEventListener("click", playToggle);
+  playBtn.addEventListener("click", playToggle, sig);
 
-  window.addEventListener("keydown", (ev) => {
+  function onKey(ev) {
     if (ev.code !== "Space") return;
     if (ev.target && /input|textarea|select|button/i.test(ev.target.tagName)) return;
     ev.preventDefault();
     playBtn.click();
-  });
-
-  window.addEventListener("resize", () => {
+  }
+  function onResize() {
     tracks.forEach(resizeCanvas);
     draw();
-  });
+  }
+  window.addEventListener("keydown", onKey, sig);
+  window.addEventListener("resize", onResize, sig);
 
   function noteDuration(sec) {
     if (!Number.isFinite(sec) || sec <= 0) return;
@@ -537,6 +565,13 @@
   }
 
   async function loadTrack(tr) {
+    if (tr.dead || !tr.src) {
+      if (tr.canvas) {
+        resizeCanvas(tr);
+        drawTrack(tr);
+      }
+      return;
+    }
     const url = media(tr.src);
     tr.el = new Audio(url);
     tr.el.preload = "auto";
@@ -581,37 +616,86 @@
   async function load() {
     root.hidden = false;
     spec.forEach((row, i) => {
+      const src = row.src || "";
+      const dead = !src || row.has_audio === false;
       tracks.push({
         id: row.id || String(i),
-        src: row.src,
+        src: src,
         freq_khz: row.freq_khz,
         place: row.place,
         site_label: row.site_label,
         label: row.label,
         spec: new Float32Array(TIME * FREQ),
         el: null,
-        muted: false,
-        volume: 1,
+        dead: dead,
+        muted: dead,
+        volume: dead ? 0 : 1,
         canvas: null,
         head: null,
       });
     });
-    renderDesk();
-    tracks.forEach(resizeCanvas);
-    draw();
-    statusEl.textContent = "Waterfall : chargement en parallèle…";
-    playBtn.disabled = true;
-    await Promise.all(tracks.map(loadTrack));
-    if (!duration) {
-      statusEl.textContent = "Aucune piste audio décodable.";
+    if (!tracks.length) {
+      if (statusEl) statusEl.textContent = "Aucune voie sur ce trafic.";
       playBtn.disabled = true;
       return;
     }
-    statusEl.textContent =
-      tracks.length +
-      " voies · waterfall USB 0–2,7 kHz (début en bas, heure TU) · mute / volume par Kiwi.";
+    renderDesk();
+    tracks.forEach(resizeCanvas);
+    draw();
+    if (statusEl) statusEl.textContent = "Waterfall : chargement en parallèle…";
+    playBtn.disabled = true;
+    await Promise.all(tracks.map(loadTrack));
+    if (!duration) {
+      if (statusEl) statusEl.textContent = "Aucune piste audio décodable (voies grisées).";
+      playBtn.disabled = true;
+      return;
+    }
+    const live = tracks.filter((tr) => !tr.dead).length;
+    if (statusEl)
+      statusEl.textContent =
+        live +
+        "/" +
+        tracks.length +
+        " voies audio · waterfall USB 0–2,7 kHz (début en bas, heure TU) · mute / volume par Kiwi.";
     updateHead();
   }
 
+  function destroy() {
+    playing = false;
+    cancelAnimationFrame(raf);
+    clearInterval(tickTimer);
+    tracks.forEach((tr) => {
+      if (tr.el) {
+        tr.el.pause();
+        tr.el.removeAttribute("src");
+        tr.el.load();
+      }
+    });
+    playBtn.removeEventListener("click", playToggle);
+    window.removeEventListener("keydown", onKey);
+    window.removeEventListener("resize", onResize);
+    ac.abort();
+    const bin = document.getElementById("mix-audio-bin");
+    if (bin) bin.remove();
+    if (deskEl) deskEl.innerHTML = "";
+  }
+
   load();
+  return { destroy: destroy };
+  }
+
+  function bootFromDom() {
+    const root = document.getElementById("mix");
+    const dataEl = document.getElementById("ggr-mix-data");
+    if (!root || !dataEl || root.getAttribute("data-ggr-mix") === "host") return;
+    mount({ root: root });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootFromDom);
+  } else {
+    bootFromDom();
+  }
+
+  return { mount: mount, unmount: unmount };
 })();

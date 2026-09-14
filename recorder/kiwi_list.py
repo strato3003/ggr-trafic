@@ -68,6 +68,72 @@ def _az_sep(a: float, b: float) -> float:
     return min(d, 360.0 - d)
 
 
+def _spread_pick(
+    pool: list[dict[str, Any]],
+    used: set[str],
+    chosen: list[dict[str, Any]],
+    *,
+    min_free: int = 1,
+    min_snr: float = 0.0,
+    min_sep_km: float = 400.0,
+) -> dict[str, Any] | None:
+    """Kiwi qui maximise l’écart aux déjà retenus (SNR comme départage)."""
+    best: dict[str, Any] | None = None
+    best_score = -1.0
+    for kiwi in pool:
+        if kiwi_key(kiwi) in used:
+            continue
+        if int(kiwi.get("free_slots") or 0) < int(min_free):
+            continue
+        if float(kiwi.get("snr_hf") or 0) < float(min_snr):
+            continue
+        if not chosen:
+            score = float(kiwi.get("snr_hf") or 0.0)
+        else:
+            dmin = min(
+                haversine_km(float(kiwi["lat"]), float(kiwi["lon"]), float(other["lat"]), float(other["lon"]))
+                for other in chosen
+            )
+            if dmin < float(min_sep_km):
+                continue
+            score = dmin * (1.0 + min(float(kiwi.get("snr_hf") or 0.0) / 40.0, 1.0))
+        if score > best_score:
+            best, best_score = kiwi, score
+    return best
+
+
+def _pad_spread_kiwis(
+    out: dict[str, dict[str, Any]],
+    pool: list[dict[str, Any]],
+    used: set[str],
+    *,
+    want: int,
+    lat: float,
+    lon: float,
+    min_sep_km: float = 400.0,
+) -> None:
+    """Complète jusqu’à *want* Kiwi distincts, éloignés les uns des autres."""
+    n = 0
+    while len(out) < int(want):
+        n += 1
+        extra = _spread_pick(pool, used, list(out.values()), min_free=1, min_snr=5.0, min_sep_km=min_sep_km)
+        if extra is None:
+            extra = _spread_pick(pool, used, list(out.values()), min_free=1, min_snr=0.0, min_sep_km=min_sep_km / 2)
+        if extra is None:
+            extra = _spread_pick(pool, used, list(out.values()), min_free=1, min_snr=0.0, min_sep_km=0.0)
+        if extra is None:
+            break
+        chosen = dict(extra)
+        dist = round(haversine_km(lat, lon, float(extra["lat"]), float(extra["lon"])), 1)
+        role = f"rx{n}"
+        chosen["site"] = role
+        chosen["site_label"] = "diversité"
+        chosen["site_km"] = dist
+        out[role] = chosen
+        used.add(kiwi_key(extra))
+        log.info("Kiwi diversité → %s (%.0f km)", chosen.get("name"), dist)
+
+
 def hf_midday_zone(dist_km: float) -> str:
     """Zone ionosphérique approximative à 12:00 TU pour 4–7 MHz."""
     d = float(dist_km)
@@ -252,6 +318,7 @@ def assign_vacation_kiwis(
         out[str(site["id"])] = chosen
         used.add(kiwi_key(kiwi))
         log.info("Kiwi ACK %s → %s (%.0f km du site)", site["label"], chosen.get("name"), chosen["site_km"])
+    _pad_spread_kiwis(out, pool, used, want=4, lat=fleet_lat, lon=fleet_lon)
     return out
 
 
@@ -275,7 +342,7 @@ def assign_buddy_kiwis(
     la zone morte (~1000 km) est évité au profit d’un 1 saut vers 6 MHz.
     """
     kiwi_cfg = ((cfg.get("buddy") or {}).get("kiwi") or {})
-    want = max(1, min(int(kiwi_cfg.get("count") or 4), 8))
+    want = 4
     sep = float(kiwi_cfg.get("min_separation_km") or 400)
     used: set[str] = set()
     out: dict[str, dict[str, Any]] = {}

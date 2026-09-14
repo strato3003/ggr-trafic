@@ -3,28 +3,24 @@
 {% block content %}
 <article class="vac" data-started="{{ vacation.started_at or '' }}">
   <header class="vac__head">
-    <p class="crumb"><a href="/">← Bulletin météo</a></p>
+    <p class="crumb"><a href="/{% if vacation.is_buddy %}#trafic/buddy{% else %}#trafic{% endif %}">← Trafic</a></p>
     <h1>{{ vacation.title or (vacation.started_at | when) }}</h1>
     <p class="meta">
       {% if vacation.is_buddy %}<span class="badge">Buddy call</span>{% endif %}
       {% if vacation.is_test %}<span class="badge">{{ vacation.title or 'Test' }}</span>{% endif %}
       {{ vacation.club.callsign if vacation.club else club_callsign }}
-      · SDR selon {{ vacation.fleet.label if vacation.fleet else 'flotte' }}
-      {% if vacation.fleet %}({{ vacation.fleet.fmt }}){% endif %}
-      {% if vacation.buddy_aim %} · {{ vacation.buddy_aim.label }}{% endif %}
       · {{ vacation.status }}
     </p>
     <p class="vac__actions">
       <button type="button" class="btn btn--danger js-del-vac" hidden
-              data-delete-vacation="{{ vacation.id }}">Supprimer cette vacation</button>
-      <span class="hint js-del-need-token">Suppression : coller le jeton dans Réglages, puis recharger cette page.</span>
+              data-delete-vacation="{{ vacation.id }}">Supprimer ce trafic</button>
+      <span class="hint js-del-need-token">Suppression : coller le jeton dans Setup, puis recharger cette page.</span>
     </p>
   </header>
 
-  {% if vacation.mixer_tracks %}
   <section class="mix" id="mix" data-vid="{{ vacation.id }}" data-started="{{ vacation.started_at or '' }}">
     <h2>Table de mixage</h2>
-    <p class="hint">Uniquement les Kiwi qui ont de l’audio. Waterfall USB (0–2,7 kHz, début en bas, heure TU) : une colonne par voie, mute et fader comme une table de mixage.</p>
+    <p class="hint">Toutes les voies : sans audio / waterfall, la colonne est grisée. Mute, volume et timeline TU.</p>
     <div class="mix__body" id="ggr-mix">
       <div class="mix__desk" id="mix-strips"></div>
     </div>
@@ -38,69 +34,7 @@
     </div>
     <p class="hint" id="mix-status">Préparation du mixage…</p>
   </section>
-  <script type="application/json" id="ggr-mix-data">{{ vacation.mixer_tracks | tojson }}</script>
-  {% endif %}
-
-  {% if vacation.channels %}
-  <nav class="chan-jump" aria-label="Canaux d’écoute">
-    {% if vacation.mixer_tracks %}
-    <a href="#mix" class="chan-jump__a">Table de mixage · {{ vacation.mixer_tracks | length }} voix</a>
-    {% endif %}
-    {% for ch in vacation.channels %}
-    <a href="#chan-{{ ch.id }}" class="chan-jump__a{% if not ch.has_audio %} is-mute{% endif %}">
-      {{ '%.0f'|format(ch.freq_khz) }} kHz
-      · {{ ch.place or ch.site_label or ch.id }}
-      · {% if ch.has_audio %}audio{% else %}pas d’audio{% endif %}
-    </a>
-    {% endfor %}
-  </nav>
-  {% endif %}
-  {% if vacation.is_buddy %}
-  <p class="hint">Le screencast Kiwi n’est filmé que sur <strong>4483 kHz</strong> (premier Kiwi). Pour 4483 et 6516 ensemble, utiliser la <a href="#mix">table de mixage</a>.</p>
-  {% endif %}
-
-  {% if vacation.tx and vacation.tx.video %}
-  <div class="player">
-    <video id="sdr-video" playsinline poster="{% if vacation.tx.thumb %}/media/{{ vacation.id }}/{{ vacation.tx.thumb }}{% endif %}">
-      <source src="/media/{{ vacation.id }}/{{ vacation.tx.video }}" type="video/mp4">
-    </video>
-    <p class="player__cap">Replay screencast · {{ vacation.tx.label }} · {{ vacation.tx.kiwi.name if vacation.tx.kiwi else '' }}</p>
-  </div>
-  {% endif %}
-
-  <section class="channels">
-    <h2>Canaux</h2>
-    <div class="chan-grid">
-      {% for ch in vacation.channels or [] %}
-      <div class="chan" id="chan-{{ ch.id }}">
-        <h3>{{ ch.label }}</h3>
-        <p class="qrg__v">{{ '%.4f'|format(ch.freq_khz) }} kHz USB</p>
-        <p class="meta">
-          <span class="badge">{% if ch.has_audio %}audio{% else %}pas d’audio{% endif %}</span>
-          {% if ch.place %}<strong>{{ ch.place }}</strong>{% endif %}
-          {% if ch.site_label %} · {{ ch.site_label }}{% endif %}
-        </p>
-        {% if ch.kiwi %}
-        <p class="meta">
-          {{ ch.kiwi.name }}
-          {% if ch.kiwi.fmt %} · {{ ch.kiwi.fmt }}{% endif %}
-          {% if ch.kiwi.prop_zone %} · {{ ch.kiwi.prop_zone }}{% endif %}
-          {% if ch.kiwi.site_km is defined %} · {{ ch.kiwi.site_km }} km{% endif %}
-          · SNR HF {{ ch.kiwi.snr_hf }}
-        </p>
-        {% endif %}
-        {% if ch.audio %}
-        <audio src="/media/{{ vacation.id }}/{{ ch.audio }}" data-sync="1" preload="metadata"></audio>
-        {% else %}
-        <p class="hint">Pas d’audio sur ce Kiwi ({{ ch.place or ch.site_label or ch.id }}).</p>
-        {% endif %}
-        {% if ch.video and ch.id != 'tx' %}
-        <p><a href="/media/{{ vacation.id }}/{{ ch.video }}">Télécharger le screencast</a></p>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-  </section>
+  <script type="application/json" id="ggr-mix-data">{{ (vacation.mixer_tracks or []) | tojson }}</script>
 
   {% if vacation.error %}
   <p class="err">Erreur : {{ vacation.error }}</p>
@@ -108,7 +42,5 @@
 </article>
 {% endblock %}
 {% block extra_js %}
-{% if vacation.mixer_tracks %}
 <script src="/static/js/mixer.js?v={{ version }}"></script>
-{% endif %}
 {% endblock %}

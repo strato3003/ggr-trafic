@@ -123,13 +123,13 @@
       if (!window.confirm(`Supprimer définitivement ${id} (audio, vidéo, dossier) ?`)) return;
       btn.disabled = true;
       try {
-        const res = await fetch("/api/vacations/" + encodeURIComponent(id) + "/delete", {
+        const res = await fetch("/api/trafic/" + encodeURIComponent(id) + "/delete", {
           method: "POST",
           headers: { "X-Admin-Token": tok },
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          if (window.location.pathname.indexOf("/vacations/") === 0) {
+          if (window.location.pathname.indexOf("/trafic/") === 0 || window.location.pathname.indexOf("/vacations/") === 0) {
             window.location.href = "/";
           } else {
             const card = btn.closest(".card");

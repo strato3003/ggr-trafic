@@ -278,7 +278,7 @@ def test_channel_place_and_globe_keeps_mute_channels():
     assert card["channels"][1]["place"] == "Montmorillon 86500 FRANCE"
 
 
-def test_mixer_tracks_only_channels_with_audio():
+def test_mixer_tracks_include_silent_channels():
     from app.store import _decorate
 
     meta = _decorate(
@@ -294,9 +294,12 @@ def test_mixer_tracks_only_channels_with_audio():
             ]
         }
     )
-    assert [t["id"] for t in meta["mixer_tracks"]] == ["nvis-main"]
+    assert [t["id"] for t in meta["mixer_tracks"]] == ["nvis-main", "far-alt"]
     assert meta["mixer_tracks"][0]["place"] == "Amarante, Portugal"
     assert meta["mixer_tracks"][0]["src"] == "audio-nvis-main.wav"
+    assert meta["mixer_tracks"][0]["has_audio"] is True
+    assert meta["mixer_tracks"][1]["has_audio"] is False
+    assert not meta["mixer_tracks"][1]["src"]
 
 
 def test_finalize_pending_promotes_orphan_with_audio(tmp_path):
@@ -522,6 +525,13 @@ def test_assign_vacation_kiwis_geo_sites():
     assert roles["tahiti"]["id"] == "th"
     assert "loud-far" not in {r["id"] for r in roles.values()}
     assert "nz" not in {r["id"] for r in roles.values()}
+    assert len(roles) == 4
+
+    thin = [k for k in pool if k["id"] != "th"]
+    padded = assign_vacation_kiwis(thin, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg)
+    assert len(padded) == 4
+    assert "tahiti" not in padded
+    assert any(str(role).startswith("rx") for role in padded)
 
 
 def test_ack_channels_per_site():
@@ -762,6 +772,20 @@ def test_buddy_aim_trio_or_whole_fleet():
     assert whole["n_boats"] == 4
     assert whole["lat"] < trio["lat"]
 
+    empty = buddy_aim({"lat": 46.5, "lon": -1.8, "fmt": "x", "label": "repli", "boats": []}, trio_cfg)
+    assert "warning" not in empty
+    mismatch = buddy_aim(
+        {
+            "lat": 1.0,
+            "lon": 2.0,
+            "fmt": "x",
+            "label": "flotte",
+            "boats": [{"id": 1, "name": "Autre Skipper", "lat": 10.0, "lon": 10.0}],
+        },
+        trio_cfg,
+    )
+    assert mismatch["warning"] == "Skippers buddy introuvables — centroïde flotte utilisé"
+
 
 def test_assign_buddy_kiwis_nvis_and_hop_not_just_nearest():
     from recorder.kiwi_list import assign_buddy_kiwis, score_buddy_kiwi
@@ -795,6 +819,7 @@ def test_assign_buddy_kiwis_nvis_and_hop_not_just_nearest():
     assert "hop-east" in names or "hop-west" in names
     assert "dead-zone" not in names or len(names) >= 3
     assert roles["nvis"]["name"] == "nvis"
+    assert len(roles) == 4
 
 
 def test_buddy_channels_record_both_qrgs():

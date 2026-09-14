@@ -1,179 +1,146 @@
 {% extends "base.html" %}
-{% block title %} · Flotte &amp; SDR{% endblock %}
+{% block title %}{% endblock %}
 {% block body_class %}globe-page{% endblock %}
 {% block content %}
 <div class="globe-app">
   <div class="globe-stage">
+    <p class="globe-brand">
+      <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
+    </p>
     <div id="ggr-globe" class="ggr-globe" role="region" aria-label="Globe 3D flotte GGR et KiwiSDR"></div>
   </div>
+  <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="true" aria-controls="globe-dock" aria-label="Replier le panneau" title="Replier">
+    <span class="kiwi-toggle__arr" aria-hidden="true"></span>
+  </button>
   <aside class="globe-rail" id="globe-dock">
-    <header class="globe-rail__brand">
-      <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
-      <nav class="globe-rail__nav">
-        <a href="/">Bulletin météo</a>
-        <a href="/flotte" aria-current="page">Flotte</a>
-        <a href="/reglages">Réglages</a>
-        <a href="/a-propos">À propos</a>
-      </nav>
+    <header class="kiwi-ident">
+      <div class="kiwi-ident__row">
+        <strong>{{ app_name }}</strong>
+        <span class="ver">{{ version }}</span>
+      </div>
+      <p class="kiwi-ident__qrg">
+        TX {{ tx_mhz }} MHz · ACK {{ ack1_mhz }} / {{ ack2_mhz }} · {{ time_utc }} TU
+      </p>
+      <p class="kiwi-ident__qrg">
+        Buddy {{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz · {{ buddy_time_utc }} TU
+      </p>
+      <p class="kiwi-ident__clock">
+        <span class="js-countdown" id="countdown" data-iso="{{ bulletin_iso }}">Bulletin {{ bulletin_label }} TU</span>
+        ·
+        <span class="js-countdown" data-iso="{{ buddy_iso }}">Buddy {{ buddy_label }} TU</span>
+        {% if recording %}<span class="live">REC</span>{% endif %}
+      </p>
     </header>
 
-    <div class="globe-rail__qrg" aria-label="Fréquences">
-      <div class="qrg">
-        <span class="qrg__k">TX {{ club_callsign }}</span>
-        <span class="qrg__v">{{ tx_mhz }} MHz</span>
-        <span class="qrg__h">± {{ qrg_tolerance_khz }} kHz · {{ time_utc }} TU</span>
-      </div>
-      <div class="qrg">
-        <span class="qrg__k">Prochain bulletin</span>
-        <span class="qrg__v js-countdown" id="countdown" data-iso="{{ bulletin_iso }}">{{ bulletin_label }} TU</span>
-        {% if recording %}<span class="live">Enregistrement</span>{% endif %}
-      </div>
-      <div class="qrg">
-        <span class="qrg__k">Buddy call {{ buddy_time_utc }} TU</span>
-        <span class="qrg__v">{{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz</span>
-        <span class="qrg__h">{{ buddy_skippers_short }}{% if buddy_include_fleet %} + flotte{% endif %}</span>
-      </div>
-      <div class="qrg">
-        <span class="qrg__k">Prochain buddy call</span>
-        <span class="qrg__v js-countdown" data-iso="{{ buddy_iso }}">{{ buddy_label }} TU</span>
-      </div>
+    <div class="kiwi-tabs" role="tablist">
+      <button type="button" class="is-on" data-tab="trafic" role="tab" aria-selected="true">Trafic</button>
+      <button type="button" data-tab="setup" role="tab" aria-selected="false">Setup</button>
+      <button type="button" data-tab="apropos" role="tab" aria-selected="false">À propos</button>
     </div>
 
-    <div class="globe-dock__tabs" role="tablist">
-      <button type="button" class="is-on" data-tab="sel">Sélection</button>
-      <button type="button" data-tab="vac">Bulletin<br>météo</button>
-      <button type="button" data-tab="buddy">Buddy<br>call</button>
-      <button type="button" data-tab="tx">Émission</button>
+    <div class="kiwi-ident-sel" id="globe-sel">
+      <p class="hint">Cliquer un bateau, un Kiwi ou un QTH. Molette pour zoomer. Replier le panneau si besoin.</p>
     </div>
-    <div id="globe-player" class="globe-player" hidden>
-      <p class="globe-player__title" id="globe-player-title"></p>
-      <p class="globe-player__cap">Waterfall</p>
-      <video id="globe-video" playsinline preload="metadata"></video>
-      <p class="hint" id="globe-wf-msg" hidden></p>
-      <p><a id="globe-wf" href="#" hidden>Télécharger le waterfall</a></p>
-      <label class="globe-player__chan" id="globe-chan-lab">
-        Canal (QRG · Kiwi)
-        <select id="globe-chan"></select>
-      </label>
-      <p class="globe-player__cap">Audio</p>
-      <audio id="globe-audio" preload="metadata"></audio>
-      <p class="hint" id="globe-audio-msg" hidden></p>
-      <p><a id="globe-open-vac" href="#">Ouvrir la fiche</a></p>
+
+    <div class="kiwi-page" data-page="trafic" id="page-trafic">
+      <div class="kiwi-mode" role="tablist" aria-label="Type de trafic">
+        <button type="button" class="is-on" data-mode="meteo">Bulletin météo</button>
+        <button type="button" data-mode="buddy">Buddy call</button>
+      </div>
+      <p class="kiwi-status" id="trafic-msg" hidden></p>
+      <div id="trafic-meteo">
+        <p class="hint">4 KiwiSDR répartis (bulletin + ACK). Mixer uniquement : voies sans audio grisées.</p>
+        <p class="settings__actions">
+          <button type="button" class="btn btn--rx" id="trafic-record-meteo">Enregistrer le bulletin</button>
+        </p>
+        <ul class="globe-vacs" id="globe-vacs"></ul>
+      </div>
+      <div id="trafic-buddy" hidden>
+        <p class="hint">4 KiwiSDR (NVIS / saut / diversité) sur {{ '%.0f'|format(buddy_main_khz) }} et {{ '%.0f'|format(buddy_alt_khz) }} kHz.</p>
+        <p class="settings__actions">
+          <button type="button" class="btn btn--rx" id="trafic-record-buddy">Enregistrer le buddy call</button>
+        </p>
+        <ul class="globe-vacs" id="globe-buddy-vacs"></ul>
+      </div>
+      <section class="mix" id="mix" hidden data-ggr-mix="host">
+        <h2 id="mix-title">Table de mixage</h2>
+        <p class="hint">Waterfall USB 0–2,7 kHz · mute / volume par voie · timeline TU.</p>
+        <div class="mix__body" id="ggr-mix">
+          <div class="mix__desk" id="mix-strips"></div>
+        </div>
+        <div class="mix__transport">
+          <button type="button" class="btn" id="mix-play" aria-pressed="false">Lecture</button>
+          <span class="mix__clock" id="mix-time">— TU</span>
+          <label class="mix__seek">
+            Heure TU
+            <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
+          </label>
+        </div>
+        <p class="hint" id="mix-status">Choisir un trafic.</p>
+      </section>
     </div>
-    <div class="globe-panel" data-panel="sel" id="globe-sel">
-      <p class="hint">Cliquer un bateau, un Kiwi, un QTH d’émission ou un bulletin. Molette pour zoomer.</p>
-    </div>
-    <div class="globe-panel" data-panel="vac" hidden>
-      <ul class="globe-vacs" id="globe-vacs"></ul>
-    </div>
-    <div class="globe-panel" data-panel="buddy" hidden>
-      <ul class="globe-vacs" id="globe-buddy-vacs"></ul>
-      <p class="hint">Centroïde buddy call ({{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz · {{ buddy_time_utc }} TU).</p>
-      <label class="settings__check">
-        <input type="checkbox" id="globe-include-fleet" {% if buddy_include_fleet %}checked{% endif %}>
-        Inclure le reste de la flotte
-      </label>
-      <ul class="skipper-list" id="globe-skippers"></ul>
-      <p class="settings__actions">
-        <button type="button" class="btn" id="globe-save-buddy">Sauver le centroïde</button>
-      </p>
-      <p class="settings-msg" id="globe-buddy-msg" hidden></p>
-    </div>
-    <div class="globe-panel" data-panel="tx" hidden>
-      <p class="hint">Jusqu’à 5 QTH d’émission du bulletin. Pointillé vers le centroïde : distance et azimut d’antenne (vrai nord, 000–359°).</p>
+
+    <div class="kiwi-page" data-page="setup" id="page-setup" hidden>
+      {% if fleet.warning or (buddy_aim and buddy_aim.warning) %}
+      <div class="kiwi-warn" role="status">
+        {% if fleet.warning %}<p class="err">{{ fleet.warning }}</p>{% endif %}
+        {% if buddy_aim and buddy_aim.warning %}<p class="err">{{ buddy_aim.warning }}</p>{% endif %}
+      </div>
+      {% endif %}
+      <p class="hint">QTH d’émission : poser un point sur le globe, puis sauver.</p>
       <ul class="tx-list" id="globe-tx-list"></ul>
       <p class="settings__actions">
         <button type="button" class="btn" id="globe-tx-place">Poser un QTH sur le globe</button>
         <button type="button" class="btn" id="globe-save-tx">Sauver les QTH</button>
       </p>
       <p class="settings-msg" id="globe-tx-msg" hidden></p>
+      {% include "_reglages_form.html" %}
+      <details class="globe-tables">
+        <summary>Tableaux bateaux et KiwiSDR</summary>
+        {% if fleet.boats %}
+        <table class="tbl">
+          <thead>
+            <tr><th>Skipper</th><th>Voile</th><th>Position</th></tr>
+          </thead>
+          <tbody>
+            {% for b in fleet.boats %}
+            <tr>
+              <td>{{ b.name }}{% if buddy_aim and b.name in buddy_aim.skipper_names %} <span class="badge">buddy call</span>{% endif %}</td>
+              <td>{{ b.sail or '—' }}</td>
+              <td>{{ '%.3f'|format(b.lat) }}, {{ '%.3f'|format(b.lon) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+        <h2>KiwiSDR buddy call</h2>
+        <table class="tbl">
+          <thead>
+            <tr><th>Rôle</th><th>Récepteur</th><th>Distance</th><th>Zone</th></tr>
+          </thead>
+          <tbody>
+            {% for k in buddy_kiwis or [] %}
+            <tr>
+              <td>{{ k.site_label or k.site }}</td>
+              <td><a href="{{ k.url }}" rel="noreferrer">{{ k.name }}</a></td>
+              <td>{{ k.site_km or k.distance_km }} km</td>
+              <td>{{ k.prop_zone or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="meta">Aucun Kiwi couvrant 4483 et 6516 kHz pour le moment.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p class="ggr-map-cap">
+          <a href="https://yb.tl/{{ fleet.race_id or 'ggr2026' }}" rel="noreferrer">Tracker Yellowbrick</a>
+          · <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">© OpenStreetMap</a>
+        </p>
+      </details>
     </div>
 
-    {% if fleet.warning %}<p class="err">{{ fleet.warning }}</p>{% endif %}
-    {% if buddy_aim and buddy_aim.warning %}<p class="err">{{ buddy_aim.warning }}</p>{% endif %}
-
-    <p class="ggr-map-cap">
-      <a href="https://yb.tl/{{ fleet.race_id or 'ggr2026' }}" rel="noreferrer">Tracker Yellowbrick</a>
-      · fond <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">© OpenStreetMap</a>
-    </p>
-
-    <details class="globe-tables">
-      <summary>Tableaux bateaux et KiwiSDR</summary>
-{% if fleet.boats %}
-<table class="tbl">
-  <thead>
-    <tr><th>Skipper</th><th>Voile</th><th>Position</th></tr>
-  </thead>
-  <tbody>
-    {% for b in fleet.boats %}
-    <tr>
-      <td>{{ b.name }}{% if buddy_aim and b.name in buddy_aim.skipper_names %} <span class="badge">buddy call</span>{% endif %}</td>
-      <td>{{ b.sail or '—' }}</td>
-      <td>{{ '%.3f'|format(b.lat) }}, {{ '%.3f'|format(b.lon) }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% endif %}
-
-<h2>KiwiSDR buddy call (propagation 4 / 6 MHz)</h2>
-<table class="tbl">
-  <thead>
-    <tr><th>Rôle</th><th>Récepteur</th><th>Distance</th><th>Zone</th><th>SNR HF</th><th>Places</th></tr>
-  </thead>
-  <tbody>
-    {% for k in buddy_kiwis or [] %}
-    <tr>
-      <td>{{ k.site_label or k.site }}</td>
-      <td><a href="{{ k.url }}" rel="noreferrer">{{ k.name }}</a><br><span class="meta">{{ k.loc }} · {{ k.antenna }}</span></td>
-      <td>{{ k.site_km or k.distance_km }} km</td>
-      <td>{{ k.prop_zone or '—' }}</td>
-      <td>{{ k.snr_hf }}</td>
-      <td>{{ k.free_slots }}/{{ k.users_max }}</td>
-    </tr>
-    {% else %}
-    <tr><td colspan="6" class="meta">Aucun Kiwi couvrant 4483 et 6516 kHz pour le moment.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<h2>QTH d’émission bulletin</h2>
-<table class="tbl">
-  <thead>
-    <tr><th>Station</th><th>Position</th><th>Distance</th><th>Azimut antenne</th></tr>
-  </thead>
-  <tbody>
-    {% for s in tx_sites or [] %}
-    <tr>
-      <td>{{ s.label }}</td>
-      <td>{{ '%.4f'|format(s.lat) }}, {{ '%.4f'|format(s.lon) }}</td>
-      <td>{% if s.distance_km is defined %}{{ s.distance_km }} km{% else %}—{% endif %}</td>
-      <td>{% if s.azimuth_deg is defined %}{{ '%03d'|format(s.azimuth_deg) }}°{% else %}—{% endif %}</td>
-    </tr>
-    {% else %}
-    <tr><td colspan="4" class="meta">Aucun QTH d’émission. Les ajouter dans Réglages ou l’onglet Émission.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<h2>KiwiSDR bulletin (12–17 MHz, proximité flotte)</h2>
-<table class="tbl">
-  <thead>
-    <tr><th>Récepteur</th><th>Distance</th><th>SNR HF</th><th>Places</th><th>Score</th></tr>
-  </thead>
-  <tbody>
-    {% for k in kiwis %}
-    <tr>
-      <td><a href="{{ k.url }}" rel="noreferrer">{{ k.name }}</a><br><span class="meta">{{ k.loc }} · {{ k.antenna }}</span></td>
-      <td>{{ k.distance_km }} km</td>
-      <td>{{ k.snr_hf }}</td>
-      <td>{{ k.free_slots }}/{{ k.users_max }}</td>
-      <td>{{ k.score }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-    </details>
+    <div class="kiwi-page" data-page="apropos" id="page-apropos" hidden>
+      {% include "_about.html" %}
+    </div>
   </aside>
 </div>
 
@@ -196,5 +163,7 @@
 {% endblock %}
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/globe.js?v={{ version }}"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi5"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi5"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi5"></script>
 {% endblock %}

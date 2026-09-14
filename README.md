@@ -57,19 +57,19 @@ Enregistrement manuel (page **Réglages** → *Record cette QRG*, ou jeton `GGR_
 curl -X POST -H "X-Admin-Token: …" \
   -H "Content-Type: application/json" \
   -d '{"freq_khz": 14.135, "duration_minutes": 2, "hunt": true}' \
-  https://ggr-vacations.k3s.lpb.ovh/api/vacations/record
+  https://ggr-vacations.k3s.lpb.ovh/api/trafic/record
 
 # Vacation complète (bulletin + ACK flotte / France / Tahiti)
 curl -X POST -H "X-Admin-Token: …" \
   -H "Content-Type: application/json" \
   -d '{"duration_minutes": 10}' \
-  https://ggr-vacations.k3s.lpb.ovh/api/vacations/record
+  https://ggr-vacations.k3s.lpb.ovh/api/trafic/record
 
 # Buddy call immédiat (4483 / 6516 kHz)
 curl -X POST -H "X-Admin-Token: …" \
   -H "Content-Type: application/json" \
   -d '{"kind": "buddy", "duration_minutes": 15}' \
-  https://ggr-vacations.k3s.lpb.ovh/api/vacations/record
+  https://ggr-vacations.k3s.lpb.ovh/api/trafic/record
 ```
 
 Les QRG survivent au redéploiement (fichier `/data/settings.json` sur le PVC). Le ConfigMap k3s reste le défaut.

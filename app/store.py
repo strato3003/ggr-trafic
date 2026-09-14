@@ -59,14 +59,14 @@ def _decorate(meta: dict[str, Any]) -> dict[str, Any]:
     meta["mixer_tracks"] = [
         {
             "id": ch.get("id"),
-            "src": ch.get("audio"),
+            "src": ch.get("audio") or "",
             "freq_khz": ch.get("freq_khz"),
             "place": ch.get("place"),
             "site_label": ch.get("site_label"),
             "label": ch.get("label"),
+            "has_audio": bool(ch.get("audio")),
         }
         for ch in (meta.get("channels") or [])
-        if ch.get("audio")
     ]
     return meta
 

@@ -72,7 +72,7 @@
       buddy_time_utc: form.elements.namedItem("buddy_time_utc").value,
       buddy_lead: Number(form.elements.namedItem("buddy_lead").value),
       buddy_duration_minutes: Number(form.elements.namedItem("buddy_duration_minutes").value),
-      buddy_kiwi_count: Number(form.elements.namedItem("buddy_kiwi_count").value),
+      buddy_kiwi_count: Number((form.elements.namedItem("buddy_kiwi_count") || { value: 4 }).value) || 4,
       buddy_include_fleet: !!(fleetEl && fleetEl.checked),
       buddy_skippers: skippers,
       tx_sites,
@@ -135,7 +135,7 @@
       say("qrg", "Contact du serveur, démarrage du test…", true);
       const huntEl = form.elements.namedItem("test_hunt");
       try {
-        const res = await fetch("/api/vacations/record", {
+        const res = await fetch("/api/trafic/record", {
           method: "POST",
           headers: headers(),
           body: JSON.stringify({
@@ -150,7 +150,7 @@
           say(
             "qrg",
             `Test radio lancé sur ${data.freq_mhz} MHz pendant ${data.duration_minutes} min` +
-              `${data.hunt ? " (chasse USB ± QRM)" : ""}. Une carte « Record … MHz » apparaîtra sur l’accueil à la fin.`,
+              `${data.hunt ? " (chasse USB ± QRM)" : ""}. Elle apparaîtra dans Trafic à la fin.`,
             true
           );
           return;
@@ -167,10 +167,10 @@
   if (recordBtn) {
     recordBtn.addEventListener("click", async () => {
       busy(recordBtn, true);
-      say("vac", "Sauvegarde des QRG puis démarrage de la vacation…", true);
+      say("vac", "Sauvegarde des QRG puis démarrage du trafic…", true);
       try {
         await saveSettings();
-        const res = await fetch("/api/vacations/record", {
+        const res = await fetch("/api/trafic/record", {
           method: "POST",
           headers: headers(),
           body: JSON.stringify({
@@ -181,7 +181,7 @@
         if (res.status === 202) {
           say(
             "vac",
-            `Vacation complète lancée (${data.duration_minutes} min) : bulletin + ACK flotte / France / Tahiti. Carte sur l’accueil à la fin.`,
+            `Trafic complet lancé (${data.duration_minutes} min) : 4 KiwiSDR répartis. Liste Trafic à la fin.`,
             true
           );
           return;
@@ -207,7 +207,7 @@
           `Buddy call mémorisé : ${data.buddy_main_khz} / ${data.buddy_alt_khz} kHz à ${data.buddy_time_utc} TU` +
             ` · ${data.buddy_enabled ? "actif" : "désactivé"}` +
             ` · ${data.buddy_include_fleet ? "centroïde flotte" : (data.buddy_skippers || []).join(", ") || "aucun skipper"}` +
-            ` · ${data.buddy_kiwi_count} Kiwi.`,
+            ` · 4 Kiwi.`,
           true
         );
       } catch (err) {
@@ -225,7 +225,7 @@
       say("buddy", "Sauvegarde puis démarrage du buddy call…", true);
       try {
         await saveSettings();
-        const res = await fetch("/api/vacations/record", {
+        const res = await fetch("/api/trafic/record", {
           method: "POST",
           headers: headers(),
           body: JSON.stringify({
@@ -237,7 +237,7 @@
         if (res.status === 202) {
           say(
             "buddy",
-            `Buddy call lancé (${data.duration_minutes} min) : 4483 et 6516 kHz sur plusieurs Kiwi. Carte sur l’accueil à la fin.`,
+            `Buddy call lancé (${data.duration_minutes} min) : 4483 et 6516 kHz sur 4 Kiwi. Liste Trafic à la fin.`,
             true
           );
           return;

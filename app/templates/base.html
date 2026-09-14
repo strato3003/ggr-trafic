@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }} {{ version }}{% block title %}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi5">
   {% block extra_head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -14,14 +14,13 @@
       <p class="tag">Bulletins météo HF · {{ club_callsign }} · flotte Golden Globe Race</p>
     </div>
     <nav class="nav">
-      <a href="/">Bulletin météo</a>
-      <a href="/flotte">Flotte &amp; SDR</a>
-      <a href="/reglages">Réglages</a>
-      <a href="/a-propos">À propos</a>
+      <a href="/#trafic">Trafic</a>
+      <a href="/#setup">Setup</a>
+      <a href="/#apropos">À propos</a>
     </nav>
   </header>
 
-  <section class="qrg-bar" aria-label="Fréquences de vacation">
+  <section class="qrg-bar" aria-label="Fréquences de trafic">
     <div class="qrg">
       <span class="qrg__k">TX {{ club_callsign }}</span>
       <span class="qrg__v">{{ tx_mhz }} MHz USB</span>

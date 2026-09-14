@@ -267,6 +267,22 @@ _grib_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _GRIB_TTL_S = 3600.0
 
 
+def _tracker_exc_text(exc: BaseException) -> str:
+    """Message court pour l’UI : code HTTP + hôte, sans stack ni URL complète."""
+    resp = getattr(exc, "response", None)
+    req = getattr(exc, "request", None)
+    code = getattr(resp, "status_code", None)
+    if code is not None:
+        reason = (getattr(resp, "reason_phrase", None) or "").strip()
+        url = str(getattr(req, "url", None) or getattr(resp, "url", "") or "")
+        host = ""
+        if "://" in url:
+            host = url.split("/")[2]
+        bit = f"{code} {reason}".strip()
+        return f"{bit} ({host})" if host else bit
+    return str(exc).split("\n", 1)[0]
+
+
 def _track_tail(moments: list[dict[str, Any]], limit: int = 36) -> list[list[float]]:
     ordered = sorted(moments, key=lambda m: m.get("at") or 0)[-limit:]
     return [[float(m["lat"]), float(m["lon"])] for m in ordered]
@@ -407,8 +423,8 @@ async def fetch_fleet(
             result["warning"] = "Tracker joignable mais aucune position récente"
             log.warning("Flotte GGR : aucune position exploitable, repli utilisé")
     except Exception as exc:
-        result["warning"] = f"Tracker indisponible : {exc}"
-        log.warning("Flotte GGR : %s", exc)
+        result["warning"] = f"Tracker indisponible : {_tracker_exc_text(exc)}"
+        log.warning("Flotte GGR : %s", _tracker_exc_text(exc))
     finally:
         if owns_client:
             await client.aclose()
@@ -476,7 +492,7 @@ def buddy_aim(fleet: dict[str, Any], cfg: dict[str, Any] | None = None) -> dict[
             "include_fleet": include_fleet,
             "source": fleet.get("source") or "buddy",
         }
-    return {
+    out = {
         "lat": float(fleet.get("lat") or 46.5025),
         "lon": float(fleet.get("lon") or -1.7888),
         "fmt": fleet.get("fmt") or fmt_latlon(float(fleet.get("lat") or 46.5025), float(fleet.get("lon") or -1.7888)),
@@ -486,5 +502,8 @@ def buddy_aim(fleet: dict[str, Any], cfg: dict[str, Any] | None = None) -> dict[
         "skipper_names": core_names,
         "include_fleet": include_fleet,
         "source": fleet.get("source") or "fallback",
-        "warning": "Skippers buddy introuvables — centroïde flotte utilisé",
     }
+    # Pas de 2e alarme si le tracker n’a renvoyé aucun bateau (le warning flotte suffit).
+    if boats:
+        out["warning"] = "Skippers buddy introuvables — centroïde flotte utilisé"
+    return out

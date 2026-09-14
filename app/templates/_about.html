@@ -1,0 +1,35 @@
+<article class="prose kiwi-about">
+  <h1>À propos — {{ app_name }} {{ version }}</h1>
+  <p>
+    <strong>GGR Vacations</strong> archive les bulletins météo HF entre le radio-club
+    <strong>{{ club_callsign }}</strong> et les bateaux de la flotte Golden Globe Race.
+    Le club émet un bulletin météo tous les jours à <strong>{{ time_utc }} TU</strong> sur
+    <strong>{{ tx_mhz }} MHz USB</strong> (QRG nominale ± {{ qrg_tolerance_khz }} kHz) et écoute les
+    accusés de réception sur <strong>{{ ack1_mhz }} MHz USB</strong> et
+    <strong>{{ ack2_mhz }} MHz USB</strong> (QRG ± {{ qrg_tolerance_khz }} kHz).
+    Tous les jours à <strong>{{ buddy_time_utc }} TU</strong>, un <strong>buddy call</strong> est
+    écouté sur <strong>{{ '%.0f'|format(buddy_main_khz) }} kHz USB</strong> (principale) et
+    <strong>{{ '%.0f'|format(buddy_alt_khz) }} kHz USB</strong> (secours), depuis
+    <strong>4 KiwiSDR</strong> choisis pour la propagation (NVIS et saut 1 hop) vers le centroïde
+    des skippers suivis ({{ buddy_skippers_short }}{% if buddy_include_fleet %} + flotte{% endif %}).
+    Le bulletin et les ACK sont enregistrés en parallèle. Les QRG se règlent dans
+    <a href="#setup">Setup</a>.
+  </p>
+  <h2>Fonctionnement</h2>
+  <ul>
+    <li>Position moyenne de la flotte via le tracker Yellowbrick GGR 2026.</li>
+    <li>Globe 3D central : flotte, Kiwi, QTH d’émission. Le panneau droit (Trafic / Setup / À propos) se replie comme un KiwiSDR.</li>
+    <li>Chaque trafic (météo ou buddy call) cherche 4 récepteurs répartis, puis propose uniquement la table de mixage (voies sans audio grisées).</li>
+    <li>Screencast de l’interface SDR (waterfall / VFO) muxé avec l’audio USB 12 kHz.</li>
+    <li>Replay multipistes : volume, mute et timeline TU.</li>
+  </ul>
+  <h2>Crédits</h2>
+  <ul>
+    <li>Radio-club F6KUF — émission du bulletin météo.</li>
+    <li>Skippers et organisation Golden Globe Race — tracker Yellowbrick.</li>
+    <li>Opérateurs KiwiSDR — récepteurs HF publics.</li>
+    <li>Liste des récepteurs : rx.linkfanel.net (agrégation kiwisdr.com).</li>
+  </ul>
+  <p>Licence MIT — code source du dépôt <code>ggr-vacations</code>.</p>
+  <p>Développé par JNoel F4IAE.</p>
+</article>

@@ -30,29 +30,91 @@
   const txPlaceBtn = document.getElementById("globe-tx-place");
   const txSaveBtn = document.getElementById("globe-save-tx");
   const includeEl = document.getElementById("globe-include-fleet");
-  const playerBox = document.getElementById("globe-player");
-  const playerTitle = document.getElementById("globe-player-title");
-  const audioEl = document.getElementById("globe-audio");
-  const videoEl = document.getElementById("globe-video");
-  const chanEl = document.getElementById("globe-chan");
-  const openVac = document.getElementById("globe-open-vac");
-  const audioMsg = document.getElementById("globe-audio-msg");
-  const wfLink = document.getElementById("globe-wf");
-  const wfMsg = document.getElementById("globe-wf-msg");
-  const chanLab = document.getElementById("globe-chan-lab");
+  const mixRoot = document.getElementById("mix");
+  const mixTitle = document.getElementById("mix-title");
+  const traficMsg = document.getElementById("trafic-msg");
+  const kiwiToggle = document.getElementById("kiwi-toggle");
 
-  function mediaUrl(id, file) {
-    return "/media/" + encodeURIComponent(id) + "/" + encodeURIComponent(file);
+  function setPanelOpen(on) {
+    document.body.classList.toggle("kiwi-panel-off", !on);
+    if (kiwiToggle) {
+      kiwiToggle.setAttribute("aria-expanded", on ? "true" : "false");
+      kiwiToggle.setAttribute("aria-label", on ? "Replier le panneau" : "Déplier le panneau");
+      kiwiToggle.setAttribute("title", on ? "Replier" : "Déplier");
+    }
+    try {
+      localStorage.setItem("ggr-kiwi-panel", on ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event("resize"));
+    window.setTimeout(() => window.dispatchEvent(new Event("resize")), 200);
   }
 
-  document.querySelectorAll(".globe-dock__tabs [data-tab]").forEach((btn) => {
+  if (kiwiToggle) {
+    kiwiToggle.addEventListener("click", () => {
+      setPanelOpen(document.body.classList.contains("kiwi-panel-off"));
+    });
+  }
+  try {
+    if (localStorage.getItem("ggr-kiwi-panel") === "off") setPanelOpen(false);
+  } catch {
+    /* ignore */
+  }
+
+  function parseHash() {
+    const h = (location.hash || "#trafic").replace(/^#/, "");
+    if (h === "setup") return ["setup", "meteo"];
+    if (h === "apropos" || h === "a-propos") return ["apropos", "meteo"];
+    if (h === "trafic/buddy" || h === "buddy") return ["trafic", "buddy"];
+    return ["trafic", "meteo"];
+  }
+
+  function showTab(name, mode) {
+    const tab = name || "trafic";
+    const sub = mode || "meteo";
+    document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((b) => {
+      const on = b.getAttribute("data-tab") === tab;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    document.querySelectorAll(".kiwi-page").forEach((p) => {
+      p.hidden = p.getAttribute("data-page") !== tab;
+    });
+    document.querySelectorAll(".kiwi-mode [data-mode]").forEach((b) => {
+      b.classList.toggle("is-on", b.getAttribute("data-mode") === sub);
+    });
+    const meteoBox = document.getElementById("trafic-meteo");
+    const buddyBox = document.getElementById("trafic-buddy");
+    if (meteoBox) meteoBox.hidden = sub !== "meteo";
+    if (buddyBox) buddyBox.hidden = sub !== "buddy";
+    let hash = "#" + tab;
+    if (tab === "trafic" && sub === "buddy") hash = "#trafic/buddy";
+    else if (tab === "trafic") hash = "#trafic";
+    if (location.hash !== hash) history.replaceState(null, "", hash);
+    if (tab !== "trafic") document.body.classList.remove("kiwi-mix-on");
+    else if (mixRoot && !mixRoot.hidden) document.body.classList.add("kiwi-mix-on");
+  }
+
+  document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".globe-dock__tabs [data-tab]").forEach((b) => b.classList.toggle("is-on", b === btn));
-      document.querySelectorAll(".globe-panel").forEach((p) => {
-        p.hidden = p.getAttribute("data-panel") !== btn.getAttribute("data-tab");
-      });
+      const tab = btn.getAttribute("data-tab");
+      showTab(tab, tab === "trafic" ? parseHash()[1] : "meteo");
+      setPanelOpen(true);
     });
   });
+  document.querySelectorAll(".kiwi-mode [data-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      showTab("trafic", btn.getAttribute("data-mode"));
+      setPanelOpen(true);
+    });
+  });
+  window.addEventListener("hashchange", () => {
+    const parsed = parseHash();
+    showTab(parsed[0], parsed[1]);
+  });
+  const initial = parseHash();
+  showTab(initial[0], initial[1]);
 
   function esc(s) {
     return String(s || "")
@@ -63,8 +125,15 @@
 
   function showSel(html) {
     if (selEl) selEl.innerHTML = html;
-    const tab = document.querySelector('.globe-dock__tabs [data-tab="sel"]');
-    if (tab) tab.click();
+    setPanelOpen(true);
+  }
+
+  function sayTrafic(text, ok) {
+    if (!traficMsg) return;
+    traficMsg.hidden = false;
+    traficMsg.textContent = text;
+    traficMsg.classList.toggle("err", !ok);
+    traficMsg.classList.toggle("ok", !!ok);
   }
 
   function sayBuddy(text, ok) {
@@ -526,22 +595,21 @@
 
   function renderSkippers() {
     if (!skipEl) return;
-    skipEl.innerHTML = boats
-      .map((b) => {
-        const on = boatInBuddy(b.name);
-        return (
-          `<li><label><input type="checkbox" data-skipper="${esc(b.name)}" ${on ? "checked" : ""}>` +
-          ` ${esc(b.name)}${b.sail ? ` <span class="meta">(${esc(b.sail)})</span>` : ""}</label></li>`
-        );
-      })
-      .join("");
-    skipEl.querySelectorAll("input[data-skipper]").forEach((inp) => {
-      inp.addEventListener("change", () => {
-        const name = inp.getAttribute("data-skipper");
-        if (inp.checked) skippers.add(name);
-        else skippers.delete(name);
-        refreshGlobe();
-      });
+    skipEl.querySelectorAll('input[name="buddy_skipper"], input[data-skipper]').forEach((inp) => {
+      const name = inp.value || inp.getAttribute("data-skipper");
+      if (name) inp.checked = boatInBuddy(name);
+    });
+  }
+
+  if (skipEl) {
+    skipEl.addEventListener("change", (ev) => {
+      const inp = ev.target;
+      if (!inp || inp.type !== "checkbox") return;
+      const name = inp.value || inp.getAttribute("data-skipper");
+      if (!name) return;
+      if (inp.checked) skippers.add(name);
+      else skippers.delete(name);
+      refreshGlobe();
     });
   }
 
@@ -563,107 +631,69 @@
       .join("");
     root.querySelectorAll(".globe-vac").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const v = vacations.find((x) => x.id === btn.getAttribute("data-vid"));
+        const v = (data.vacations || []).find((x) => x.id === btn.getAttribute("data-vid"));
         if (v) playVacation(v);
       });
     });
   }
 
   function renderVacList() {
+    const all = data.vacations || [];
     fillVacList(
       vacsEl,
-      vacations.filter((v) => !v.is_buddy),
-      "Aucun bulletin météo avec position."
+      all.filter((v) => !v.is_buddy),
+      "Aucun bulletin météo."
     );
     fillVacList(
       buddyVacsEl,
-      vacations.filter((v) => v.is_buddy),
-      "Aucun buddy call avec position."
+      all.filter((v) => v.is_buddy),
+      "Aucun buddy call."
     );
   }
 
-  function playVacation(v) {
-    if (!playerBox || !audioEl || !chanEl) return;
-    playerBox.hidden = false;
-    if (playerTitle) playerTitle.textContent = v.title || v.id;
-    if (openVac) {
-      const hasMix = (v.channels || []).some((c) => c.audio);
-      openVac.href =
-        "/vacations/" + encodeURIComponent(v.id) + (hasMix ? "#mix" : "");
+  function mixerTracks(v) {
+    return (v.channels || []).map((c, i) => ({
+      id: c.id || String(i),
+      src: c.audio || "",
+      freq_khz: c.freq_khz,
+      place: c.place || c.loc,
+      site_label: c.site_label,
+      label: c.label,
+      has_audio: !!(c.has_audio || c.audio),
+    }));
+  }
+
+  async function playVacation(v) {
+    setPanelOpen(true);
+    showTab("trafic", v.is_buddy ? "buddy" : "meteo");
+    document.body.classList.add("kiwi-mix-on");
+    showSel(
+      `<p class="badge">${v.is_buddy ? "Buddy call" : v.is_test ? "Test" : "Bulletin météo"}</p>` +
+        `<h3>${esc(v.title || v.id)}</h3>` +
+        `<p class="meta">${esc((v.started_at || "").replace("T", " ").slice(0, 16))} TU</p>`
+    );
+    if (mixTitle) mixTitle.textContent = v.title || v.id;
+    if (mixRoot) {
+      mixRoot.hidden = false;
+      mixRoot.setAttribute("data-vid", v.id || "");
+      mixRoot.setAttribute("data-started", v.started_at || "");
     }
-    const chans = v.channels || [];
-    if (chanLab) chanLab.classList.toggle("is-off", !chans.length);
-    if (chans.length) {
-      chanEl.innerHTML = chans
-        .map((c, i) => {
-          const qrg = Number.isFinite(c.freq_khz) ? Math.round(c.freq_khz) + " kHz" : "";
-          const where = c.place || c.loc || c.site_label || c.kiwi || c.label || c.id || "";
-          const audio = c.has_audio || c.audio ? "audio" : "pas d’audio";
-          return `<option value="${i}">${esc([qrg, where, audio].filter(Boolean).join(" · "))}</option>`;
-        })
-        .join("");
-    } else {
-      chanEl.innerHTML = "";
+    let tracks = mixerTracks(v);
+    try {
+      const full = await fetch("/api/trafic/" + encodeURIComponent(v.id)).then((r) => r.json());
+      if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) tracks = full.mixer_tracks;
+      else if ((full.channels || []).length) tracks = mixerTracks(full);
+    } catch {
+      /* carte globe */
     }
-    const applyChan = () => {
-      const ch = chans[Number(chanEl.value) || 0] || {};
-      const audioFile = ch.audio;
-      audioEl.pause();
-      if (audioFile) {
-        audioEl.src = mediaUrl(v.id, audioFile);
-      } else {
-        audioEl.removeAttribute("src");
-      }
-      audioEl.load();
-      if (typeof window.ggrEnhanceTuPlayer === "function") {
-        window.ggrEnhanceTuPlayer(audioEl, Date.parse(v.started_at || ""));
-      }
-      if (audioMsg) {
-        audioMsg.hidden = !!audioFile;
-        audioMsg.textContent = audioFile
-          ? ""
-          : (ch.place || ch.loc || "ce Kiwi") + " : pas d’audio.";
-      }
-      const vid = ch.video || null;
-      const thumb = ch.thumb || null;
-      if (videoEl) {
-        if (vid) {
-          videoEl.src = mediaUrl(v.id, vid);
-          if (thumb) videoEl.poster = mediaUrl(v.id, thumb);
-          else videoEl.removeAttribute("poster");
-        } else {
-          videoEl.removeAttribute("src");
-          videoEl.removeAttribute("poster");
-        }
-        videoEl.load();
-      }
-      if (videoEl && typeof window.ggrEnhanceTuPlayer === "function") {
-        window.ggrEnhanceTuPlayer(videoEl, Date.parse(v.started_at || ""));
-      }
-      if (wfLink) {
-        if (vid) {
-          wfLink.hidden = false;
-          wfLink.href = mediaUrl(v.id, vid);
-        } else {
-          wfLink.hidden = true;
-          wfLink.removeAttribute("href");
-        }
-      }
-      if (wfMsg) {
-        wfMsg.hidden = !!vid;
-        const where = ch.place || ch.loc || (Number.isFinite(ch.freq_khz) ? Math.round(ch.freq_khz) + " kHz" : "ce canal");
-        wfMsg.textContent = vid
-          ? ""
-          : audioFile
-            ? "Pas de waterfall sur " + where + " (audio seul)."
-            : "Pas d’audio ni de waterfall · " + where;
-      }
-    };
-    chanEl.onchange = applyChan;
-    applyChan();
-    const tabName = v.is_buddy ? "buddy" : "vac";
-    const tab = document.querySelector('.globe-dock__tabs [data-tab="' + tabName + '"]');
-    if (tab) tab.click();
+    if (window.GgrMixer && mixRoot) {
+      window.GgrMixer.mount({
+        root: mixRoot,
+        tracks: tracks,
+        vacId: v.id,
+        started: v.started_at,
+      });
+    }
     if (Number.isFinite(v.lat) && globe) {
       globe.pointOfView({ lat: v.lat, lng: v.lon, altitude: 1.6 }, 900);
     }
@@ -1158,8 +1188,7 @@
         renderTxList();
         refreshGlobe();
         sayTx("QTH posé. Sauver pour mémoriser.", true);
-        const tab = document.querySelector('.globe-dock__tabs [data-tab="tx"]');
-        if (tab) tab.click();
+        showTab("setup");
       });
     }
     } catch (err) {
@@ -1170,6 +1199,7 @@
   if (includeEl) {
     includeEl.addEventListener("change", () => {
       includeFleet = includeEl.checked;
+      refreshGlobe();
     });
   }
 
@@ -1178,7 +1208,7 @@
     saveBtn.addEventListener("click", async () => {
       const tok = token();
       if (!tok) {
-        sayBuddy("Jeton manquant : coller le jeton dans Réglages.", false);
+        sayBuddy("Jeton manquant : coller le jeton dans Setup.", false);
         return;
       }
       saveBtn.disabled = true;
@@ -1201,7 +1231,7 @@
             buddy_time_utc: cur.buddy_time_utc,
             buddy_lead: cur.buddy_lead,
             buddy_duration_minutes: cur.buddy_duration_minutes,
-            buddy_kiwi_count: cur.buddy_kiwi_count,
+            buddy_kiwi_count: 4,
             buddy_include_fleet: includeFleet,
             buddy_skippers: [...skippers],
           }),
@@ -1261,7 +1291,7 @@
     txSaveBtn.addEventListener("click", async () => {
       const tok = token();
       if (!tok) {
-        sayTx("Jeton manquant : coller le jeton dans Réglages.", false);
+        sayTx("Jeton manquant : coller le jeton dans Setup.", false);
         return;
       }
       txSaveBtn.disabled = true;
@@ -1298,5 +1328,49 @@
   renderSkippers();
   renderVacList();
   renderTxList();
+
+  async function startRecord(kind) {
+    const tok = token();
+    if (!tok) {
+      sayTrafic("Jeton manquant : coller le jeton dans Setup.", false);
+      showTab("setup");
+      setPanelOpen(true);
+      return;
+    }
+    sayTrafic(kind === "buddy" ? "Buddy call : 4 Kiwi, démarrage…" : "Bulletin : 4 Kiwi, démarrage…", true);
+    try {
+      const res = await fetch("/api/trafic/record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Token": tok },
+        body: JSON.stringify(kind === "buddy" ? { kind: "buddy" } : {}),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 202) {
+        sayTrafic(
+          (kind === "buddy" ? "Buddy call lancé" : "Bulletin lancé") +
+            " (" +
+            (body.duration_minutes || "?") +
+            " min). Le trafic apparaîtra dans la liste à la fin.",
+          true
+        );
+        return;
+      }
+      const d = body.detail;
+      sayTrafic((Array.isArray(d) ? d.map((x) => x.msg || x).join(" ") : d) || "Erreur " + res.status, false);
+    } catch (err) {
+      sayTrafic(String(err), false);
+    }
+  }
+  const recMeteo = document.getElementById("trafic-record-meteo");
+  const recBuddy = document.getElementById("trafic-record-buddy");
+  if (recMeteo) recMeteo.addEventListener("click", () => startRecord("meteo"));
+  if (recBuddy) recBuddy.addEventListener("click", () => startRecord("buddy"));
+
   initGlobe();
+
+  const vacQ = new URLSearchParams(location.search).get("vac");
+  if (vacQ) {
+    const found = vacations.find((v) => v.id === vacQ) || (data.vacations || []).find((v) => v.id === vacQ);
+    if (found) playVacation(found);
+  }
 })();

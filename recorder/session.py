@@ -367,9 +367,9 @@ async def run_vacation(
         )
         meta["kiwi_roles"] = {role: _kiwi_snap(kiwi) for role, kiwi in roles.items()}
         ack_sites = [
-            {"id": sid, "label": roles[sid].get("site_label") or sid}
-            for sid in ("fleet", "france", "tahiti")
-            if sid in roles
+            {"id": sid, "label": kiwi.get("site_label") or sid}
+            for sid, kiwi in roles.items()
+            if sid != "tx"
         ]
         channels = _channels(cfg, ack_sites)
         assignment = _pick_kiwis(roles, channels)

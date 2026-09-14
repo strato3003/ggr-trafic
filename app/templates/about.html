@@ -1,40 +1,5 @@
 {% extends "base.html" %}
 {% block title %} · À propos{% endblock %}
 {% block content %}
-<article class="prose">
-  <h1>À propos — {{ app_name }} {{ version }}</h1>
-  <p>
-    <strong>GGR Vacations</strong> archive les bulletins météo HF entre le radio-club
-    <strong>{{ club_callsign }}</strong> et les bateaux de la flotte Golden Globe Race.
-    Le club émet un bulletin météo tous les jours à <strong>{{ time_utc }} TU</strong> sur
-    <strong>{{ tx_mhz }} MHz USB</strong> (QRG nominale ± {{ qrg_tolerance_khz }} kHz) et écoute les
-    accusés de réception sur <strong>{{ ack1_mhz }} MHz USB</strong> et
-    <strong>{{ ack2_mhz }} MHz USB</strong> (QRG ± {{ qrg_tolerance_khz }} kHz).
-    Tous les jours à <strong>{{ buddy_time_utc }} TU</strong>, un <strong>buddy call</strong> est
-    écouté sur <strong>{{ '%.0f'|format(buddy_main_khz) }} kHz USB</strong> (principale) et
-    <strong>{{ '%.0f'|format(buddy_alt_khz) }} kHz USB</strong> (secours), depuis plusieurs
-    KiwiSDR choisis pour la propagation (NVIS et saut 1 hop) vers le centroïde des skippers
-    suivis ({{ buddy_skippers_short }}{% if buddy_include_fleet %} + flotte{% endif %}).
-    Le bulletin et les deux ACK sont enregistrés en parallèle pendant toute la vacation
-    (pas d’attente de fin de bulletin). Les QRG se règlent dans
-    <a href="/reglages">Réglages</a>.
-  </p>
-  <h2>Fonctionnement</h2>
-  <ul>
-    <li>Position moyenne de la flotte via le tracker Yellowbrick GGR 2026.</li>
-    <li>Globe 3D (flotte, Kiwi, bulletins météo) : cliquer pour régler le centroïde buddy call et écouter les archives.</li>
-    <li>Screencast de l’interface SDR (waterfall / VFO) muxé avec l’audio USB 12 kHz.</li>
-    <li>WAV des deux QRG d’accusé en parallèle, depuis trois Kiwi : près de la flotte, en France, vers Tahiti.</li>
-    <li>Replay dans cette interface, comme si l’on était devant le récepteur.</li>
-  </ul>
-  <h2>Crédits</h2>
-  <ul>
-    <li>Radio-club F6KUF — émission du bulletin météo.</li>
-    <li>Skippers et organisation Golden Globe Race — tracker Yellowbrick.</li>
-    <li>Opérateurs KiwiSDR — récepteurs HF publics.</li>
-    <li>Liste des récepteurs : rx.linkfanel.net (agrégation kiwisdr.com).</li>
-  </ul>
-  <p>Licence MIT — code source du dépôt <code>ggr-vacations</code>.</p>
-  <p>Développé par JNoel F4IAE.</p>
-</article>
+{% include "_about.html" %}
 {% endblock %}
