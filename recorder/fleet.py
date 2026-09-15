@@ -291,7 +291,7 @@ def _track_tail(moments: list[dict[str, Any]], limit: int = 36) -> list[list[flo
 async def fetch_fleet(
     cfg: dict[str, Any], client: Any | None = None, *, with_wx: bool = False
 ) -> dict[str, Any]:
-    """Retourne le centroïde de la flotte en course, avec repli configuré."""
+    """Positions Yellowbrick ; le centroïde (lat/lon) est celui des skippers cochés."""
     import httpx
 
     fleet_cfg = cfg.get("fleet") or {}
@@ -413,7 +413,7 @@ async def fetch_fleet(
                     "source": "yellowbrick",
                     "lat": center[0],
                     "lon": center[1],
-                    "label": f"Centroïde flotte GGR ({len(points)} bateaux)",
+                    "label": f"Flotte GGR ({len(points)} bateaux)",
                     "n_boats": len(points),
                     "boats": boats,
                     "race_id": race_id,
@@ -428,6 +428,12 @@ async def fetch_fleet(
     finally:
         if owns_client:
             await client.aclose()
+    # Kiwi bulletin + globe : centroïde = skippers cochés, jamais le reste de la flotte.
+    aim = buddy_aim(result, cfg)
+    if aim.get("skipper_names") and aim.get("n_boats"):
+        result["lat"] = aim["lat"]
+        result["lon"] = aim["lon"]
+        result["label"] = aim["label"]
     result["fmt"] = fmt_latlon(result["lat"], result["lon"])
     return result
 
@@ -453,7 +459,7 @@ def skipper_matches(boat: dict[str, Any], names: list[str], team_ids: list[int])
 
 
 def buddy_aim(fleet: dict[str, Any], cfg: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Centroïde d’écoute buddy : trio (ou liste) avec ou sans le reste de la flotte."""
+    """Centroïde d’écoute : uniquement les skippers listés (jamais le reste de la flotte)."""
     cfg = cfg or {}
     buddy = cfg.get("buddy") or {}
     cent = buddy.get("centroid") or {}
@@ -462,48 +468,39 @@ def buddy_aim(fleet: dict[str, Any], cfg: dict[str, Any] | None = None) -> dict[
         team_ids = [int(x) for x in (cent.get("team_ids") or [])]
     except (TypeError, ValueError):
         team_ids = []
-    include_fleet = bool(cent.get("include_fleet"))
     boats = [b for b in (fleet.get("boats") or []) if isinstance(b, dict)]
     core = [b for b in boats if skipper_matches(b, names, team_ids)]
-    chosen = boats if include_fleet else core
     points = [
         (float(b["lat"]), float(b["lon"]))
-        for b in chosen
+        for b in core
         if b.get("lat") is not None and b.get("lon") is not None
     ]
     center = centroid(points) if points else None
     core_names = [str(b.get("name") or "?").strip() for b in core]
     if center:
-        if include_fleet:
-            label = f"Centroïde flotte ({len(points)} bateaux"
-            if core_names:
-                label += f", dont {', '.join(core_names)}"
-            label += ")"
-        else:
-            label = "Centroïde buddy : " + (", ".join(core_names) or "aucun skipper")
         return {
             "lat": center[0],
             "lon": center[1],
             "fmt": fmt_latlon(center[0], center[1]),
-            "label": label,
+            "label": "Centroïde : " + (", ".join(core_names) or "aucun skipper"),
             "n_boats": len(points),
             "skippers": core,
             "skipper_names": core_names,
-            "include_fleet": include_fleet,
+            "include_fleet": False,
             "source": fleet.get("source") or "buddy",
         }
     out = {
         "lat": float(fleet.get("lat") or 46.5025),
         "lon": float(fleet.get("lon") or -1.7888),
         "fmt": fleet.get("fmt") or fmt_latlon(float(fleet.get("lat") or 46.5025), float(fleet.get("lon") or -1.7888)),
-        "label": (fleet.get("label") or "Flotte") + " (repli buddy)",
-        "n_boats": int(fleet.get("n_boats") or 0),
+        "label": (fleet.get("label") or "Flotte") + " (repli centroïde)",
+        "n_boats": 0,
         "skippers": core,
         "skipper_names": core_names,
-        "include_fleet": include_fleet,
+        "include_fleet": False,
         "source": fleet.get("source") or "fallback",
     }
     # Pas de 2e alarme si le tracker n’a renvoyé aucun bateau (le warning flotte suffit).
     if boats:
-        out["warning"] = "Skippers buddy introuvables — centroïde flotte utilisé"
+        out["warning"] = "Skippers du centroïde introuvables — repli flotte"
     return out

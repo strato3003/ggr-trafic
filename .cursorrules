@@ -13,7 +13,7 @@
 
 ## Technique
 - UI et commentaires techniques en **français**.
-- Enregistrement via les meilleurs KiwiSDR selon la position moyenne de la flotte.
+- Enregistrement via les meilleurs KiwiSDR selon le centroïde des skippers suivis.
 - Screencast du SDR pour le replay « comme si on y était ».
 - Déploiement **k3s** : manifests dans `k8s/`, mise à jour via `scripts/update.sh`.
 - Modifications chirurgicales : ne pas réécrire un fichier entier si un diff local suffit.

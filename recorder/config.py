@@ -273,9 +273,9 @@ def buddy_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "buddy_main_label": main.get("label") or f"Buddy call {fmt_khz(main_khz)} kHz",
         "buddy_alt_label": alt.get("label") or f"Buddy call {fmt_khz(alt_khz)} kHz (secours)",
         "buddy_skippers": skippers,
-        "buddy_include_fleet": bool(cent.get("include_fleet")),
+        "buddy_include_fleet": False,
         "buddy_kiwi_count": int(kiwi.get("count") or 4),
-        "buddy_skippers_short": ", ".join(skippers) if skippers else "flotte",
+        "buddy_skippers_short": ", ".join(skippers) if skippers else "aucun skipper",
     }
 
 

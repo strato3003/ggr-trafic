@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }} {{ version }}{% block title %}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi8">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi9">
   {% block extra_head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -51,9 +51,9 @@
       <span class="qrg__v">{{ '%.0f'|format(buddy_alt_khz) }} kHz USB</span>
     </div>
     <div class="qrg">
-      <span class="qrg__k">Centroïde buddy</span>
+      <span class="qrg__k">Centroïde</span>
       <span class="qrg__v qrg__v--small">{{ buddy_skippers_short }}</span>
-      <span class="qrg__h">{% if buddy_include_fleet %}trio + flotte{% else %}skippers listés{% endif %}</span>
+      <span class="qrg__h">skippers cochés</span>
     </div>
     <div class="qrg qrg--next">
       <span class="qrg__k">Prochain buddy call</span>
@@ -66,9 +66,9 @@
   </main>
 
   <footer class="foot">
-    <p>{{ app_name }} {{ version }} — enregistrements KiwiSDR selon la position moyenne de la flotte GGR.</p>
+    <p>{{ app_name }} {{ version }} — enregistrements KiwiSDR selon le centroïde des skippers suivis.</p>
   </footer>
-  <script src="/static/js/app.js?v={{ version }}-kiwi8"></script>
+  <script src="/static/js/app.js?v={{ version }}-kiwi9"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

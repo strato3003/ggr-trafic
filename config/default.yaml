@@ -5,7 +5,7 @@ club:
   callsign: F6KUF
   name: "Radio-club F6KUF"
 
-# QTH d’émission du bulletin météo (max 5). Pointillé globe → centroïde flotte.
+# QTH d’émission du bulletin météo (max 5). Pointillé globe → centroïde des skippers suivis.
 tx_sites:
   - label: F6KUF
     lat: 46.5025
@@ -57,13 +57,12 @@ buddy:
     label: "Buddy call 6516 kHz (secours)"
     zoom: 12
   centroid:
-    # Noms Yellowbrick RaceSetup (ggr2026). Le centroïde est celui de ces skippers,
-    # ou de toute la flotte en course si include_fleet est vrai.
+    # Noms Yellowbrick RaceSetup (ggr2026). Le centroïde (bulletin et buddy)
+    # est uniquement celui de ces skippers, jamais le reste de la flotte.
     skippers:
       - "Damien Guillou"
       - "Etienne Messikommer"
       - "Louis Kerdelhue"
-    include_fleet: false
   kiwi:
     # Plusieurs WebSDR : NVIS proche + saut 1 hop + diversité d’azimut (pas seulement le plus proche).
     count: 4

@@ -14,7 +14,6 @@
   const token = () => localStorage.getItem(TOKEN_KEY) || "";
   const boats = (data.boats || []).filter((b) => Number.isFinite(b.lat) && Number.isFinite(b.lon));
   const skippers = new Set(data.skippers || []);
-  let includeFleet = !!data.include_fleet;
   const trafics = (data.trafics || data.vacations || []).filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lon));
   const TX_MAX = 5;
   let txSites = (data.tx_sites || []).filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon)).slice(0, TX_MAX);
@@ -29,10 +28,8 @@
   const txMsgEl = document.getElementById("globe-tx-msg");
   const txPlaceBtn = document.getElementById("globe-tx-place");
   const txSaveBtn = document.getElementById("globe-save-tx");
-  const includeEl = document.getElementById("globe-include-fleet");
   const mixRoot = document.getElementById("mix");
   const mixTitle = document.getElementById("mix-title");
-  const traficMsg = document.getElementById("trafic-msg");
   const kiwiToggle = document.getElementById("kiwi-toggle");
 
   function setPanelOpen(on) {
@@ -128,14 +125,6 @@
     setPanelOpen(true);
   }
 
-  function sayTrafic(text, ok) {
-    if (!traficMsg) return;
-    traficMsg.hidden = false;
-    traficMsg.textContent = text;
-    traficMsg.classList.toggle("err", !ok);
-    traficMsg.classList.toggle("ok", !!ok);
-  }
-
   function sayBuddy(text, ok) {
     if (!msgEl) return;
     msgEl.hidden = false;
@@ -197,21 +186,41 @@
     return [toDeg(p2), lon2];
   }
 
+  function selectedBoats() {
+    return boats.filter((b) => skippers.has(b.name));
+  }
+
+  function sphericalCentroid(pts) {
+    if (!pts.length) return null;
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    pts.forEach(([lat, lon]) => {
+      const p = toRad(lat);
+      const l = toRad(lon);
+      x += Math.cos(p) * Math.cos(l);
+      y += Math.cos(p) * Math.sin(l);
+      z += Math.sin(p);
+    });
+    const n = pts.length;
+    x /= n;
+    y /= n;
+    z /= n;
+    const hyp = Math.sqrt(x * x + y * y);
+    return { lat: toDeg(Math.atan2(z, hyp)), lon: toDeg(Math.atan2(y, x)) };
+  }
+
   function fleetCenter() {
-    const c = data.centroid || {};
-    if (Number.isFinite(c.lat) && Number.isFinite(c.lon)) {
-      return { lat: c.lat, lon: c.lon };
-    }
-    return null;
+    return sphericalCentroid(selectedBoats().map((b) => [b.lat, b.lon]));
   }
 
   function fleetRingKm(center) {
-    if (boats.length) {
-      const maxD = Math.max(...boats.map((b) => haversineKm(center.lat, center.lon, b.lat, b.lon)));
-      // Entoure la flotte : écart max au centroïde + 15 %, plancher 40 km pour rester lisible.
+    const sel = selectedBoats();
+    if (sel.length) {
+      const maxD = Math.max(...sel.map((b) => haversineKm(center.lat, center.lon, b.lat, b.lon)));
+      // Entoure les skippers cochés : écart max au centroïde + 15 %, plancher 40 km.
       return Math.max(40, maxD * 1.15);
     }
-    // Repli sans écartement bateaux : 300 km, portée NVIS typique 4–7 MHz (zone nvis ≤ 850 km).
     return 300;
   }
 
@@ -268,13 +277,9 @@
       seenSdr.add(sdrKey(k));
       rows.push({ ...k, lng: k.lon, kind: "kiwi" });
     });
-    const c = data.centroid || {};
-    if (Number.isFinite(c.lat) && Number.isFinite(c.lon)) {
-      rows.push({ ...c, lng: c.lon, kind: "centroid", name: "Centroïde flotte" });
-    }
-    const buddy = data.buddy || {};
-    if (Number.isFinite(buddy.lat) && Number.isFinite(buddy.lon)) {
-      rows.push({ ...buddy, lng: buddy.lon, kind: "buddy_cent", name: buddy.label || "Centroïde buddy" });
+    const c = fleetCenter();
+    if (c) {
+      rows.push({ lat: c.lat, lon: c.lon, lng: c.lon, kind: "centroid", name: "Centroïde" });
     }
     trafics.forEach((v) => {
       rows.push({
@@ -637,7 +642,7 @@
         const aim = txAim(s);
         const stats = aim
           ? Math.round(aim.km) + " km · az. " + fmtAz(aim.az)
-          : "centroïde flotte indisponible";
+          : "centroïde indisponible";
         return (
           "<li>" +
           "<input type=\"text\" maxlength=\"64\" data-tx-label=\"" +
@@ -665,8 +670,9 @@
   }
 
   function fleetView() {
-    const pts = boats.map((b) => [b.lat, b.lon]);
-    const c = data.centroid || {};
+    const sel = selectedBoats();
+    const pts = (sel.length ? sel : boats).map((b) => [b.lat, b.lon]);
+    const c = fleetCenter() || data.centroid || {};
     if (!pts.length) {
       return {
         lat: Number.isFinite(c.lat) ? c.lat : 25,
@@ -829,7 +835,7 @@
           yb("Arrivée est.", d.finish_at) +
           (d.status && d.status !== "RACING" ? yb("Statut", d.status) : "") +
           `<p class="settings__actions"><button type="button" class="btn" id="globe-toggle-skip">` +
-          `${on ? "Retirer du centroïde buddy call" : "Ajouter au centroïde buddy call"}</button></p>`
+          `${on ? "Retirer du centroïde" : "Ajouter au centroïde"}</button></p>`
       );
       const btn = document.getElementById("globe-toggle-skip");
       if (btn) {
@@ -872,7 +878,7 @@
           (aim
             ? `<p>Distance centroïde : <strong>${Math.round(aim.km)} km</strong></p>` +
               `<p>Azimut antenne (vrai nord) : <strong>${esc(fmtAz(aim.az))}</strong></p>`
-            : "<p class=\"hint\">Centroïde flotte indisponible.</p>")
+            : "<p class=\"hint\">Centroïde indisponible.</p>")
       );
       if (globe && Number.isFinite(d.lat)) globe.pointOfView({ lat: d.lat, lng: d.lon, altitude: 1.6 }, 800);
       return;
@@ -1297,13 +1303,6 @@
     }
   }
 
-  if (includeEl) {
-    includeEl.addEventListener("change", () => {
-      includeFleet = includeEl.checked;
-      refreshGlobe();
-    });
-  }
-
   const saveBtn = document.getElementById("globe-save-buddy");
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
@@ -1333,7 +1332,6 @@
             buddy_lead: cur.buddy_lead,
             buddy_duration_minutes: cur.buddy_duration_minutes,
             buddy_kiwi_count: 4,
-            buddy_include_fleet: includeFleet,
             buddy_skippers: [...skippers],
           }),
         });
@@ -1429,43 +1427,6 @@
   renderSkippers();
   renderVacList();
   renderTxList();
-
-  async function startRecord(kind) {
-    const tok = token();
-    if (!tok) {
-      sayTrafic("Jeton manquant : coller le jeton dans Setup.", false);
-      showTab("setup");
-      setPanelOpen(true);
-      return;
-    }
-    sayTrafic(kind === "buddy" ? "Buddy call : 4 Kiwi, démarrage…" : "Bulletin : 4 Kiwi, démarrage…", true);
-    try {
-      const res = await fetch("/api/trafic/record", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Token": tok },
-        body: JSON.stringify(kind === "buddy" ? { kind: "buddy" } : {}),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (res.status === 202) {
-        sayTrafic(
-          (kind === "buddy" ? "Buddy call lancé" : "Bulletin lancé") +
-            " (" +
-            (body.duration_minutes || "?") +
-            " min). Le trafic apparaîtra dans la liste à la fin.",
-          true
-        );
-        return;
-      }
-      const d = body.detail;
-      sayTrafic((Array.isArray(d) ? d.map((x) => x.msg || x).join(" ") : d) || "Erreur " + res.status, false);
-    } catch (err) {
-      sayTrafic(String(err), false);
-    }
-  }
-  const recMeteo = document.getElementById("trafic-record-meteo");
-  const recBuddy = document.getElementById("trafic-record-buddy");
-  if (recMeteo) recMeteo.addEventListener("click", () => startRecord("meteo"));
-  if (recBuddy) recBuddy.addEventListener("click", () => startRecord("buddy"));
 
   initGlobe();
 

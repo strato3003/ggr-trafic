@@ -415,8 +415,8 @@ async def api_settings_put(
             buddy_cfg["duration_minutes"] = b_dur
         if "buddy_enabled" in body:
             buddy_cfg["enabled"] = bool(body.get("buddy_enabled"))
-        if "buddy_include_fleet" in body:
-            cent["include_fleet"] = bool(body.get("buddy_include_fleet"))
+        if "buddy_skippers" in body or "buddy_include_fleet" in body:
+            cent["include_fleet"] = False
         if "buddy_skippers" in body:
             raw_skip = body.get("buddy_skippers")
             if isinstance(raw_skip, str):

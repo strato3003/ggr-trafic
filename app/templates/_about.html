@@ -11,13 +11,13 @@
     écouté sur <strong>{{ '%.0f'|format(buddy_main_khz) }} kHz USB</strong> (principale) et
     <strong>{{ '%.0f'|format(buddy_alt_khz) }} kHz USB</strong> (secours), depuis
     <strong>4 KiwiSDR</strong> choisis pour la propagation (NVIS et saut 1 hop) vers le centroïde
-    des skippers suivis ({{ buddy_skippers_short }}{% if buddy_include_fleet %} + flotte{% endif %}).
+    des skippers suivis ({{ buddy_skippers_short }}).
     Le bulletin et les ACK sont enregistrés en parallèle. Les QRG se règlent dans
     <a href="#setup">Setup</a>.
   </p>
   <h2>Fonctionnement</h2>
   <ul>
-    <li>Position moyenne de la flotte via le tracker Yellowbrick GGR 2026.</li>
+    <li>Centroïde des skippers suivis via le tracker Yellowbrick GGR 2026.</li>
     <li>Globe 3D central : flotte, Kiwi, QTH d’émission. Le panneau droit (Trafic / Setup / À propos) se replie comme un KiwiSDR.</li>
     <li>Chaque trafic (météo ou buddy call) cherche 4 récepteurs répartis, puis propose uniquement la table de mixage (voies sans audio grisées).</li>
     <li>Screencast de l’interface SDR (waterfall / VFO) muxé avec l’audio USB 12 kHz.</li>

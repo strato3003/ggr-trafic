@@ -47,7 +47,6 @@
             .filter(Boolean)
         : [];
     const enabledEl = form.elements.namedItem("buddy_enabled");
-    const fleetEl = form.elements.namedItem("buddy_include_fleet");
     const tx_sites = [];
     for (let i = 0; i < 5; i++) {
       const labelEl = form.elements.namedItem("tx_label_" + i);
@@ -73,7 +72,6 @@
       buddy_lead: Number(form.elements.namedItem("buddy_lead").value),
       buddy_duration_minutes: Number(form.elements.namedItem("buddy_duration_minutes").value),
       buddy_kiwi_count: Number((form.elements.namedItem("buddy_kiwi_count") || { value: 4 }).value) || 4,
-      buddy_include_fleet: !!(fleetEl && fleetEl.checked),
       buddy_skippers: skippers,
       tx_sites,
     };
@@ -206,7 +204,7 @@
           "buddy",
           `Buddy call mémorisé : ${data.buddy_main_khz} / ${data.buddy_alt_khz} kHz à ${data.buddy_time_utc} TU` +
             ` · ${data.buddy_enabled ? "actif" : "désactivé"}` +
-            ` · ${data.buddy_include_fleet ? "centroïde flotte" : (data.buddy_skippers || []).join(", ") || "aucun skipper"}` +
+            ` · centroïde ${ (data.buddy_skippers || []).join(", ") || "aucun skipper" }` +
             ` · 4 Kiwi.`,
           true
         );
@@ -218,36 +216,4 @@
     });
   }
 
-  const recordBuddyBtn = document.getElementById("record-buddy");
-  if (recordBuddyBtn) {
-    recordBuddyBtn.addEventListener("click", async () => {
-      busy(recordBuddyBtn, true);
-      say("buddy", "Sauvegarde puis démarrage du buddy call…", true);
-      try {
-        await saveSettings();
-        const res = await fetch("/api/trafic/record", {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify({
-            kind: "buddy",
-            duration_minutes: Number(form.elements.namedItem("buddy_duration_minutes").value),
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.status === 202) {
-          say(
-            "buddy",
-            `Buddy call lancé (${data.duration_minutes} min) : 4483 et 6516 kHz sur 4 Kiwi. Liste Trafic à la fin.`,
-            true
-          );
-          return;
-        }
-        say("buddy", _detail(data) || `Erreur ${res.status}`, false);
-      } catch (err) {
-        say("buddy", String(err), false);
-      } finally {
-        busy(recordBuddyBtn, false);
-      }
-    });
-  }
 })();

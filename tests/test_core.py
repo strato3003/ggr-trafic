@@ -732,7 +732,7 @@ def test_midday_prop_prefers_nvis_on_4mhz_and_hop_on_6mhz():
     assert hf_midday_prop_score(2000, 6516) > hf_midday_prop_score(1100, 6516)
 
 
-def test_buddy_aim_trio_or_whole_fleet():
+def test_buddy_aim_listed_skippers_only():
     from recorder.fleet import buddy_aim
 
     fleet = {
@@ -740,7 +740,7 @@ def test_buddy_aim_trio_or_whole_fleet():
         "lon": 0.0,
         "fmt": "0.000°N 0.000°E",
         "label": "flotte",
-        "n_boats": 3,
+        "n_boats": 4,
         "boats": [
             {"id": 6, "name": "Damien Guillou", "lat": 40.0, "lon": -20.0},
             {"id": 13, "name": "Etienne Messikommer", "lat": 41.0, "lon": -21.0},
@@ -753,14 +753,14 @@ def test_buddy_aim_trio_or_whole_fleet():
         "buddy": {
             "centroid": {
                 "skippers": ["Damien Guillou", "Etienne Messikommer", "Louis Kerdelhue"],
-                "include_fleet": False,
             }
         }
     }
     trio = buddy_aim(fleet, trio_cfg)
     assert trio["n_boats"] == 3
     assert 40.0 < trio["lat"] < 42.0
-    all_cfg = {
+    # include_fleet historique : ignoré, le centroïde reste le skipper listé.
+    one_cfg = {
         "buddy": {
             "centroid": {
                 "skippers": ["Damien Guillou"],
@@ -768,9 +768,9 @@ def test_buddy_aim_trio_or_whole_fleet():
             }
         }
     }
-    whole = buddy_aim(fleet, all_cfg)
-    assert whole["n_boats"] == 4
-    assert whole["lat"] < trio["lat"]
+    one = buddy_aim(fleet, one_cfg)
+    assert one["n_boats"] == 1
+    assert abs(one["lat"] - 40.0) < 0.01
 
     empty = buddy_aim({"lat": 46.5, "lon": -1.8, "fmt": "x", "label": "repli", "boats": []}, trio_cfg)
     assert "warning" not in empty
@@ -784,7 +784,7 @@ def test_buddy_aim_trio_or_whole_fleet():
         },
         trio_cfg,
     )
-    assert mismatch["warning"] == "Skippers buddy introuvables — centroïde flotte utilisé"
+    assert mismatch["warning"] == "Skippers du centroïde introuvables — repli flotte"
 
 
 def test_assign_buddy_kiwis_nvis_and_hop_not_just_nearest():

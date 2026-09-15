@@ -47,19 +47,12 @@
         <button type="button" class="is-on" data-mode="meteo">Bulletin météo</button>
         <button type="button" data-mode="buddy">Buddy call</button>
       </div>
-      <p class="kiwi-status" id="trafic-msg" hidden></p>
       <div id="trafic-meteo">
         <p class="hint">4 KiwiSDR répartis (bulletin + ACK). Mixer uniquement : voies sans audio grisées.</p>
-        <p class="settings__actions">
-          <button type="button" class="btn btn--rx" id="trafic-record-meteo">Enregistrer le bulletin</button>
-        </p>
         <ul class="globe-vacs" id="globe-vacs"></ul>
       </div>
       <div id="trafic-buddy" hidden>
         <p class="hint">4 KiwiSDR (NVIS / saut / diversité) sur {{ '%.0f'|format(buddy_main_khz) }} et {{ '%.0f'|format(buddy_alt_khz) }} kHz.</p>
-        <p class="settings__actions">
-          <button type="button" class="btn btn--rx" id="trafic-record-buddy">Enregistrer le buddy call</button>
-        </p>
         <ul class="globe-vacs" id="globe-buddy-vacs"></ul>
       </div>
       <section class="mix" id="mix" hidden data-ggr-mix="host">
@@ -105,7 +98,7 @@
           <tbody>
             {% for b in fleet.boats %}
             <tr>
-              <td>{{ b.name }}{% if buddy_aim and b.name in buddy_aim.skipper_names %} <span class="badge">buddy call</span>{% endif %}</td>
+              <td>{{ b.name }}{% if buddy_aim and b.name in buddy_aim.skipper_names %} <span class="badge">centroïde</span>{% endif %}</td>
               <td>{{ b.sail or '—' }}</td>
               <td>{{ '%.3f'|format(b.lat) }}, {{ '%.3f'|format(b.lon) }}</td>
             </tr>
@@ -153,7 +146,6 @@
   "trafics": globe_trafics or [],
   "tx_sites": tx_sites or [],
   "skippers": buddy_skippers,
-  "include_fleet": buddy_include_fleet,
   "qrg": {
     "buddy_main_khz": buddy_main_khz,
     "buddy_alt_khz": buddy_alt_khz,
@@ -163,7 +155,7 @@
 {% endblock %}
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi8"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi8"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi8"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi9"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi9"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi9"></script>
 {% endblock %}
