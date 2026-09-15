@@ -10,12 +10,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from app import store
+from app import globe_tiles, store
 from recorder.config import ack_label, fmt_khz, fmt_mhz, load_config, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import assign_buddy_kiwis, fetch_ranked_kiwis
@@ -236,6 +237,26 @@ async def about_redirect():
 @app.get("/reglages")
 async def reglages_redirect():
     return RedirectResponse("/#setup", status_code=302)
+
+
+@app.get("/api/globe/osm/{z}/{x}/{y}.png")
+async def osm_land_tile(z: int, x: int, y: int):
+    """Tuile OSM : l’eau Carto est remplacée par un bleu uniforme, sans mosaïque de LOD."""
+    if not globe_tiles.valid_tile(z, x, y):
+        raise HTTPException(404, "Tuile OSM hors limites")
+    try:
+        png = await globe_tiles.land_tile_png(z, x, y, load_config())
+    except httpx.HTTPError as exc:
+        log.warning("Tuile OSM %s/%s/%s : %s", z, x, y, exc)
+        raise HTTPException(502, "Tuile OSM indisponible") from exc
+    except Exception:
+        log.exception("Tuile OSM %s/%s/%s", z, x, y)
+        raise HTTPException(502, "Tuile OSM illisible")
+    return Response(
+        png,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/media/{trafic_id}/{filename}")

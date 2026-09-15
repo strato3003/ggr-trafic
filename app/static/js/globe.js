@@ -93,8 +93,13 @@
     else if (mixRoot && !mixRoot.hidden) document.body.classList.add("kiwi-mix-on");
   }
 
+  let introAboutArmed = true;
+  const traficQBoot = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
+  if (traficQBoot) introAboutArmed = false;
+
   document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      introAboutArmed = false;
       const tab = btn.getAttribute("data-tab");
       showTab(tab, tab === "trafic" ? parseHash()[1] : "meteo");
       setPanelOpen(true);
@@ -770,6 +775,7 @@
   }
 
   async function playTrafic(v) {
+    introAboutArmed = false;
     setPanelOpen(true);
     showTab("trafic", v.is_buddy ? "buddy" : "meteo");
     document.body.classList.add("kiwi-mix-on");
@@ -1134,29 +1140,15 @@
     runBannerAnim(g, null);
   }
 
-  function startGgrEquatorBanner(g, dest) {
+  function startGgrEquatorBanner(g) {
     if (bannerStarting) return;
     bannerStarting = true;
     let tries = 0;
-    const beginIntro = () => {
-      if (!dest) return;
-      window.setTimeout(() => {
-        if (g) g.pointOfView(dest, BANNER_INTRO_MS);
-        window.setTimeout(() => {
-          const deep = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
-          if (deep) return;
-          if (parseHash()[0] !== "trafic") return;
-          showTab("apropos");
-          setPanelOpen(true);
-        }, BANNER_INTRO_MS);
-      }, BANNER_HOLD_MS);
-    };
     const attempt = () => {
       try {
         const belt = makeBannerMesh(g);
         if (belt) {
           runBannerAnim(g, belt);
-          beginIntro();
           return;
         }
       } catch {
@@ -1168,9 +1160,83 @@
         return;
       }
       startHtmlBanner(g);
-      beginIntro();
     };
     attempt();
+  }
+
+  function oceanImageUrl() {
+    const c = document.createElement("canvas");
+    c.width = 16;
+    c.height = 8;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#0a3558";
+    ctx.fillRect(0, 0, 16, 8);
+    return c.toDataURL("image/png");
+  }
+
+  function findSlippyEngine(g) {
+    const root = typeof g.scene === "function" ? g.scene() : null;
+    if (!root) return null;
+    let engine = null;
+    root.traverse((n) => {
+      if (engine) return;
+      if (Array.isArray(n.thresholds) && "maxLevel" in n) engine = n;
+    });
+    return engine;
+  }
+
+  function tuneOsmTiles(g) {
+    const OCEAN = 0x0a3558;
+    const paint = (engine) => {
+      if (!engine) return;
+      engine.maxLevel = 8;
+      engine.thresholds = [10, 8, 6, 4, 2, 1, 0.5, 0.25, 0.15, 0.08, 0.04, 0.02];
+      engine.traverse((n) => {
+        const mat = n.material;
+        if (!mat) return;
+        if (mat.isMeshBasicMaterial && !mat.map) {
+          mat.color.setHex(OCEAN);
+        }
+        if (mat.isMeshLambertMaterial) {
+          mat.transparent = true;
+          if ("alphaTest" in mat) mat.alphaTest = 0.12;
+        }
+      });
+      if (typeof g.controls === "function" && typeof engine.updatePov === "function") {
+        try {
+          engine.updatePov(g.controls().object);
+        } catch {
+          /* camera pas encore liée */
+        }
+      }
+    };
+    let tries = 0;
+    const tick = () => {
+      tries += 1;
+      paint(findSlippyEngine(g));
+      if (tries < 80) window.setTimeout(tick, 250);
+    };
+    tick();
+    if (typeof g.controls === "function") {
+      try {
+        g.controls().addEventListener("change", () => paint(findSlippyEngine(g)));
+      } catch {
+        /* OrbitControls */
+      }
+    }
+  }
+
+  function scheduleIntroCamera(g, dest) {
+    window.setTimeout(() => {
+      if (g && dest) g.pointOfView(dest, BANNER_INTRO_MS);
+    }, BANNER_HOLD_MS);
+    const wantAbout = parseHash()[0] === "trafic";
+    if (!wantAbout) return;
+    window.setTimeout(() => {
+      if (!introAboutArmed) return;
+      showTab("apropos");
+      setPanelOpen(true);
+    }, BANNER_HOLD_MS + BANNER_INTRO_MS);
   }
 
   function refreshGlobe() {
@@ -1190,8 +1256,8 @@
     globe = Globe()(el)
       .backgroundColor("#02050a")
       .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
-      // Texture unique (pas de tuiles ni de bump) : les LOD / la bathymétrie tachent les océans.
-      .globeImageUrl("https://cdn.jsdelivr.net/gh/turban/webgl-earth@master/images/2_no_clouds_4k.jpg")
+      // Océan uni (#0a3558) dans les tuiles OSM : plus de mosaïque de LOD sur l’eau.
+      .globeImageUrl(oceanImageUrl())
       .showAtmosphere(true)
       .atmosphereColor("#5a7a98")
       .atmosphereAltitude(0.08)
@@ -1212,7 +1278,10 @@
       .pathTransitionDuration(0);
 
     if (typeof globe.globeTileEngineUrl === "function") {
-      globe.globeTileEngineUrl(null);
+      globe.globeTileEngineUrl((x, y, l) => "/api/globe/osm/" + l + "/" + x + "/" + y + ".png");
+    }
+    if (typeof globe.globeTileEngineMaxLevel === "function") {
+      globe.globeTileEngineMaxLevel(8);
     }
     if (typeof globe.bumpImageUrl === "function") {
       globe.bumpImageUrl(null);
@@ -1254,8 +1323,10 @@
     globe.pointOfView({ lat: 8, lng: dest.lng + 40, altitude: 2.7 }, 0);
     globe.controls().autoRotate = false;
     globe.controls().enableDamping = true;
+    tuneOsmTiles(globe);
+    scheduleIntroCamera(globe, dest);
 
-    const bootBanner = () => startGgrEquatorBanner(globe, dest);
+    const bootBanner = () => startGgrEquatorBanner(globe);
     if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);
     const afterFont = () => bootBanner();
     if (document.fonts && document.fonts.load) {
@@ -1305,6 +1376,10 @@
     }
     } catch (err) {
       showSel("<p class=\"err\">Globe 3D : " + esc(err && err.message ? err.message : err) + "</p>");
+      if (introAboutArmed && parseHash()[0] === "trafic") {
+        showTab("apropos");
+        setPanelOpen(true);
+      }
     }
   }
 

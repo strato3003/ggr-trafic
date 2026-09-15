@@ -854,3 +854,27 @@ def test_kiwi_tune_url_sets_wf_colormap():
     )
     assert url.startswith("http://kiwi.example:8073/?f=4483.00usbz12")
     assert "wfm=-110,-40" in url
+
+
+def test_osm_water_is_carto_cyan_not_ice_or_forest():
+    from app.globe_tiles import is_osm_water, punch_water, valid_tile
+    from PIL import Image
+    import io
+
+    assert is_osm_water(170, 211, 223)  # #aad3df Carto
+    assert not is_osm_water(221, 236, 236)  # glacier #ddecec
+    assert not is_osm_water(120, 170, 90)  # forêt
+    assert not is_osm_water(210, 180, 120)  # désert
+    assert valid_tile(6, 31, 22)
+    assert not valid_tile(9, 0, 0)
+    assert not valid_tile(2, 8, 0)
+
+    im = Image.new("RGB", (2, 1), (170, 211, 223))
+    im.putpixel((1, 0), (34, 139, 34))
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    out = Image.open(io.BytesIO(punch_water(buf.getvalue()))).convert("RGBA")
+    assert out.getpixel((0, 0))[:3] == (10, 53, 88)
+    assert out.getpixel((0, 0))[3] == 255
+    assert out.getpixel((1, 0))[3] == 255
+    assert out.getpixel((1, 0))[1] > 100

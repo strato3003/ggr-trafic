@@ -8,6 +8,7 @@
       <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
     </p>
     <div id="ggr-globe" class="ggr-globe" role="region" aria-label="Globe 3D flotte GGR et KiwiSDR"></div>
+    <p class="globe-osm-copy">© <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a></p>
   </div>
   <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="true" aria-controls="globe-dock" aria-label="Replier le panneau" title="Replier">
     <span class="kiwi-toggle__arr" aria-hidden="true"></span>
@@ -155,7 +156,7 @@
 {% endblock %}
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi13"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi13"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi13"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi14"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi14"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi14"></script>
 {% endblock %}
