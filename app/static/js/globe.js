@@ -1142,6 +1142,13 @@
       if (!dest) return;
       window.setTimeout(() => {
         if (g) g.pointOfView(dest, BANNER_INTRO_MS);
+        window.setTimeout(() => {
+          const deep = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
+          if (deep) return;
+          if (parseHash()[0] !== "trafic") return;
+          showTab("apropos");
+          setPanelOpen(true);
+        }, BANNER_INTRO_MS);
       }, BANNER_HOLD_MS);
     };
     const attempt = () => {
@@ -1180,13 +1187,14 @@
       return;
     }
     try {
-    const osmTile = (x, y, l) =>
-      "https://" + ["a", "b", "c"][Math.abs(x + y) % 3] + ".tile.openstreetmap.org/" + l + "/" + x + "/" + y + ".png";
     globe = Globe()(el)
       .backgroundColor("#02050a")
       .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
+      // Pas de tuiles slippy : leurs LOD se voient en taches / hexagones sur les océans.
+      .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
+      .bumpImageUrl("https://unpkg.com/three-globe/example/img/earth-topology.png")
       .showAtmosphere(true)
-      .atmosphereColor("#7aa0c4")
+      .atmosphereColor("#5a7a98")
       .atmosphereAltitude(0.08)
       .htmlElementsData(points())
       .htmlLat("lat")
@@ -1203,16 +1211,6 @@
       .pathColor((d) => d.color)
       .pathStroke((d) => (d && d.stroke != null ? d.stroke : 1))
       .pathTransitionDuration(0);
-
-    if (typeof globe.globeTileEngineUrl === "function") {
-      globe.globeTileEngineUrl(osmTile);
-      // z trop élevé : tuiles océan de zooms mélangés (taches bleu clair).
-      if (typeof globe.globeTileEngineMaxLevel === "function") {
-        globe.globeTileEngineMaxLevel(6);
-      }
-    } else {
-      globe.globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg");
-    }
 
     if (typeof globe.pathResolution === "function") {
       globe.pathResolution(0.35);
