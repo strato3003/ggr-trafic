@@ -1177,7 +1177,7 @@
     if (!globe) return;
     globe.htmlElementsData(points());
     if (typeof globe.pathsData === "function") globe.pathsData(paths());
-    if (typeof globe.polygonsData === "function") globe.polygonsData(fleetPolygons());
+    if (typeof globe.polygonsData === "function") globe.polygonsData([]);
     if (typeof globe.arcsData === "function") globe.arcsData([]);
   }
 
@@ -1190,8 +1190,8 @@
     globe = Globe()(el)
       .backgroundColor("#02050a")
       .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
-      // Pas de tuiles slippy ni de bump : LOD et bathymétrie se voient en taches sur les océans.
-      .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
+      // Texture unique (pas de tuiles ni de bump) : les LOD / la bathymétrie tachent les océans.
+      .globeImageUrl("https://cdn.jsdelivr.net/gh/turban/webgl-earth@master/images/2_no_clouds_4k.jpg")
       .showAtmosphere(true)
       .atmosphereColor("#5a7a98")
       .atmosphereAltitude(0.08)
@@ -1211,13 +1211,23 @@
       .pathStroke((d) => (d && d.stroke != null ? d.stroke : 1))
       .pathTransitionDuration(0);
 
+    if (typeof globe.globeTileEngineUrl === "function") {
+      globe.globeTileEngineUrl(null);
+    }
+    if (typeof globe.bumpImageUrl === "function") {
+      globe.bumpImageUrl(null);
+    }
     if (typeof globe.globeMaterial === "function") {
       try {
         const mat = globe.globeMaterial();
         if (mat) {
+          mat.bumpMap = null;
+          mat.normalMap = null;
+          mat.displacementMap = null;
           if ("bumpScale" in mat) mat.bumpScale = 0;
-          if (mat.specular && typeof mat.specular.setHex === "function") mat.specular.setHex(0x111111);
-          if ("shininess" in mat) mat.shininess = 5;
+          if (mat.specular && typeof mat.specular.setHex === "function") mat.specular.setHex(0x000000);
+          if ("shininess" in mat) mat.shininess = 0;
+          if ("needsUpdate" in mat) mat.needsUpdate = true;
         }
       } catch {
         /* matériau globe.gl */
@@ -1229,22 +1239,7 @@
     }
 
     if (typeof globe.polygonsData === "function") {
-      globe.polygonsData(fleetPolygons());
-      if (typeof globe.polygonGeoJsonGeometry === "function") {
-        globe.polygonGeoJsonGeometry("geometry");
-      }
-      if (typeof globe.polygonCapColor === "function") {
-        globe.polygonCapColor(() => "rgba(244,230,195,0.20)");
-      }
-      if (typeof globe.polygonSideColor === "function") {
-        globe.polygonSideColor(() => "rgba(244,230,195,0.08)");
-      }
-      if (typeof globe.polygonStrokeColor === "function") {
-        globe.polygonStrokeColor(() => "rgba(244,230,195,0.45)");
-      }
-      if (typeof globe.polygonAltitude === "function") {
-        globe.polygonAltitude(0.001);
-      }
+      globe.polygonsData([]);
     }
 
     if (typeof globe.htmlOcclude === "function") {
