@@ -1190,9 +1190,8 @@
     globe = Globe()(el)
       .backgroundColor("#02050a")
       .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
-      // Pas de tuiles slippy : leurs LOD se voient en taches / hexagones sur les océans.
+      // Pas de tuiles slippy ni de bump : LOD et bathymétrie se voient en taches sur les océans.
       .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
-      .bumpImageUrl("https://unpkg.com/three-globe/example/img/earth-topology.png")
       .showAtmosphere(true)
       .atmosphereColor("#5a7a98")
       .atmosphereAltitude(0.08)
@@ -1211,6 +1210,19 @@
       .pathColor((d) => d.color)
       .pathStroke((d) => (d && d.stroke != null ? d.stroke : 1))
       .pathTransitionDuration(0);
+
+    if (typeof globe.globeMaterial === "function") {
+      try {
+        const mat = globe.globeMaterial();
+        if (mat) {
+          if ("bumpScale" in mat) mat.bumpScale = 0;
+          if (mat.specular && typeof mat.specular.setHex === "function") mat.specular.setHex(0x111111);
+          if ("shininess" in mat) mat.shininess = 5;
+        }
+      } catch {
+        /* matériau globe.gl */
+      }
+    }
 
     if (typeof globe.pathResolution === "function") {
       globe.pathResolution(0.35);
