@@ -519,19 +519,22 @@ def test_assign_vacation_kiwis_geo_sites():
         }
     }
     roles = assign_vacation_kiwis(pool, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg)
-    assert roles["tx"]["id"] == "near-a"
+    # Atlantique (ouest du cap) : émetteur F6KUF + flotte, pas Tahiti.
+    assert roles["tx"]["id"] == "fr"
+    assert roles["tx_fleet"]["id"] == "near-a"
     assert roles["fleet"]["id"] == "near-b"
-    assert roles["france"]["id"] == "fr"
     assert roles["tahiti"]["id"] == "th"
     assert "loud-far" not in {r["id"] for r in roles.values()}
     assert "nz" not in {r["id"] for r in roles.values()}
-    assert len(roles) == 4
 
     thin = [k for k in pool if k["id"] != "th"]
     padded = assign_vacation_kiwis(thin, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg)
-    assert len(padded) == 4
     assert "tahiti" not in padded
-    assert any(str(role).startswith("rx") for role in padded)
+    assert padded["tx"]["id"] == "fr"
+
+    indian = assign_vacation_kiwis(pool, fleet_lat=-35.0, fleet_lon=25.0, cfg=cfg)
+    assert indian["tx"]["id"] == "th"
+    assert indian["tx"].get("club_id") == "tahiti"
 
 
 def test_ack_channels_per_site():
@@ -555,6 +558,7 @@ def test_ack_channels_per_site():
     channels = _channels(cfg, sites)
     assert [c["id"] for c in channels] == [
         "tx",
+        "tx-fleet",
         "ack1-fleet",
         "ack1-france",
         "ack1-tahiti",
@@ -564,12 +568,14 @@ def test_ack_channels_per_site():
     ]
     roles = {
         "tx": {"name": "k-tx"},
+        "tx_fleet": {"name": "k-fleet-tx"},
         "fleet": {"name": "k-fleet"},
         "france": {"name": "k-fr"},
         "tahiti": {"name": "k-th"},
     }
     got = _pick_kiwis(roles, channels)
     assert got["tx"]["name"] == "k-tx"
+    assert got["tx-fleet"]["name"] == "k-fleet-tx"
     assert got["ack1-france"]["name"] == "k-fr"
     assert got["ack2-tahiti"]["name"] == "k-th"
 
@@ -878,3 +884,29 @@ def test_osm_water_is_carto_cyan_not_ice_or_forest():
     assert out.getpixel((0, 0))[3] == 255
     assert out.getpixel((1, 0))[3] == 255
     assert out.getpixel((1, 0))[1] > 100
+
+
+def test_fleet_uses_tahiti_tx_after_cape_of_good_hope():
+    from recorder.kiwi_list import bulletin_tx_qth, fleet_uses_tahiti_tx
+
+    assert not fleet_uses_tahiti_tx(28.0, -15.0)  # Canaries
+    assert not fleet_uses_tahiti_tx(-35.0, 10.0)  # Atlantique sud, ouest du cap
+    assert fleet_uses_tahiti_tx(-35.0, 25.0)  # Indien, est de 18°28′E
+    assert fleet_uses_tahiti_tx(-45.0, -120.0)  # Pacifique, ouest du Horn
+    assert not fleet_uses_tahiti_tx(-50.0, -40.0)  # Atlantique après Horn
+    cfg = {"sdr": {"sites": {}}}
+    assert bulletin_tx_qth(cfg, 28.0, -15.0)["id"] == "france"
+    assert bulletin_tx_qth(cfg, -35.0, 25.0)["id"] == "tahiti"
+    assert bulletin_tx_qth(cfg, -35.0, 25.0)["label"] == "Tahiti"
+
+
+def test_metrics_payload_exposes_ggr_gauges(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from app.metrics import payload
+
+    body, media = payload()
+    text = body.decode()
+    assert "ggr_recording" in text
+    assert "ggr_data_used_bytes" in text
+    assert "ggr_data_total_bytes" in text
+    assert "text/plain" in media

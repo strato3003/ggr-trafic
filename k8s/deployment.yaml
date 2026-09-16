@@ -15,6 +15,10 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: ggr-trafic
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       securityContext:
         fsGroup: 1000

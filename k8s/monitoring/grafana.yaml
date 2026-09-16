@@ -1,0 +1,338 @@
+# Grafana dédié k3s (NS monitoring). Ne pas toucher au Grafana applicatif
+# https://dashboard.k3s.lpb.ovh (NS grafana).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k3s-grafana-datasource
+  namespace: monitoring
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        uid: prometheus
+        url: http://prometheus.monitoring.svc:9090
+        isDefault: true
+        editable: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k3s-grafana-dashboard-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: k3s
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 60
+        options:
+          path: /grafana-dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k3s-grafana-dashboard
+  namespace: monitoring
+data:
+  k3s-ggr.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "title": "CPU nœud %",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+              "legendFormat": "CPU",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "RAM nœud",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "bytes" } },
+          "targets": [
+            {
+              "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+              "legendFormat": "utilisée",
+              "refId": "A"
+            },
+            {
+              "expr": "node_memory_MemTotal_bytes",
+              "legendFormat": "totale",
+              "refId": "B"
+            }
+          ]
+        },
+        {
+          "title": "Disque racine libre",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "bytes" } },
+          "targets": [
+            {
+              "expr": "node_filesystem_avail_bytes{mountpoint=\"/\"}",
+              "legendFormat": "libre",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Pods Running (tous NS)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (namespace) (kube_pod_status_phase{phase=\"Running\"})",
+              "legendFormat": "{{namespace}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "CPU par namespace",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\",container!=\"POD\"}[5m]))",
+              "legendFormat": "{{namespace}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "RAM par namespace",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "bytes" } },
+          "targets": [
+            {
+              "expr": "sum by (namespace) (container_memory_working_set_bytes{container!=\"\",container!=\"POD\"})",
+              "legendFormat": "{{namespace}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "GGR Trafic enregistrement",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "expr": "ggr_recording", "refId": "A" }
+          ]
+        },
+        {
+          "title": "GGR volume données %",
+          "type": "gauge",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "max": 1,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.7 },
+                  { "color": "red", "value": 0.85 }
+                ]
+              },
+              "unit": "percentunit"
+            }
+          },
+          "targets": [
+            { "expr": "ggr_data_used_bytes / ggr_data_total_bytes", "refId": "A" }
+          ]
+        },
+        {
+          "title": "Restarts pods (tous NS)",
+          "type": "timeseries",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (namespace) (increase(kube_pod_container_status_restarts_total[1h]))",
+              "legendFormat": "{{namespace}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "PVC utilisés %",
+          "type": "gauge",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "max": 1,
+              "min": 0,
+              "unit": "percentunit"
+            }
+          },
+          "targets": [
+            {
+              "expr": "kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes",
+              "legendFormat": "{{persistentvolumeclaim}}",
+              "refId": "A"
+            }
+          ]
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["k3s", "ggr-trafic"],
+      "timezone": "browser",
+      "title": "k3s + GGR Trafic",
+      "uid": "k3s-ggr-trafic",
+      "version": 1
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k3s-grafana
+  namespace: monitoring
+  labels:
+    app: k3s-grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k3s-grafana
+  template:
+    metadata:
+      labels:
+        app: k3s-grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.3.1
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: GF_SERVER_DOMAIN
+              value: monitoring.k3s.lpb.ovh
+            - name: GF_SERVER_ROOT_URL
+              value: https://monitoring.k3s.lpb.ovh
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+              value: "false"
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: k3s-grafana-admin
+                  key: user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: k3s-grafana-admin
+                  key: password
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: ds
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: provider
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: dash
+              mountPath: /grafana-dashboards
+              readOnly: true
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: ds
+          configMap:
+            name: k3s-grafana-datasource
+        - name: provider
+          configMap:
+            name: k3s-grafana-dashboard-provider
+        - name: dash
+          configMap:
+            name: k3s-grafana-dashboard
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k3s-grafana
+  namespace: monitoring
+spec:
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+  selector:
+    app: k3s-grafana
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k3s-grafana
+  namespace: monitoring
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - monitoring.k3s.lpb.ovh
+      secretName: k3s-grafana-tls
+  rules:
+    - host: monitoring.k3s.lpb.ovh
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: k3s-grafana
+                port:
+                  number: 3000

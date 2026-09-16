@@ -19,7 +19,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from app import globe_tiles, store
 from recorder.config import ack_label, fmt_khz, fmt_mhz, load_config, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
-from recorder.kiwi_list import assign_buddy_kiwis, fetch_ranked_kiwis
+from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_qth, fetch_ranked_kiwis, fleet_uses_tahiti_tx
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
 from recorder.session import (
     finalize_pending_sessions,
@@ -155,6 +155,14 @@ async def health():
     return {"ok": True, "version": version(cfg), "recording": store.recording_in_progress(cfg)}
 
 
+@app.get("/metrics")
+async def metrics():
+    from app.metrics import payload
+
+    body, media = payload()
+    return Response(body, media_type=media)
+
+
 @app.get("/ping", response_class=HTMLResponse)
 async def ping():
     return HTMLResponse("<!doctype html><p>ggr-trafic ping</p>")
@@ -210,6 +218,8 @@ async def _globe_page(request: Request):
             buddy_kiwis = list(roles.values())
         except Exception:
             log.exception("KiwiSDR buddy indisponibles")
+        qth = bulletin_tx_qth(cfg, float(fleet.get("lat") or 0), float(fleet.get("lon") or 0))
+        tahiti_tx = fleet_uses_tahiti_tx(float(fleet.get("lat") or 0), float(fleet.get("lon") or 0))
     except Exception as exc:
         log.exception("Page flotte")
         return HTMLResponse(
@@ -226,6 +236,8 @@ async def _globe_page(request: Request):
         globe_trafics=[store.globe_vacation(v) for v in store.list_vacations(cfg)],
         tx_sites=tx_sites_aim(cfg, fleet.get("lat"), fleet.get("lon")),
         boats=fleet.get("boats") or [],
+        bulletin_tx_label=qth["label"],
+        bulletin_tx_from_tahiti=tahiti_tx,
     )
 
 

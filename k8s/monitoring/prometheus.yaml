@@ -1,0 +1,219 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: monitoring
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+    rule_files:
+      - /etc/prometheus/rules.yml
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+      - job_name: node-exporter
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [monitoring]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: node-exporter
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: ["kube-state-metrics:8080"]
+      - job_name: kubelet
+        scheme: https
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          insecure_skip_verify: true
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            replacement: /api/v1/nodes/${1}/proxy/metrics
+            target_label: __metrics_path__
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: "kubelet_running_pods|kubelet_volume_stats_available_bytes|kubelet_volume_stats_capacity_bytes|kubelet_volume_stats_used_bytes"
+            action: keep
+      - job_name: cadvisor
+        scheme: https
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          insecure_skip_verify: true
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+            target_label: __metrics_path__
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: "container_cpu_usage_seconds_total|container_memory_working_set_bytes"
+            action: keep
+          - source_labels: [container]
+            regex: "POD|"
+            action: drop
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: kubernetes_pod_name
+  rules.yml: |
+    groups:
+      - name: k3s-ggr
+        rules:
+          - alert: NodeDiskFilling
+            expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.20
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Disque nœud < 20 % libre"
+          - alert: NodeMemoryHigh
+            expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.88
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "RAM nœud > 88 %"
+          - alert: KubeNodeNotReady
+            expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Nœud k3s non Ready"
+          - alert: KubePodCrashLooping
+            expr: increase(kube_pod_container_status_restarts_total[15m]) > 5
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod en crash-loop (restarts)"
+          - alert: GgrTraficDown
+            expr: kube_deployment_status_replicas_available{namespace="ggr-trafic",deployment="ggr-trafic"} < 1
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Déploiement GGR Trafic indisponible"
+          - alert: GgrDataVolumeHigh
+            expr: ggr_data_used_bytes / ggr_data_total_bytes > 0.70
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Volume GGR Trafic > 70 %"
+          - alert: GgrRecordingStuck
+            expr: ggr_recording == 1
+            for: 45m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Enregistrement GGR Trafic bloqué > 45 min"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        runAsUser: 65534
+        runAsNonRoot: true
+        fsGroup: 65534
+      containers:
+        - name: prometheus
+          image: quay.io/prometheus/prometheus:v2.54.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=7d
+            - --storage.tsdb.retention.size=800MB
+            - --web.enable-lifecycle
+          ports:
+            - name: web
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  ports:
+    - name: web
+      port: 9090
+      targetPort: web
+  selector:
+    app: prometheus

@@ -15,7 +15,13 @@ from recorder.config import data_dir, fmt_khz, fmt_mhz, load_config, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.geo import fmt_latlon
 from recorder.kiwi_audio import record_kiwi_wav
-from recorder.kiwi_list import assign_buddy_kiwis, assign_vacation_kiwis, fetch_ranked_kiwis, pick_nearest
+from recorder.kiwi_list import (
+    assign_buddy_kiwis,
+    assign_vacation_kiwis,
+    bulletin_tx_qth,
+    fetch_ranked_kiwis,
+    pick_nearest,
+)
 from recorder.postprocess import mux_screencast, thumbnail
 from recorder.screencast import record_screencast
 from recorder.kiwi_wf import HUNT_CF_KHZ, HUNT_HI_KHZ, HUNT_LO_KHZ, HUNT_ZOOM, hunt_usb_signal
@@ -51,20 +57,36 @@ def vacation_id(when: datetime | None = None) -> str:
     return when.strftime("%Y-%m-%dT%H%MZ")
 
 
-def _channels(cfg: dict[str, Any], ack_sites: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+def _channels(
+    cfg: dict[str, Any],
+    ack_sites: list[dict[str, Any]] | None = None,
+    *,
+    club_label: str | None = None,
+) -> list[dict[str, Any]]:
     radio = cfg.get("radio") or {}
     tx = radio.get("tx") or {}
+    club = (club_label or "F6KUF").strip() or "F6KUF"
     rows = [
         {
             "id": "tx",
             "kind": "tx",
             "site": "tx",
-            "site_label": "flotte (bulletin)",
+            "site_label": f"{club} (bulletin)",
             "freq_khz": float(tx["freq_khz"]),
             "label": tx.get("label") or "Bulletin F6KUF",
             "zoom": int(tx.get("zoom") or 10),
             "screencast": bool((cfg.get("sdr") or {}).get("screencast_tx", True)),
-        }
+        },
+        {
+            "id": "tx-fleet",
+            "kind": "tx",
+            "site": "tx_fleet",
+            "site_label": "flotte (bulletin)",
+            "freq_khz": float(tx["freq_khz"]),
+            "label": (tx.get("label") or "Bulletin F6KUF") + " · flotte",
+            "zoom": int(tx.get("zoom") or 10),
+            "screencast": False,
+        },
     ]
     sites = ack_sites or []
     for idx, ack in enumerate(radio.get("ack") or []):
@@ -105,14 +127,9 @@ def _pick_kiwis(
     roles: dict[str, dict[str, Any]],
     channels: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Associe chaque canal au Kiwi du rôle (tx / fleet / france / tahiti)."""
+    """Associe chaque canal au Kiwi du rôle (tx / tx_fleet / fleet / france / tahiti)."""
     assignment: dict[str, dict[str, Any]] = {}
-    tx = roles.get("tx")
     for ch in channels:
-        if ch["id"] == "tx":
-            if tx:
-                assignment["tx"] = tx
-            continue
         kiwi = roles.get(str(ch.get("site") or ""))
         if kiwi:
             assignment[ch["id"]] = kiwi
@@ -365,24 +382,26 @@ async def run_vacation(
             fleet_lon=float(fleet["lon"]),
             cfg=cfg,
         )
+        club = bulletin_tx_qth(cfg, float(fleet["lat"]), float(fleet["lon"]))
         meta["kiwi_roles"] = {role: _kiwi_snap(kiwi) for role, kiwi in roles.items()}
+        meta["bulletin_tx"] = {"id": club["id"], "label": club["label"], "lat": club["lat"], "lon": club["lon"]}
         ack_sites = [
             {"id": sid, "label": kiwi.get("site_label") or sid}
             for sid, kiwi in roles.items()
-            if sid != "tx"
+            if sid not in ("tx", "tx_fleet")
         ]
-        channels = _channels(cfg, ack_sites)
+        channels = _channels(cfg, ack_sites, club_label=str(club["label"]))
         assignment = _pick_kiwis(roles, channels)
         if "tx" not in assignment:
-            raise RuntimeError("Aucun KiwiSDR disponible pour la position de la flotte")
+            raise RuntimeError("Aucun KiwiSDR disponible près de l’émetteur du bulletin")
 
-        tx_kiwi = assignment.get("tx") or ranked[0]
-        try:
-            await asyncio.wait_for(_follow_tx_qrg(cfg, tx_kiwi, channels), timeout=HUNT_BUDGET_S)
-        except TimeoutError:
-            log.warning("Suivi QRG TX trop long (>%ss) — accord nominal", int(HUNT_BUDGET_S))
-        except Exception:
-            log.exception("Suivi QRG TX impossible — accord nominal")
+        # QRG nominale 14135.0 kHz : pas de chasse USB (un QSO voisin dans ± 5 kHz
+        # n’est pas le bulletin F6KUF / Michel). Le test radio manuel peut encore chasser.
+        for ch in channels:
+            if ch.get("kind") == "tx":
+                tx_cfg = ((cfg.get("radio") or {}).get("tx") or {})
+                ch["freq_nominal_khz"] = float(tx_cfg.get("freq_khz") or 14135.0)
+                ch["hunt"] = False
 
         minutes = (
             duration_minutes

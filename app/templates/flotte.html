@@ -25,6 +25,9 @@
       <p class="kiwi-ident__qrg">
         Buddy {{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz · {{ buddy_time_utc }} TU
       </p>
+      <p class="kiwi-ident__qrg">
+        Émission bulletin : {{ bulletin_tx_label | default('F6KUF') }}{% if bulletin_tx_from_tahiti %} (Tahiti){% endif %}
+      </p>
       <p class="kiwi-ident__clock">
         <span class="js-countdown" id="countdown" data-iso="{{ bulletin_iso }}">Bulletin {{ bulletin_label }} TU</span>
         ·

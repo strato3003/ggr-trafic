@@ -98,6 +98,9 @@ sdr:
     width: 1280
     height: 800
   # Écoute ACK en parallèle : un Kiwi distinct par site (rayon max autour du point).
+  # Bulletin 14.135 MHz : un Kiwi près de l’émetteur (F6KUF, puis Tahiti après
+  # Bonne-Espérance 34°21′26″S 18°28′24″E) ET un Kiwi près de la flotte.
+  # QRG d’enregistrement = 14135.0 kHz (pas de chasse USB sur le trafic programmé).
   sites:
     france:
       # Les Sables-d'Olonne / F6KUF (WGS84)

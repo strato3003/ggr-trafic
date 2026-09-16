@@ -2,17 +2,17 @@
 
 Archives du **trafic HF** entre le radio-club **F6KUF** et les bateaux de la flotte **Golden Globe Race**.
 
-Tous les jours à **18:00 TU**, F6KUF émet un bulletin météo sur **14.135 MHz USB** (QRG nominale ± 5 kHz, suivi automatique si QRM) et écoute les accusés de réception sur **16.551 MHz USB** et **12.418 MHz USB** (± 5 kHz). Tous les jours à **12:00 TU**, un **buddy call** est écouté sur **4483 kHz USB** (principale) et **6516 kHz USB** (secours). L’application choisit les [KiwiSDR](http://kiwisdr.com/) selon la position : **bulletin 14 MHz** sur le récepteur le plus proche de la flotte ; **ACK** en parallèle près des bateaux, **en France** et **vers Tahiti** ; **buddy call** sur plusieurs récepteurs en NVIS et en saut 1 hop vers le centroïde des skippers suivis (défaut : Damien Guillou, Etienne Messikommer, Louis Kerdelhue). Audio USB + **screencast** de l’interface SDR pour le replay.
+Tous les jours à **18:00 TU**, F6KUF émet un bulletin météo sur **14.135 MHz USB** (VFO calé sur 14.135000 ; le test radio manuel peut encore chasser ± 5 kHz) et écoute les accusés de réception sur **16.551 MHz USB** et **12.418 MHz USB** (± 5 kHz). Après le **cap de Bonne-Espérance** (34°21′26″S 18°28′24″E), l’émission 14.135 MHz est celle de **Michel depuis Tahiti**, jusqu’au cap Horn. Tous les jours à **12:00 TU**, un **buddy call** est écouté sur **4483 kHz USB** (principale) et **6516 kHz USB** (secours). L’application choisit les [KiwiSDR](http://kiwisdr.com/) selon la position : **bulletin 14.135 MHz** sur un récepteur près de l’émetteur **et** un près de la flotte ; **ACK** en parallèle près des bateaux, **en France** et **vers Tahiti** ; **buddy call** sur plusieurs récepteurs en NVIS et en saut 1 hop vers le centroïde des skippers suivis (défaut : Damien Guillou, Etienne Messikommer, Louis Kerdelhue). Audio USB + **screencast** de l’interface SDR pour le replay.
 
 Les trois QRG, la tolérance, l’avance et la durée se règlent dans l’UI (**Réglages**). Un **record immédiat** permet de tester le suivi ± 5 kHz sans attendre 18:00 TU.
 
 ## Fonctionnement
 
 1. **Flotte** — centroïde des bateaux en course via le tracker Yellowbrick (`/BIN/ggr2026/AllPositions3`). Buddy call : centroïde d’un sous-ensemble de skippers (trio par défaut, ou trio + flotte).
-2. **SDR** — bulletin : Kiwi le plus proche de la flotte ; ACK : un Kiwi près de la flotte, un en France (≤ 1500 km des Sables-d’Olonne), un vers Tahiti / Papeete (≤ 2500 km). Buddy : plusieurs Kiwi qui couvrent **4483** et **6516 kHz**, NVIS proche + saut 1 hop (~1400–3200 km à 12:00 TU), pas seulement le plus proche.
+2. **SDR** — bulletin : un Kiwi près de l’émetteur (**F6KUF**, puis **Tahiti** après Bonne-Espérance) **et** un près de la flotte ; ACK : un Kiwi près de la flotte, un en France (≤ 1500 km des Sables-d’Olonne), un vers Tahiti / Papeete (≤ 2500 km). Buddy : plusieurs Kiwi qui couvrent **4483** et **6516 kHz**, NVIS proche + saut 1 hop (~1400–3200 km à 12:00 TU), pas seulement le plus proche.
 3. **Enregistrement** — 1 minute avant 18:00 TU, pendant 10 minutes (configurable) :
-   - chasse USB autour de **14.135 MHz** (± 5 kHz) puis screencast Playwright ;
-   - WAV 12 kHz sur le bulletin **et** les deux QRG d’accusé **en même temps**, aux trois sites ;
+   - VFO calé sur **14.135000 MHz USB** (pas de chasse sur le bulletin programmé) puis screencast Playwright près de l’émetteur ;
+   - WAV 12 kHz sur le bulletin (émetteur + flotte) **et** les deux QRG d’accusé **en même temps**, aux trois sites ;
    - muxage ffmpeg → MP4 H.264 / AAC.
    Buddy call : 1 minute avant **12:00 TU**, 15 minutes, **4483 kHz** + **6516 kHz** en parallèle.
 4. **Replay** — interface web (français) : liste des trafics, lecteur vidéo, pistes audio.
@@ -93,7 +93,7 @@ Défauts dans [`config/default.yaml`](config/default.yaml) ; overrides runtime d
 
 | Paramètre | Valeur |
 | --- | --- |
-| Bulletin | 14.135 MHz USB, ± 5 kHz, 18:00 TU |
+| Bulletin | 14.135 MHz USB, QRG 14.135000, 18:00 TU |
 | Accusé | 16.551 MHz USB, 12.418 MHz USB (± 5 kHz ; flotte + France + Tahiti, en parallèle du bulletin) |
 | Buddy call | 4483 kHz USB (principale), 6516 kHz USB (secours), 12:00 TU, 15 min |
 | Centroïde buddy | Damien Guillou, Etienne Messikommer, Louis Kerdelhue (modifiable ; option « + flotte ») |
@@ -114,6 +114,21 @@ playwright install chromium
 make test
 make run          # http://127.0.0.1:8080
 ```
+
+## Supervision k3s (Grafana dédié)
+
+Le Grafana applicatif [https://dashboard.k3s.lpb.ovh](https://dashboard.k3s.lpb.ovh) n’est **pas** modifié.
+
+Un Grafana **k3s** séparé : [https://monitoring.k3s.lpb.ovh](https://monitoring.k3s.lpb.ovh) (NS `monitoring`, Prometheus 7 j / PVC 1 Gio, node-exporter, kube-state-metrics). Dashboard **k3s + GGR Trafic** (CPU/RAM nœud et par namespace, disque, pods, PVC, enregistrement GGR). `./scripts/update.sh` ne déploie pas ce NS.
+
+Sur le VPS, hors 12:00 / 18:00 TU :
+
+```bash
+cd /opt/ggr-vacations
+./scripts/monitoring.sh
+```
+
+Seuils Prometheus (visibles dans Grafana) : disque nœud < 20 % libre, RAM nœud > 88 %, pod GGR down, volume archives > 70 %, enregistrement bloqué > 45 min.
 
 Docker Compose :
 
