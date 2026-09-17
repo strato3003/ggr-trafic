@@ -868,7 +868,9 @@ def test_osm_water_is_carto_cyan_not_ice_or_forest():
     import io
 
     assert is_osm_water(170, 211, 223)  # #aad3df Carto
+    assert is_osm_water(153, 217, 242)  # océan Esri World Street Map
     assert not is_osm_water(221, 236, 236)  # glacier #ddecec
+    assert not is_osm_water(244, 242, 219)  # terre Esri
     assert not is_osm_water(120, 170, 90)  # forêt
     assert not is_osm_water(210, 180, 120)  # désert
     assert valid_tile(6, 31, 22)

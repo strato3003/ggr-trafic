@@ -1,4 +1,4 @@
-"""Tuiles OSM « terre seule » : l’océan est transparent pour éviter les taches de LOD."""
+"""Tuiles carte « toponymes latins » : océan uni pour éviter les taches de LOD."""
 
 from __future__ import annotations
 
@@ -15,17 +15,17 @@ from recorder.config import load_config
 log = logging.getLogger(__name__)
 
 OSM_MAX_Z = 8
-OSM_TILE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+# Esri World Street Map : alphabet latin (pas d’arabe / cyrillique / CJK). XYZ Esri = z/y/x.
+MAP_TILE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
 OSM_UA = "GGR-Trafic/0.3.9 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
 # Océan uni (#0a3558), identique à la sphère sous les tuiles.
 OCEAN_RGBA = (10, 53, 88, 255)
-# OSM Carto @water-color #aad3df — https://github.com/gravitystorm/openstreetmap-carto
 _FETCH_SEM = asyncio.Semaphore(6)
 
 
 def is_osm_water(r: int, g: int, b: int) -> bool:
-    """Cyan des océans / lacs Carto, pas la glace (r trop élevé) ni la végétation (b trop bas)."""
-    if r >= 210:
+    """Eau Esri (bleu ciel) ou cyan OSM Carto, pas la crème des terres ni la végétation."""
+    if r >= 225:
         return False
     return b >= 150 and g >= 145 and (b - r) >= 28 and (g - r) >= 18
 
@@ -47,7 +47,7 @@ def punch_water(png: bytes) -> bytes:
 def _cache_dir(cfg: dict | None = None) -> Path:
     cfg = cfg or load_config()
     raw = (cfg.get("storage") or {}).get("data_dir") or "data"
-    return Path(raw) / "osm-land-v2"
+    return Path(raw) / "esri-latin-v1"
 
 
 def tile_cache_path(z: int, x: int, y: int, cfg: dict | None = None) -> Path:
@@ -67,7 +67,7 @@ async def land_tile_png(z: int, x: int, y: int, cfg: dict | None = None) -> byte
     path = tile_cache_path(z, x, y, cfg)
     if path.is_file() and path.stat().st_size > 32:
         return path.read_bytes()
-    url = OSM_TILE.format(z=z, x=x, y=y)
+    url = MAP_TILE.format(z=z, x=x, y=y)
     async with _FETCH_SEM:
         async with httpx.AsyncClient(timeout=20.0, headers={"User-Agent": OSM_UA}) as client:
             res = await client.get(url)
