@@ -38,9 +38,6 @@
         Émission bulletin : {{ bulletin_tx_label | default('F6KUF') }}{% if bulletin_tx_from_tahiti %} (Tahiti){% endif %}
       </p>
       <p class="kiwi-ident__clock">
-        <span class="js-countdown" id="countdown" data-iso="{{ bulletin_iso }}">Bulletin {{ bulletin_label }} TU</span>
-        ·
-        <span class="js-countdown" data-iso="{{ buddy_iso }}">Buddy {{ buddy_label }} TU</span>
         {% include "_recording.html" %}
       </p>
     </header>
@@ -51,39 +48,26 @@
       <button type="button" data-tab="apropos" role="tab" aria-selected="false">À propos</button>
     </div>
 
-    <div class="kiwi-ident-sel" id="globe-sel">
-      <p class="hint">Cliquer un bateau, un Kiwi ou un QTH. Molette pour zoomer. Vue 2D ou 3D en haut à gauche.</p>
-    </div>
+    <div class="kiwi-ident-sel" id="globe-sel" hidden></div>
 
     <div class="kiwi-page" data-page="trafic" id="page-trafic">
-      <div class="kiwi-mode" role="tablist" aria-label="Type de trafic">
-        <button type="button" class="is-on" data-mode="meteo">Bulletin météo</button>
-        <button type="button" data-mode="buddy">Buddy call</button>
+      <ul class="globe-vacs" id="globe-vacs"></ul>
+      <div id="mix-park" hidden>
+        <section class="mix mix--rows" id="mix" hidden data-ggr-mix="host">
+          <div class="mix__transport">
+            <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
+            <span class="mix__clock" id="mix-time">— TU</span>
+            <label class="mix__seek">
+              Heure TU
+              <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
+            </label>
+          </div>
+          <div class="mix__body" id="ggr-mix">
+            <div class="mix__desk" id="mix-strips"></div>
+          </div>
+          <p class="hint mix__status" id="mix-status" hidden>Choisir un trafic.</p>
+        </section>
       </div>
-      <div id="trafic-meteo">
-        <p class="hint">4 KiwiSDR répartis (bulletin + ACK). Mixer uniquement : voies sans audio grisées.</p>
-        <ul class="globe-vacs" id="globe-vacs"></ul>
-      </div>
-      <div id="trafic-buddy" hidden>
-        <p class="hint">4 KiwiSDR (NVIS / saut / diversité) sur {{ '%.0f'|format(buddy_main_khz) }} et {{ '%.0f'|format(buddy_alt_khz) }} kHz.</p>
-        <ul class="globe-vacs" id="globe-buddy-vacs"></ul>
-      </div>
-      <section class="mix" id="mix" hidden data-ggr-mix="host">
-        <h2 id="mix-title">Table de mixage</h2>
-        <p class="hint">Waterfall USB 0–2,7 kHz · mute / volume par voie · timeline TU.</p>
-        <div class="mix__body" id="ggr-mix">
-          <div class="mix__desk" id="mix-strips"></div>
-        </div>
-        <div class="mix__transport">
-          <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
-          <span class="mix__clock" id="mix-time">— TU</span>
-          <label class="mix__seek">
-            Heure TU
-            <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
-          </label>
-        </div>
-        <p class="hint" id="mix-status">Choisir un trafic.</p>
-      </section>
     </div>
 
     <div class="kiwi-page" data-page="setup" id="page-setup" hidden>
@@ -169,7 +153,7 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi21"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi21"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi21"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi22"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi22"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi22"></script>
 {% endblock %}

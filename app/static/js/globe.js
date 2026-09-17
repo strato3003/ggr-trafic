@@ -23,7 +23,6 @@
 
   const selEl = document.getElementById("globe-sel");
   const vacsEl = document.getElementById("globe-vacs");
-  const buddyVacsEl = document.getElementById("globe-buddy-vacs");
   const skipEl = document.getElementById("globe-skippers");
   const msgEl = document.getElementById("globe-buddy-msg");
   const txListEl = document.getElementById("globe-tx-list");
@@ -31,8 +30,9 @@
   const txPlaceBtn = document.getElementById("globe-tx-place");
   const txSaveBtn = document.getElementById("globe-save-tx");
   const mixRoot = document.getElementById("mix");
-  const mixTitle = document.getElementById("mix-title");
+  const mixPark = document.getElementById("mix-park");
   const kiwiToggle = document.getElementById("kiwi-toggle");
+  let openVid = null;
 
   function setPanelOpen(on) {
     document.body.classList.toggle("kiwi-panel-off", !on);
@@ -63,15 +63,28 @@
 
   function parseHash() {
     const h = (location.hash || "#trafic").replace(/^#/, "");
-    if (h === "setup") return ["setup", "meteo"];
-    if (h === "apropos" || h === "a-propos") return ["apropos", "meteo"];
-    if (h === "trafic/buddy" || h === "buddy") return ["trafic", "buddy"];
-    return ["trafic", "meteo"];
+    if (h === "setup") return "setup";
+    if (h === "apropos" || h === "a-propos") return "apropos";
+    return "trafic";
   }
 
-  function showTab(name, mode) {
+  function parkMix() {
+    if (window.GgrMixer) window.GgrMixer.unmount();
+    if (mixRoot) {
+      mixRoot.hidden = true;
+      if (mixPark) mixPark.appendChild(mixRoot);
+    }
+    document.querySelectorAll(".globe-vac-row.is-open").forEach((li) => {
+      li.classList.remove("is-open");
+      const btn = li.querySelector(".globe-vac");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+    });
+    openVid = null;
+    document.body.classList.remove("kiwi-mix-on");
+  }
+
+  function showTab(name) {
     const tab = name || "trafic";
-    const sub = mode || "meteo";
     document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((b) => {
       const on = b.getAttribute("data-tab") === tab;
       b.classList.toggle("is-on", on);
@@ -80,25 +93,15 @@
     document.querySelectorAll(".kiwi-page").forEach((p) => {
       p.hidden = p.getAttribute("data-page") !== tab;
     });
-    document.querySelectorAll(".kiwi-mode [data-mode]").forEach((b) => {
-      b.classList.toggle("is-on", b.getAttribute("data-mode") === sub);
-    });
-    const meteoBox = document.getElementById("trafic-meteo");
-    const buddyBox = document.getElementById("trafic-buddy");
-    if (meteoBox) meteoBox.hidden = sub !== "meteo";
-    if (buddyBox) buddyBox.hidden = sub !== "buddy";
-    let hash = "#" + tab;
-    if (tab === "trafic" && sub === "buddy") hash = "#trafic/buddy";
-    else if (tab === "trafic") hash = "#trafic";
+    const hash = "#" + tab;
     if (location.hash !== hash) history.replaceState(null, "", hash);
-    if (tab !== "trafic") document.body.classList.remove("kiwi-mix-on");
-    else if (mixRoot && !mixRoot.hidden) document.body.classList.add("kiwi-mix-on");
+    if (tab !== "trafic") parkMix();
   }
 
   let introAboutArmed = true;
   const traficQBoot = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
   if (traficQBoot) introAboutArmed = false;
-  const bootTab = parseHash()[0];
+  const bootTab = parseHash();
   if (introAboutArmed && bootTab !== "setup") {
     if (bootTab === "apropos") history.replaceState(null, "", "#trafic");
     setPanelOpen(false);
@@ -110,23 +113,14 @@
   document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       introAboutArmed = false;
-      const tab = btn.getAttribute("data-tab");
-      showTab(tab, tab === "trafic" ? parseHash()[1] : "meteo");
-      setPanelOpen(true);
-    });
-  });
-  document.querySelectorAll(".kiwi-mode [data-mode]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      showTab("trafic", btn.getAttribute("data-mode"));
+      showTab(btn.getAttribute("data-tab"));
       setPanelOpen(true);
     });
   });
   window.addEventListener("hashchange", () => {
-    const parsed = parseHash();
-    showTab(parsed[0], parsed[1]);
+    showTab(parseHash());
   });
-  const initial = parseHash();
-  showTab(initial[0], initial[1]);
+  showTab(parseHash());
 
   function esc(s) {
     return String(s || "")
@@ -136,7 +130,9 @@
   }
 
   function showSel(html) {
-    if (selEl) selEl.innerHTML = html;
+    if (!selEl) return;
+    selEl.hidden = false;
+    selEl.innerHTML = html;
     setPanelOpen(true);
   }
 
@@ -760,10 +756,16 @@
         const when = (v.started_at || "").replace("T", " ").slice(0, 16);
         const tag = v.is_buddy ? "Buddy call" : v.is_test ? "Test" : "Bulletin météo";
         const n = audioSdrs(v);
+        const title = v.title && v.title !== v.id ? " · " + esc(v.title) : "";
         return (
-          `<li><button type="button" class="globe-vac" data-vid="${esc(v.id)}">` +
-          `<span class="badge">${esc(tag)}</span> ${esc(when)} · ${esc(v.title || v.id)}` +
-          `<span class="globe-vac__sdr">${n} SDR</span></button></li>`
+          `<li class="globe-vac-row" data-vid="${esc(v.id)}">` +
+          `<button type="button" class="globe-vac" data-vid="${esc(v.id)}" aria-expanded="false">` +
+          `<span class="globe-vac__arr" aria-hidden="true"></span>` +
+          `<span class="globe-vac__body">` +
+          `<span class="badge">${esc(tag)}</span>` +
+          `<span class="globe-vac__when">${esc(when)}${title}</span>` +
+          `<span class="globe-vac__sdr">${n} SDR</span>` +
+          `</span></button></li>`
         );
       })
       .join("");
@@ -777,16 +779,7 @@
 
   function renderVacList() {
     const all = data.trafics || data.vacations || [];
-    fillVacList(
-      vacsEl,
-      all.filter((v) => !v.is_buddy),
-      "Aucun bulletin météo."
-    );
-    fillVacList(
-      buddyVacsEl,
-      all.filter((v) => v.is_buddy),
-      "Aucun buddy call."
-    );
+    fillVacList(vacsEl, all, "Aucun trafic enregistré.");
   }
 
   function mixerTracks(v) {
@@ -804,28 +797,33 @@
   async function playTrafic(v) {
     introAboutArmed = false;
     setPanelOpen(true);
-    showTab("trafic", v.is_buddy ? "buddy" : "meteo");
-    document.body.classList.add("kiwi-mix-on");
-    showSel(
-      `<p class="badge">${v.is_buddy ? "Buddy call" : v.is_test ? "Test" : "Bulletin météo"}</p>` +
-        `<h3>${esc(v.title || v.id)}</h3>` +
-        `<p class="meta">${esc((v.started_at || "").replace("T", " ").slice(0, 16))} TU</p>`
-    );
-    if (mixTitle) mixTitle.textContent = v.title || v.id;
-    if (mixRoot) {
-      mixRoot.hidden = false;
-      mixRoot.setAttribute("data-vid", v.id || "");
-      mixRoot.setAttribute("data-started", v.started_at || "");
+    showTab("trafic");
+    if (openVid === v.id) {
+      parkMix();
+      return;
     }
+    parkMix();
+    const li = vacsEl && vacsEl.querySelector('.globe-vac-row[data-vid="' + CSS.escape(v.id) + '"]');
+    if (!li || !mixRoot) return;
+    li.classList.add("is-open");
+    const hdr = li.querySelector(".globe-vac");
+    if (hdr) hdr.setAttribute("aria-expanded", "true");
+    li.appendChild(mixRoot);
+    mixRoot.hidden = false;
+    mixRoot.setAttribute("data-vid", v.id || "");
+    mixRoot.setAttribute("data-started", v.started_at || "");
+    openVid = v.id;
     let tracks = mixerTracks(v);
     try {
       const full = await fetch("/api/trafic/" + encodeURIComponent(v.id)).then((r) => r.json());
+      if (openVid !== v.id) return;
       if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) tracks = full.mixer_tracks;
       else if ((full.channels || []).length) tracks = mixerTracks(full);
     } catch {
       /* carte globe */
     }
-    if (window.GgrMixer && mixRoot) {
+    if (openVid !== v.id) return;
+    if (window.GgrMixer) {
       window.GgrMixer.mount({
         root: mixRoot,
         tracks: tracks,
@@ -833,6 +831,7 @@
         started: v.started_at,
       });
     }
+    li.scrollIntoView({ block: "nearest" });
     if (Number.isFinite(v.lat)) lookAt(v.lat, v.lon, 1.6, 900);
   }
 
@@ -1292,7 +1291,7 @@
     window.setTimeout(() => {
       if (g && dest) g.pointOfView(dest, BANNER_INTRO_MS);
     }, BANNER_HOLD_MS);
-    const wantAbout = parseHash()[0] === "trafic";
+    const wantAbout = parseHash() === "trafic";
     if (!wantAbout) return;
     window.setTimeout(() => {
       if (!introAboutArmed) return;
@@ -1563,7 +1562,7 @@
     }
     } catch (err) {
       showSel("<p class=\"err\">Globe 3D : " + esc(err && err.message ? err.message : err) + "</p>");
-      if (introAboutArmed && parseHash()[0] === "trafic") {
+      if (introAboutArmed && parseHash() === "trafic") {
         showTab("apropos");
         setPanelOpen(true);
       }

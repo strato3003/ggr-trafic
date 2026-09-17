@@ -28,11 +28,10 @@
     if (!nodes().length) return;
     const first = document.querySelector(".js-rec");
     let rec = {
-      recording: first && !first.hidden,
-      recording_label: (first && first.querySelector(".js-rec-label")
-        ? first.querySelector(".js-rec-label").textContent.replace(/\s+en cours\s*$/, "")
-        : "Enregistrement"),
+      recording: first && first.classList.contains("is-live"),
+      recording_label: "Enregistrement",
       recording_ends_at: first ? first.dataset.ends || "" : "",
+      next_recording_at: first ? first.dataset.next || "" : "",
     };
     function hms(ms) {
       const s = Math.max(0, Math.floor(ms / 1000));
@@ -40,18 +39,29 @@
     }
     function paint() {
       nodes().forEach((el) => {
-        if (!rec.recording) {
-          el.hidden = true;
+        const live = !!rec.recording;
+        el.classList.toggle("is-live", live);
+        el.classList.toggle("is-next", !live);
+        const label = el.querySelector(".js-rec-label");
+        const clock = el.querySelector(".js-rec-clock");
+        if (live) {
+          const name = rec.recording_label || "Enregistrement";
+          if (label) label.textContent = name + " en cours";
+          if (rec.recording_ends_at) el.dataset.ends = rec.recording_ends_at;
+          const ends = Date.parse(el.dataset.ends || "");
+          if (clock) clock.textContent = Number.isFinite(ends) ? hms(ends - Date.now()) : "—";
           return;
         }
-        el.hidden = false;
-        const name = rec.recording_label || "Enregistrement";
-        const label = el.querySelector(".js-rec-label");
-        if (label) label.textContent = name + " en cours";
-        if (rec.recording_ends_at) el.dataset.ends = rec.recording_ends_at;
-        const clock = el.querySelector(".js-rec-clock");
-        const ends = Date.parse(el.dataset.ends || "");
-        if (clock) clock.textContent = Number.isFinite(ends) ? hms(ends - Date.now()) : "—";
+        if (label) label.textContent = "Prochain enregistrement";
+        if (rec.next_recording_at) el.dataset.next = rec.next_recording_at;
+        const next = Date.parse(el.dataset.next || "");
+        if (!clock) return;
+        if (!Number.isFinite(next)) {
+          clock.textContent = "—";
+          return;
+        }
+        const remain = next - Date.now();
+        clock.textContent = remain <= 0 ? "imminent" : hms(remain);
       });
     }
     paint();
@@ -65,6 +75,7 @@
             recording: !!st.recording,
             recording_label: st.recording_label || "Enregistrement",
             recording_ends_at: st.recording_ends_at || "",
+            next_recording_at: st.next_recording_at || rec.next_recording_at,
           };
           paint();
         })

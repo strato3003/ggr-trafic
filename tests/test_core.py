@@ -9,7 +9,7 @@ from recorder.fleet import parse_positions3, _heading_deg, _team_colour, _sog_kn
 from recorder.geo import centroid, fmt_latlon, haversine_km, initial_bearing
 from recorder.kiwi_audio import ImaAdpcmDecoder, wav_from_snd_frames, _pcm_from_snd, _ws_uris
 from recorder.kiwi_list import parse_kiwi_directory, score_kiwi
-from recorder.session import next_vacation_utc, vacation_id
+from recorder.session import next_recording_utc, next_vacation_utc, vacation_id
 
 
 def test_haversine_les_sables_to_self():
@@ -52,6 +52,23 @@ def test_next_vacation_before_slot():
     nxt = next_vacation_utc(cfg, now)
     assert nxt.hour == 17 and nxt.minute == 50
     assert nxt.date() == now.date()
+
+
+def test_next_recording_picks_buddy_in_the_morning():
+    cfg = {
+        "schedule": {"time_utc": "18:00", "lead_minutes": 1},
+        "buddy": {"time_utc": "12:00", "lead_minutes": 1, "enabled": True},
+    }
+    morning = datetime(2026, 9, 17, 10, 0, tzinfo=timezone.utc)
+    nxt = next_recording_utc(cfg, morning)
+    assert nxt.hour == 11 and nxt.minute == 59
+    afternoon = datetime(2026, 9, 17, 15, 0, tzinfo=timezone.utc)
+    nxt = next_recording_utc(cfg, afternoon)
+    assert nxt.hour == 17 and nxt.minute == 59
+    off = dict(cfg)
+    off["buddy"] = {**cfg["buddy"], "enabled": False}
+    nxt = next_recording_utc(off, morning)
+    assert nxt.hour == 17 and nxt.minute == 59
 
 
 def test_scheduler_cron_is_1759_with_one_minute_lead():

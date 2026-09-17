@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.0.3 — 2026-09-17
+
+- Badge : **Prochain enregistrement** `hh:mm:ss` (buddy 11:59 TU ou bulletin 17:59 TU) ; pendant un record, décompte restant.
+- Onglet Trafic : une seule liste (météo, buddy, test), sans sous-onglets ni bandeau.
+- Mixer en accordéon sous la ligne (un seul ouvert) : pistes horizontales (waterfall, mute, volume), 6 voies max.
+
 ## 1.0.2 — 2026-09-17
 
 - Mixer : lecture / pause en symboles (triangle / barres), plus de texte.

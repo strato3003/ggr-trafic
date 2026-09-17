@@ -23,6 +23,7 @@ from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_qth, fetch_ranked
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
 from recorder.session import (
     finalize_pending_sessions,
+    next_recording_utc,
     next_vacation_utc,
     recover_orphaned,
     run_buddy_call,
@@ -118,6 +119,7 @@ def _ctx(request: Request, **extra):
         "buddy_label": buddy_at.strftime("%d/%m %H:%M"),
         "recording": store.recording_in_progress(cfg),
         "recording_state": store.recording_state(cfg),
+        "next_recording_iso": next_recording_utc(cfg).isoformat(),
         "admin_configured": _admin_configured(cfg),
         **qrg,
         **extra,
@@ -169,6 +171,7 @@ async def health():
         "recording_label": rec["label"],
         "recording_started_at": rec["started_at"],
         "recording_ends_at": rec["ends_at"],
+        "next_recording_at": next_recording_utc(cfg).isoformat(),
     }
 
 

@@ -27,6 +27,7 @@ window.GgrMixer = (function () {
     }
   }
   if (!Array.isArray(spec)) spec = [];
+  spec = spec.slice(0, 6);
 
   const vacId = opts.vacId || root.getAttribute("data-vid") || "";
   const startMs = (function parseStart() {
@@ -53,7 +54,6 @@ window.GgrMixer = (function () {
   const TIME = 420;
   const FREQ = 128;
   const FFT = 512;
-  const WF_H = 288;
 
   const tracks = [];
   let duration = 0;
@@ -267,11 +267,12 @@ window.GgrMixer = (function () {
   function resizeCanvas(tr) {
     const canvas = tr.canvas;
     if (!canvas) return;
-    const cssW = Math.max(96, canvas.clientWidth || 140);
+    const wrap = canvas.parentElement;
+    const cssW = Math.max(64, (wrap && wrap.clientWidth) || canvas.clientWidth || 140);
+    const cssH = Math.max(18, (wrap && wrap.clientHeight) || canvas.clientHeight || 28);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.floor(cssW * dpr);
-    canvas.height = Math.floor(WF_H * dpr);
-    canvas.style.height = WF_H + "px";
+    canvas.height = Math.floor(cssH * dpr);
   }
 
   function drawTrack(tr) {
@@ -287,11 +288,10 @@ window.GgrMixer = (function () {
     const img = tr.spec;
     const dim = tr.muted ? 0.22 : 1;
     for (let row = 0; row < h; row++) {
-      const t = Math.min(TIME - 1, Math.floor(((h - 1 - row) / h) * TIME));
-      const base = t * FREQ;
+      const f = Math.min(FREQ - 1, Math.floor(((h - 1 - row) / Math.max(1, h)) * FREQ));
       for (let col = 0; col < w; col++) {
-        const f = Math.min(FREQ - 1, Math.floor((col / w) * FREQ));
-        kiwiColor(img[base + f] * dim, rgb);
+        const t = Math.min(TIME - 1, Math.floor((col / Math.max(1, w)) * TIME));
+        kiwiColor(img[t * FREQ + f] * dim, rgb);
         const off = (row * w + col) * 4;
         px[off] = rgb[0];
         px[off + 1] = rgb[1];
@@ -312,15 +312,11 @@ window.GgrMixer = (function () {
     const t = nowT();
     const pct = Math.max(0, Math.min(1, t / duration));
     tracks.forEach((tr) => {
-      if (tr.head) tr.head.style.top = (1 - pct) * 100 + "%";
+      if (tr.head) tr.head.style.left = pct * 100 + "%";
     });
     if (!seekDragging) seekEl.value = String(t);
     if (timeEl) timeEl.textContent = fmtTu(t) + " · " + fmtTu(duration);
     seekEl.max = String(duration);
-    const startMark = deskEl.querySelector(".mix__tu-start");
-    const endMark = deskEl.querySelector(".mix__tu-end");
-    if (startMark) startMark.textContent = fmtTu(0);
-    if (endMark) endMark.textContent = fmtTu(duration);
   }
 
   function seekElTo(tr, off) {
@@ -421,8 +417,8 @@ window.GgrMixer = (function () {
 
   function pointerTime(ev, canvas) {
     const rect = canvas.getBoundingClientRect();
-    const y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
-    return (1 - y) * duration;
+    const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / Math.max(1, rect.width)));
+    return x * duration;
   }
 
   function bindCanvasSeek(tr) {
@@ -477,14 +473,7 @@ window.GgrMixer = (function () {
     const stage = document.getElementById("mix-stage");
     if (stage) stage.hidden = true;
     deskEl.classList.add("mix__desk");
-    const scale =
-      '<div class="mix__tu-scale" aria-hidden="true">' +
-      '<span class="mix__tu-end"></span>' +
-      '<span class="mix__tu-start"></span>' +
-      "</div>";
-    deskEl.innerHTML =
-      scale +
-      tracks
+    deskEl.innerHTML = tracks
       .map((tr) => {
         const qrg = Number.isFinite(tr.freq_khz) ? Math.round(tr.freq_khz) + " kHz" : "";
         const where = tr.place || tr.site_label || tr.label || tr.id;
@@ -503,7 +492,6 @@ window.GgrMixer = (function () {
           '"></canvas>' +
           '<div class="mix__head"></div>' +
           "</div>" +
-          '<p class="mix__axis">0 Hz · USB · 2,7 kHz</p>' +
           '<div class="mix__ch-ctrl">' +
           '<div class="mix__meta"><strong>' +
           esc(qrg) +
@@ -650,8 +638,10 @@ window.GgrMixer = (function () {
       return;
     }
     renderDesk();
-    tracks.forEach(resizeCanvas);
-    draw();
+    requestAnimationFrame(() => {
+      tracks.forEach(resizeCanvas);
+      draw();
+    });
     if (statusEl) statusEl.textContent = "Waterfall : chargement en parallèle…";
     playBtn.disabled = true;
     await Promise.all(tracks.map(loadTrack));
@@ -666,7 +656,7 @@ window.GgrMixer = (function () {
         live +
         "/" +
         tracks.length +
-        " voies audio · waterfall USB 0–2,7 kHz (début en bas, heure TU) · mute / volume par Kiwi.";
+        " voies audio · waterfall USB 0–2,7 kHz (début à gauche) · mute / volume.";
     updateHead();
   }
 

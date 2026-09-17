@@ -3,7 +3,7 @@
 {% block content %}
 <article class="vac" data-started="{{ trafic.started_at or '' }}">
   <header class="vac__head">
-    <p class="crumb"><a href="/{% if trafic.is_buddy %}#trafic/buddy{% else %}#trafic{% endif %}">← Trafic</a></p>
+    <p class="crumb"><a href="/#trafic">← Trafic</a></p>
     <h1>{{ trafic.title or (trafic.started_at | when) }}</h1>
     <p class="meta">
       {% if trafic.is_buddy %}<span class="badge">Buddy call</span>{% endif %}
@@ -18,12 +18,8 @@
     </p>
   </header>
 
-  <section class="mix" id="mix" data-vid="{{ trafic.id }}" data-started="{{ trafic.started_at or '' }}">
+  <section class="mix mix--rows" id="mix" data-vid="{{ trafic.id }}" data-started="{{ trafic.started_at or '' }}">
     <h2>Table de mixage</h2>
-    <p class="hint">Toutes les voies : sans audio / waterfall, la colonne est grisée. Mute, volume et timeline TU.</p>
-    <div class="mix__body" id="ggr-mix">
-      <div class="mix__desk" id="mix-strips"></div>
-    </div>
     <div class="mix__transport">
       <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
       <span class="mix__clock" id="mix-time">— TU</span>
@@ -32,7 +28,10 @@
         <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
       </label>
     </div>
-    <p class="hint" id="mix-status">Préparation du mixage…</p>
+    <div class="mix__body" id="ggr-mix">
+      <div class="mix__desk" id="mix-strips"></div>
+    </div>
+    <p class="hint mix__status" id="mix-status">Préparation du mixage…</p>
   </section>
   <script type="application/json" id="ggr-mix-data">{{ (trafic.mixer_tracks or []) | tojson }}</script>
 
@@ -42,5 +41,5 @@
 </article>
 {% endblock %}
 {% block extra_js %}
-<script src="/static/js/mixer.js?v={{ version }}-kiwi21"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi22"></script>
 {% endblock %}

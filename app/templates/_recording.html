@@ -1,5 +1,8 @@
-<span class="live js-rec"{% if not recording_state.active %} hidden{% endif %} data-ends="{{ recording_state.ends_at or '' }}" role="status">
+<span class="rec-badge js-rec {% if recording_state.active %}is-live{% else %}is-next{% endif %}"
+      data-ends="{{ recording_state.ends_at or '' }}"
+      data-next="{{ next_recording_iso or '' }}"
+      role="status">
   <span class="live__dot" aria-hidden="true"></span>
-  <span class="js-rec-label">{{ recording_state.label or 'Enregistrement' }} en cours</span>
-  <span class="js-rec-clock">{{ recording_state.remaining_hms or '00:00:00' }}</span>
+  <span class="js-rec-label">{% if recording_state.active %}{{ recording_state.label or 'Enregistrement' }} en cours{% else %}Prochain enregistrement{% endif %}</span>
+  <span class="js-rec-clock">{% if recording_state.active %}{{ recording_state.remaining_hms }}{% else %}—{% endif %}</span>
 </span>

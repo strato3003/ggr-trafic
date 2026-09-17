@@ -158,6 +158,17 @@ def next_buddy_utc(cfg: dict[str, Any], now: datetime | None = None) -> datetime
     return start
 
 
+def next_recording_utc(cfg: dict[str, Any], now: datetime | None = None) -> datetime:
+    """Prochain démarrage réel (avance comprise) : buddy 11:59 TU ou bulletin 17:59 TU."""
+    now = now or datetime.now(timezone.utc)
+    nxt = next_vacation_utc(cfg, now)
+    buddy = cfg.get("buddy") or {}
+    if buddy.get("enabled") is False:
+        return nxt
+    b = next_buddy_utc(cfg, now)
+    return b if b < nxt else nxt
+
+
 async def _hunt_usb_around(
     cfg: dict[str, Any],
     kiwi: dict[str, Any],
