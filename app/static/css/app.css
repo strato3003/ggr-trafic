@@ -151,6 +151,7 @@ h2 { font-size: 1.15rem; margin-top: 2rem; }
 .ggr-globe { position: relative; z-index: 1; }
 body.is-map-2d .ggr-globe { visibility: hidden; pointer-events: none; }
 body.is-map-3d .ggr-map-2d { visibility: hidden; pointer-events: none; }
+.leaflet-div-icon.ggr-leaflet-icon,
 .ggr-leaflet-icon {
   background: none !important;
   border: none !important;
@@ -188,7 +189,7 @@ body.is-map-3d .ggr-map-2d { visibility: hidden; pointer-events: none; }
 .ggr-map-2d .leaflet-map-pane { z-index: 2; }
 .ggr-map-2d .leaflet-tile-pane { z-index: 2; }
 .ggr-map-2d .leaflet-overlay-pane { z-index: 3; }
-.ggr-map-2d .leaflet-marker-pane { z-index: 4; }
+.ggr-map-2d .leaflet-marker-pane { z-index: 6; }
 .ggr-map-2d .leaflet-tooltip-pane,
 .ggr-map-2d .leaflet-popup-pane { z-index: 5; }
 .ggr-map-2d .leaflet-control-container { z-index: 6; }

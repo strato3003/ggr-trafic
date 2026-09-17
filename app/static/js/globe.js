@@ -1292,7 +1292,7 @@
   }
 
   function refreshMap() {
-    if (!map || !mapLayers || typeof L !== "function") return;
+    if (!map || !mapLayers || typeof L === "undefined" || typeof L.marker !== "function") return;
     mapLayers.clearLayers();
     paths().forEach((p) => {
       const latlngs = (p.coords || [])
@@ -1324,10 +1324,15 @@
           interactive: d.kind !== "link_km" && d.kind !== "tx_km",
           keyboard: false,
         }).addTo(mapLayers);
-        const host = m.getElement();
-        if (host) {
+        const mount = () => {
+          const host = m.getElement();
+          if (!host) return false;
           host.innerHTML = "";
           host.appendChild(node);
+          return true;
+        };
+        if (!mount()) {
+          m.once("add", mount);
         }
       });
   }
@@ -1381,7 +1386,11 @@
       placeTxAt(ev.latlng.lat, ev.latlng.lng);
     });
     refreshMap();
-    window.setTimeout(() => map && map.invalidateSize(), 50);
+    window.setTimeout(() => {
+      if (!map) return;
+      map.invalidateSize();
+      refreshMap();
+    }, 80);
   }
 
   function syncModeButtons() {
