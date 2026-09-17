@@ -16,7 +16,7 @@
       <button type="button" data-map-mode="2d" aria-pressed="false">2D</button>
       <button type="button" data-map-mode="3d" class="is-on" aria-pressed="true">3D</button>
     </div>
-    <p class="globe-osm-copy">© <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a> · <a href="https://www.esri.com/" rel="noreferrer">Esri</a></p>
+    <p class="globe-osm-copy">© <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a></p>
   </div>
   <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="true" aria-controls="globe-dock" aria-label="Replier le panneau" title="Replier">
     <span class="kiwi-toggle__arr" aria-hidden="true"></span>
@@ -139,7 +139,6 @@
         <p class="ggr-map-cap">
           <a href="https://yb.tl/{{ fleet.race_id or 'ggr2026' }}" rel="noreferrer">Tracker Yellowbrick</a>
           · <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">© OpenStreetMap</a>
-          · <a href="https://www.esri.com/" rel="noreferrer">Esri</a>
         </p>
       </details>
     </div>
@@ -169,7 +168,7 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi20"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi20"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi20"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi19"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi19"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi19"></script>
 {% endblock %}

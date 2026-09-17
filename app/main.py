@@ -253,7 +253,7 @@ async def reglages_redirect():
 
 @app.get("/api/globe/osm/{z}/{x}/{y}.png")
 async def osm_land_tile(z: int, x: int, y: int):
-    """Tuile globe : toponymes latins, océan uni (#0a3558), sans mosaïque de LOD."""
+    """Tuile OSM : l’eau Carto est remplacée par un bleu uniforme, sans mosaïque de LOD."""
     if not globe_tiles.valid_tile(z, x, y):
         raise HTTPException(404, "Tuile OSM hors limites")
     try:

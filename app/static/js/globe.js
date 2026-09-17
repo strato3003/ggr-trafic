@@ -1381,7 +1381,7 @@
       attributionControl: false,
       worldCopyJump: true,
     });
-    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
     }).addTo(map);
     map.setView([dest.lat, dest.lng], altitudeToZoom(dest.altitude));
@@ -1446,7 +1446,7 @@
     globe = Globe()(el)
       .backgroundColor("#02050a")
       .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
-      // Océan uni (#0a3558) dans les tuiles : plus de mosaïque de LOD sur l’eau.
+      // Océan uni (#0a3558) dans les tuiles OSM : plus de mosaïque de LOD sur l’eau.
       .globeImageUrl(oceanImageUrl())
       .showAtmosphere(true)
       .atmosphereColor("#5a7a98")
