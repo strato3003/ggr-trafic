@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.0.4 — 2026-09-17
+
+- Mixer : volume, mute, QRG/SDR, puis waterfall (plus l’inverse).
+- Waterfall USB dessiné au fil de l’extraction, avec **Extraction bande son en cours… xx %** — il restait noir tant que le WAV entier n’était pas FFT.
+
 ## 1.0.3 — 2026-09-17
 
 - Badge : **Prochain enregistrement** `hh:mm:ss` (buddy 11:59 TU ou bulletin 17:59 TU) ; pendant un record, décompte restant.

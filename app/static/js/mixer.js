@@ -51,9 +51,14 @@ window.GgrMixer = (function () {
   if (!deskEl || !playBtn || !seekEl) return null;
   setPlayUi(false);
 
-  const TIME = 420;
+  const TIME = 256;
   const FREQ = 128;
   const FFT = 512;
+  const fftRe = new Float32Array(FFT);
+  const fftIm = new Float32Array(FFT);
+  const specSheet = document.createElement("canvas");
+  specSheet.width = TIME;
+  specSheet.height = FREQ;
 
   const tracks = [];
   let duration = 0;
@@ -88,8 +93,10 @@ window.GgrMixer = (function () {
 
   function fftMag(src, offset, n, scale) {
     scale = scale || 1;
-    const re = new Float32Array(n);
-    const im = new Float32Array(n);
+    const re = fftRe;
+    const im = fftIm;
+    re.fill(0);
+    im.fill(0);
     const last = Math.max(n - 1, 1);
     for (let i = 0; i < n; i++) {
       const w = 0.5 * (1 - Math.cos((2 * Math.PI * i) / last));
@@ -164,18 +171,27 @@ window.GgrMixer = (function () {
     }
     if (!dataOff || bits !== 16) return null;
     const frame = 2 * Math.max(1, ch);
-    const n = Math.floor(dataLen / frame);
+    const n = Math.min(
+      Math.floor(dataLen / frame),
+      Math.floor((dv.byteLength - dataOff) / frame)
+    );
+    if (n <= 0) return null;
     if (ch === 1 && dataOff % 2 === 0) {
-      return { samples: new Int16Array(ab.slice(dataOff, dataOff + n * 2)), sampleRate: sr };
+      return { samples: new Int16Array(ab, dataOff, n), sampleRate: sr };
     }
     const samples = new Int16Array(n);
     for (let i = 0; i < n; i++) samples[i] = dv.getInt16(dataOff + i * frame, true);
     return { samples, sampleRate: sr };
   }
 
-  async function spectrogram(channel, sampleRate, scale) {
+  function dbToUnit(db) {
+    return Math.pow(Math.max(0, Math.min(1, (db + 80) / 60)), 0.72);
+  }
+
+  async function spectrogram(channel, sampleRate, scale, onTick) {
     const n = channel.length;
     const img = new Float32Array(TIME * FREQ);
+    img.fill(-120);
     if (n < FFT) return img;
     const nyquist = sampleRate / 2;
     const fMax = Math.min(2700, nyquist);
@@ -189,16 +205,22 @@ window.GgrMixer = (function () {
         const bin = 1 + Math.floor((f / FREQ) * (binMax - 1));
         img[row + f] = 20 * Math.log10(mag[bin] + 1e-9);
       }
-      if (t && t % 60 === 0) await new Promise((r) => setTimeout(r, 0));
+      if (onTick && (t % 16 === 0 || t === TIME - 1)) {
+        await onTick(img, true, (t + 1) / TIME);
+      }
     }
-    const sorted = Array.from(img).sort((a, b) => a - b);
-    const lo = sorted[Math.floor(sorted.length * 0.25)] || -80;
-    const hi = Math.max(sorted[Math.floor(sorted.length * 0.99)] || -20, lo + 12);
+    const sample = [];
+    const step = Math.max(1, Math.floor(img.length / 4096));
+    for (let i = 0; i < img.length; i += step) sample.push(img[i]);
+    sample.sort((a, b) => a - b);
+    const lo = sample[Math.floor(sample.length * 0.25)] || -80;
+    const hi = Math.max(sample[Math.floor(sample.length * 0.99)] || -20, lo + 12);
     const span = Math.max(8, hi - lo);
     for (let i = 0; i < img.length; i++) {
       const u = Math.max(0, Math.min(1, (img[i] - lo) / span));
       img[i] = Math.pow(u, 0.72);
     }
+    if (onTick) await onTick(img, false, 1);
     return img;
   }
 
@@ -266,40 +288,61 @@ window.GgrMixer = (function () {
 
   function resizeCanvas(tr) {
     const canvas = tr.canvas;
-    if (!canvas) return;
+    if (!canvas) return false;
     const wrap = canvas.parentElement;
     const cssW = Math.max(64, (wrap && wrap.clientWidth) || canvas.clientWidth || 140);
     const cssH = Math.max(18, (wrap && wrap.clientHeight) || canvas.clientHeight || 28);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.floor(cssW * dpr);
-    canvas.height = Math.floor(cssH * dpr);
+    const w = Math.floor(cssW * dpr);
+    const h = Math.floor(cssH * dpr);
+    if (canvas.width === w && canvas.height === h) return false;
+    canvas.width = w;
+    canvas.height = h;
+    return true;
   }
 
-  function drawTrack(tr) {
-    const canvas = tr.canvas;
-    if (!canvas) return;
-    const ctx2d = canvas.getContext("2d");
-    const w = canvas.width;
-    const h = canvas.height;
-    if (!w || !h) return;
-    const idata = ctx2d.createImageData(w, h);
+  function bakeSpec(tr, asDb) {
+    const img = tr.spec;
+    if (!img) return;
+    const ctx = specSheet.getContext("2d");
+    const idata = ctx.createImageData(TIME, FREQ);
     const px = idata.data;
     const rgb = [0, 0, 0];
-    const img = tr.spec;
     const dim = tr.muted ? 0.22 : 1;
-    for (let row = 0; row < h; row++) {
-      const f = Math.min(FREQ - 1, Math.floor(((h - 1 - row) / Math.max(1, h)) * FREQ));
-      for (let col = 0; col < w; col++) {
-        const t = Math.min(TIME - 1, Math.floor((col / Math.max(1, w)) * TIME));
-        kiwiColor(img[t * FREQ + f] * dim, rgb);
-        const off = (row * w + col) * 4;
+    for (let y = 0; y < FREQ; y++) {
+      const f = FREQ - 1 - y;
+      for (let x = 0; x < TIME; x++) {
+        let v = img[x * FREQ + f] || 0;
+        if (asDb) v = dbToUnit(v);
+        kiwiColor(v * dim, rgb);
+        const off = (y * TIME + x) * 4;
         px[off] = rgb[0];
         px[off + 1] = rgb[1];
         px[off + 2] = rgb[2];
         px[off + 3] = 255;
       }
     }
-    ctx2d.putImageData(idata, 0, 0);
+    ctx.putImageData(idata, 0, 0);
+    if (!tr.specBmp) {
+      tr.specBmp = document.createElement("canvas");
+      tr.specBmp.width = TIME;
+      tr.specBmp.height = FREQ;
+    }
+    tr.specBmp.getContext("2d").drawImage(specSheet, 0, 0);
+  }
+
+  function drawTrack(tr) {
+    const canvas = tr.canvas;
+    if (!canvas) return;
+    resizeCanvas(tr);
+    const w = canvas.width;
+    const h = canvas.height;
+    if (!w || !h) return;
+    const ctx2d = canvas.getContext("2d");
+    ctx2d.imageSmoothingEnabled = false;
+    ctx2d.fillStyle = "#000";
+    ctx2d.fillRect(0, 0, w, h);
+    if (tr.specBmp) ctx2d.drawImage(tr.specBmp, 0, 0, w, h);
   }
 
   function draw() {
@@ -484,22 +527,25 @@ window.GgrMixer = (function () {
           '" data-id="' +
           esc(tr.id) +
           '">' +
+          '<div class="mix__ch-ctrl">' +
+          '<label class="mix__fader"><span>Vol</span><input type="range" min="0" max="150" value="100" step="1" data-act="vol"></label>' +
+          '<button type="button" class="mix__mute" data-act="mute" aria-pressed="false">Mute</button>' +
+          '<div class="mix__meta"><strong>' +
+          esc(qrg) +
+          "</strong><span>" +
+          esc(where) +
+          "</span></div>" +
+          "</div>" +
           '<div class="mix__wf-wrap">' +
           '<canvas class="mix__wf" aria-label="Waterfall USB ' +
           esc(qrg) +
           " " +
           esc(where) +
           '"></canvas>' +
+          (tr.dead
+            ? ""
+            : '<div class="mix__wf-load">Extraction bande son en cours… 0 %</div>') +
           '<div class="mix__head"></div>' +
-          "</div>" +
-          '<div class="mix__ch-ctrl">' +
-          '<div class="mix__meta"><strong>' +
-          esc(qrg) +
-          "</strong><span>" +
-          esc(where) +
-          "</span></div>" +
-          '<button type="button" class="mix__mute" data-act="mute" aria-pressed="false">Mute</button>' +
-          '<label class="mix__fader"><span>Vol</span><input type="range" min="0" max="150" value="100" step="1" data-act="vol"></label>' +
           "</div></div>"
         );
       })
@@ -508,6 +554,7 @@ window.GgrMixer = (function () {
       const tr = tracks[i];
       tr.canvas = el.querySelector("canvas");
       tr.head = el.querySelector(".mix__head");
+      tr.loadEl = el.querySelector(".mix__wf-load");
       const muteBtn = el.querySelector('[data-act="mute"]');
       const vol = el.querySelector('[data-act="vol"]');
       if (tr.dead) {
@@ -521,6 +568,7 @@ window.GgrMixer = (function () {
         muteBtn.setAttribute("aria-pressed", tr.muted ? "true" : "false");
         el.classList.toggle("is-mute", tr.muted);
         applyGain(tr);
+        bakeSpec(tr, !!tr.specDb);
         drawTrack(tr);
       });
       vol.addEventListener("input", (ev) => {
@@ -546,11 +594,12 @@ window.GgrMixer = (function () {
     playBtn.click();
   }
   function onResize() {
-    tracks.forEach(resizeCanvas);
-    draw();
+    tracks.forEach(drawTrack);
   }
   window.addEventListener("keydown", onKey, sig);
   window.addEventListener("resize", onResize, sig);
+  const ro = typeof ResizeObserver === "function" ? new ResizeObserver(onResize) : null;
+  if (ro) ro.observe(deskEl);
 
   function noteDuration(sec) {
     if (!Number.isFinite(sec) || sec <= 0) return;
@@ -562,12 +611,22 @@ window.GgrMixer = (function () {
     updateHead();
   }
 
-  async function loadTrack(tr) {
+  function setExtract(tr, pct, done) {
+    const el = tr.loadEl;
+    if (!el) return;
+    if (done || tr.dead) {
+      el.hidden = true;
+      return;
+    }
+    const n = Math.max(0, Math.min(100, Math.round(pct)));
+    el.hidden = false;
+    el.textContent = "Extraction bande son en cours… " + n + " %";
+  }
+
+  function attachAudio(tr) {
     if (tr.dead || !tr.src) {
-      if (tr.canvas) {
-        resizeCanvas(tr);
-        drawTrack(tr);
-      }
+      bakeSpec(tr, false);
+      drawTrack(tr);
       return;
     }
     const url = media(tr.src);
@@ -592,23 +651,70 @@ window.GgrMixer = (function () {
     tr.el.addEventListener("ended", () => {
       if (playing && masterEl() === tr.el) pauseAt(duration || tr.el.currentTime || 0);
     });
+  }
+
+  async function fetchWav(tr) {
+    if (tr.dead || !tr.src) return null;
+    setExtract(tr, 0);
     try {
-      const res = await fetch(url, { cache: "force-cache" });
+      const res = await fetch(media(tr.src));
       if (!res.ok) throw new Error("HTTP " + res.status);
-      const raw = await res.arrayBuffer();
-      const wav = wavMono16(raw);
-      if (wav) {
-        noteDuration(wav.samples.length / wav.sampleRate);
-        tr.spec = await spectrogram(wav.samples, wav.sampleRate, 1 / 32768);
+      const total = Number(res.headers.get("content-length")) || 0;
+      let raw;
+      if (res.body) {
+        const reader = res.body.getReader();
+        const chunks = [];
+        let received = 0;
+        while (true) {
+          const step = await reader.read();
+          if (step.done) break;
+          chunks.push(step.value);
+          received += step.value.byteLength;
+          if (total) setExtract(tr, (received / total) * 45);
+          else setExtract(tr, Math.min(40, 5 + received / 350000));
+        }
+        raw = await new Blob(chunks).arrayBuffer();
+      } else {
+        raw = await res.arrayBuffer();
       }
+      setExtract(tr, 45);
+      return wavMono16(raw);
     } catch (err) {
       tr.place = (tr.place || tr.id) + " (échec waterfall)";
+      const meta =
+        tr.canvas &&
+        tr.canvas.closest(".mix__ch") &&
+        tr.canvas.closest(".mix__ch").querySelector(".mix__meta span");
+      if (meta) meta.textContent = tr.place;
+      setExtract(tr, 0, true);
       console.warn("Mixage piste", tr.id, err);
+      return null;
     }
-    if (tr.canvas) {
-      resizeCanvas(tr);
+  }
+
+  async function paintSpec(tr, wav) {
+    if (!wav) {
+      tr.specDb = false;
+      bakeSpec(tr, false);
       drawTrack(tr);
+      setExtract(tr, 0, true);
+      return;
     }
+    noteDuration(wav.samples.length / wav.sampleRate);
+    tr.specDb = true;
+    setExtract(tr, 45);
+    tr.spec = await spectrogram(wav.samples, wav.sampleRate, 1 / 32768, async (img, asDb, frac) => {
+      tr.spec = img;
+      tr.specDb = asDb;
+      bakeSpec(tr, asDb);
+      drawTrack(tr);
+      setExtract(tr, 45 + Math.max(0, frac || 0) * 55);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    tr.specDb = false;
+    bakeSpec(tr, false);
+    drawTrack(tr);
+    setExtract(tr, 100, true);
   }
 
   async function load() {
@@ -630,6 +736,8 @@ window.GgrMixer = (function () {
         volume: dead ? 0 : 1,
         canvas: null,
         head: null,
+        loadEl: null,
+        specDb: false,
       });
     });
     if (!tracks.length) {
@@ -638,13 +746,20 @@ window.GgrMixer = (function () {
       return;
     }
     renderDesk();
-    requestAnimationFrame(() => {
-      tracks.forEach(resizeCanvas);
-      draw();
+    tracks.forEach((tr) => {
+      if (!tr.dead) setExtract(tr, 0);
     });
-    if (statusEl) statusEl.textContent = "Waterfall : chargement en parallèle…";
+    requestAnimationFrame(() => {
+      tracks.forEach((tr) => {
+        bakeSpec(tr, false);
+        drawTrack(tr);
+      });
+    });
+    if (statusEl) statusEl.textContent = "Waterfall : chargement…";
     playBtn.disabled = true;
-    await Promise.all(tracks.map(loadTrack));
+    tracks.forEach(attachAudio);
+    const wavJobs = tracks.map((tr) => fetchWav(tr));
+    for (let i = 0; i < tracks.length; i++) await paintSpec(tracks[i], await wavJobs[i]);
     if (!duration) {
       if (statusEl) statusEl.textContent = "Aucune piste audio décodable (voies grisées).";
       playBtn.disabled = true;
@@ -674,6 +789,7 @@ window.GgrMixer = (function () {
     playBtn.removeEventListener("click", playToggle);
     window.removeEventListener("keydown", onKey);
     window.removeEventListener("resize", onResize);
+    if (ro) ro.disconnect();
     ac.abort();
     const bin = document.getElementById("mix-audio-bin");
     if (bin) bin.remove();

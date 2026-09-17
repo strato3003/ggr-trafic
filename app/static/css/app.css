@@ -1021,6 +1021,24 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   width: 100%;
   height: 100%;
 }
+.mix__wf-load {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 0.4rem;
+  z-index: 3;
+  pointer-events: none;
+  font: 600 0.58rem var(--sans);
+  letter-spacing: 0.01em;
+  color: #e8f4fc;
+  text-shadow: 0 1px 2px #000;
+  background: linear-gradient(90deg, rgba(4, 12, 20, 0.72), rgba(4, 12, 20, 0.28) 70%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mix__wf-load[hidden] { display: none; }
 .mix__head {
   position: absolute;
   top: 0;
@@ -1042,7 +1060,8 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   flex-wrap: nowrap;
   gap: 0.25rem;
   flex: 0 0 auto;
-  padding: 0 0.25rem;
+  flex-shrink: 0;
+  padding: 0 0.25rem 0 0.2rem;
 }
 .mix__mute {
   font: 600 0.58rem var(--sans);
