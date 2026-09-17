@@ -913,12 +913,21 @@ def test_metrics_payload_exposes_ggr_gauges(tmp_path, monkeypatch):
     assert "text/plain" in media
 
 
-def _starlette_request(path: str, *, method: str = "GET", forwarded: str | None = None, client: str = "10.42.0.1"):
+def _starlette_request(
+    path: str,
+    *,
+    method: str = "GET",
+    forwarded: str | None = None,
+    extra_headers: list[tuple[bytes, bytes]] | None = None,
+    client: str = "10.42.0.1",
+):
     from starlette.requests import Request
 
     headers = []
     if forwarded:
         headers.append((b"x-forwarded-for", forwarded.encode()))
+    if extra_headers:
+        headers.extend(extra_headers)
     return Request(
         {
             "type": "http",
@@ -963,6 +972,10 @@ def test_visitors_client_ip_leftmost_public():
 
     req = _starlette_request("/", forwarded="8.8.8.8, 10.42.0.1")
     assert visitors.client_ip(req) == "8.8.8.8"
+    assert visitors.client_ip(_starlette_request("/", forwarded="8.8.8.8:54321")) == "8.8.8.8"
+    assert visitors.client_ip(
+        _starlette_request("/", extra_headers=[(b"forwarded", b"for=1.1.1.1;proto=https")])
+    ) == "1.1.1.1"
     assert visitors.is_page_visit("GET", "/")
     assert visitors.is_page_visit("GET", "/trafic/2026-09-16T1759Z")
     assert not visitors.is_page_visit("GET", "/metrics")

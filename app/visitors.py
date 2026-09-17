@@ -68,18 +68,37 @@ def is_public_ip(raw: str) -> bool:
         return False
 
 
+def _clean_ip(raw: str) -> str:
+    """Retire quotes, crochets IPv6 et port (X-Forwarded-For / Forwarded)."""
+    s = (raw or "").strip().strip('"').strip("'")
+    if s.startswith("["):
+        end = s.find("]")
+        if end > 0:
+            return s[1:end]
+    if s.count(":") == 1:
+        left, right = s.rsplit(":", 1)
+        if right.isdigit():
+            return left
+    return s.split("%")[0]
+
+
 def client_ip(request: Request) -> str | None:
-    """IP publique du navigateur (X-Forwarded-For / X-Real-IP), jamais l’IP du pod."""
+    """IP publique du navigateur (X-Forwarded-For / Forwarded / X-Real-IP), jamais l’IP du pod."""
     candidates: list[str] = []
     xff = request.headers.get("x-forwarded-for") or ""
     candidates.extend(p.strip() for p in xff.split(",") if p.strip())
+    forwarded = request.headers.get("forwarded") or ""
+    for part in forwarded.split(","):
+        match = re.search(r"for=([^;,\s]+)", part, flags=re.I)
+        if match:
+            candidates.append(match.group(1))
     real = (request.headers.get("x-real-ip") or "").strip()
     if real:
         candidates.append(real)
     if request.client and request.client.host:
         candidates.append(request.client.host)
     for raw in candidates:
-        host = raw.strip().strip("[]").split("%")[0]
+        host = _clean_ip(raw)
         if is_public_ip(host):
             return host
     return None
