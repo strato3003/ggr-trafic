@@ -86,7 +86,7 @@ def render(request: Request, name: str, **extra) -> HTMLResponse:
     try:
         ctx = _ctx(request, **extra)
         html = jinja.get_template(name).render(**ctx)
-        return HTMLResponse(html)
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
     except Exception as exc:
         log.exception("Rendu %s", name)
         return HTMLResponse(

@@ -636,7 +636,7 @@ window.GgrMixer = (function () {
     }
     const url = media(tr.src);
     tr.el = new Audio(url);
-    tr.el.preload = "metadata";
+    tr.el.preload = "none";
     tr.el.controls = false;
     tr.el.hidden = true;
     tr.el.setAttribute("aria-hidden", "true");
@@ -697,34 +697,38 @@ window.GgrMixer = (function () {
     }
   }
 
-  function loadStoredWf(tr) {
+  async function loadStoredWf(tr) {
     const name = tr.waterfall || (tr.id ? "waterfall-" + tr.id + ".png" : "");
-    if (tr.dead || !name) return Promise.resolve(false);
+    if (tr.dead || !name || !vacId) return false;
     tr.waterfall = name;
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.fetchPriority = "high";
-      const paint = () => {
-        if (!tr.specBmp) {
-          tr.specBmp = document.createElement("canvas");
-          tr.specBmp.width = TIME;
-          tr.specBmp.height = FREQ;
-        }
-        const ctx = tr.specBmp.getContext("2d");
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(img, 0, 0, TIME, FREQ);
-        tr.storedWf = true;
-        setExtract(tr, 100, true);
-        drawTrack(tr);
-        resolve(true);
-      };
-      img.onload = () => {
-        if (img.decode) img.decode().then(paint).catch(paint);
-        else paint();
-      };
-      img.onerror = () => resolve(false);
-      img.src = media(name);
-    });
+    const url = media(name);
+    try {
+      const bag = (window.GgrWfCache = window.GgrWfCache || {});
+      let blob = bag[url] || null;
+      if (!blob) {
+        const res = await fetch(url, { cache: "force-cache", priority: "high" });
+        if (!res.ok) return false;
+        blob = await res.blob();
+        if (blob && blob.size > 128) bag[url] = blob;
+      }
+      if (!blob || blob.size < 128) return false;
+      const bmp = await createImageBitmap(blob);
+      if (!tr.specBmp) {
+        tr.specBmp = document.createElement("canvas");
+        tr.specBmp.width = TIME;
+        tr.specBmp.height = FREQ;
+      }
+      const ctx = tr.specBmp.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(bmp, 0, 0, TIME, FREQ);
+      if (bmp.close) bmp.close();
+      tr.storedWf = true;
+      setExtract(tr, 100, true);
+      drawTrack(tr);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function waitDuration(tr, ms) {

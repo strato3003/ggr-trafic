@@ -11,6 +11,25 @@
     return;
   }
 
+  window.GgrWfCache = window.GgrWfCache || {};
+  (function prefetchWaterfalls() {
+    const cache = window.GgrWfCache;
+    (data.trafics || data.vacations || []).forEach((v, i) => {
+      (v.channels || []).forEach((c) => {
+        const name = c.waterfall || "";
+        if (!name || !(c.has_audio || c.audio)) return;
+        const url = "/media/" + encodeURIComponent(v.id) + "/" + encodeURIComponent(name);
+        if (cache[url]) return;
+        fetch(url, { cache: "force-cache", priority: i < 2 ? "high" : "low" })
+          .then((r) => (r.ok ? r.blob() : null))
+          .then((b) => {
+            if (b && b.size > 128) cache[url] = b;
+          })
+          .catch(() => {});
+      });
+    });
+  })();
+
   const TOKEN_KEY = "ggr-admin-token";
   const token = () => localStorage.getItem(TOKEN_KEY) || "";
   const boats = (data.boats || []).filter((b) => Number.isFinite(b.lat) && Number.isFinite(b.lon));

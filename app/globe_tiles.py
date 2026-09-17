@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -16,11 +17,13 @@ log = logging.getLogger(__name__)
 
 OSM_MAX_Z = 8
 OSM_TILE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-OSM_UA = "GGR-Trafic/1.0.8 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
+OSM_UA = "GGR-Trafic/1.0.9 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
 # Océan uni (#0a3558), identique à la sphère sous les tuiles.
 OCEAN_RGBA = (10, 53, 88, 255)
 # OSM Carto @water-color #aad3df — https://github.com/gravitystorm/openstreetmap-carto
-_FETCH_SEM = asyncio.Semaphore(6)
+_FETCH_SEM = asyncio.Semaphore(4)
+# Pool dédié : ne pas saturer le default executor (FileResponse /media waterfall).
+_PUNCH_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="osm-punch")
 
 
 def is_osm_water(r: int, g: int, b: int) -> bool:
@@ -73,7 +76,8 @@ async def land_tile_png(z: int, x: int, y: int, cfg: dict | None = None) -> byte
             res = await client.get(url)
             res.raise_for_status()
             raw = res.content
-    png = await asyncio.to_thread(punch_water, raw)
+    loop = asyncio.get_running_loop()
+    png = await loop.run_in_executor(_PUNCH_POOL, punch_water, raw)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(png)
     return png

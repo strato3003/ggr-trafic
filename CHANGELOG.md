@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.0.9 — 2026-09-18
+
+- Mixer : PNG waterfall via `fetch` (cache + préchargement liste Trafic), sans WAV ni FFT ; tuiles OSM sur un pool séparé pour ne plus bloquer `/media`.
+
 ## 1.0.8 — 2026-09-18
 
 - Mixer : afficher d’abord les PNG waterfall (déjà calculés), sans lancer le téléchargement des WAV — les waterfalls restaient vides ~80 s le temps des 14 Mo × N voies.
