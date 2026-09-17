@@ -236,7 +236,7 @@ data:
           },
           "fieldConfig": { "defaults": { "decimals": 0, "unit": "short" } },
           "targets": [
-            { "expr": "ggr_http_visitors", "legendFormat": "uniques", "refId": "A" }
+            { "expr": "max(ggr_http_visitors)", "legendFormat": "uniques", "refId": "A" }
           ]
         },
         {
@@ -279,7 +279,7 @@ data:
             }
           ],
           "options": {
-            "basemap": { "name": "CartoDB Positron", "type": "default" },
+            "basemap": { "name": "OpenStreetMap", "type": "osm" },
             "controls": {
               "mouseWheelZoom": true,
               "showAttribution": true,
