@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.0.7 — 2026-09-17
+
+- Mixer : ne plus afficher « Aucune piste audio décodable » quand le waterfall PNG est déjà là et que les WAV se chargent encore.
+
 ## 1.0.6 — 2026-09-17
 
 - Waterfall USB calculé et stocké (`waterfall-{id}.png`) dès la fin de chaque WAV (en parallèle des autres voies) ; le mux charge ce PNG au lieu de refaire la FFT à chaque ouverture.

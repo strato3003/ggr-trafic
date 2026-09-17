@@ -738,7 +738,7 @@ window.GgrMixer = (function () {
         noteDuration(tr.el.duration);
         finish();
       };
-      const tid = setTimeout(finish, ms || 8000);
+      const tid = setTimeout(finish, ms || 20000);
       tr.el.addEventListener("loadedmetadata", onMeta, { once: true });
       tr.el.addEventListener("error", onMeta, { once: true });
     });
@@ -818,10 +818,21 @@ window.GgrMixer = (function () {
           if (await loadStoredWf(tr)) return;
           await paintSpec(tr, await fetchWav(tr));
         })();
-        await Promise.all([specJob, waitDuration(tr, 8000)]);
+        await Promise.all([specJob, waitDuration(tr, 20000)]);
       })
     );
     if (!duration) {
+      const live = tracks.filter((tr) => !tr.dead);
+      if (live.length) {
+        if (statusEl)
+          statusEl.textContent =
+            live.length +
+            "/" +
+            tracks.length +
+            " voies audio · waterfall USB 0–2,7 kHz (début à gauche) · mute / volume.";
+        updateHead();
+        return;
+      }
       if (statusEl) statusEl.textContent = "Aucune piste audio décodable (voies grisées).";
       playBtn.disabled = true;
       return;
