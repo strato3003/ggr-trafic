@@ -20,11 +20,6 @@
   let txSites = (data.tx_sites || []).filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon)).slice(0, TX_MAX);
   let placingTx = false;
   let mapMode = "3d";
-  try {
-    if (localStorage.getItem("ggr-view") === "2d") mapMode = "2d";
-  } catch {
-    /* ignore */
-  }
 
   const selEl = document.getElementById("globe-sel");
   const vacsEl = document.getElementById("globe-vacs");
@@ -63,13 +58,8 @@
       setPanelOpen(document.body.classList.contains("kiwi-panel-off"));
     });
   }
-  try {
-    if (localStorage.getItem("ggr-kiwi-panel") === "off") setPanelOpen(false);
-  } catch {
-    /* ignore */
-  }
-  document.body.classList.toggle("is-map-2d", mapMode === "2d");
-  document.body.classList.toggle("is-map-3d", mapMode !== "2d");
+  document.body.classList.add("is-map-3d");
+  document.body.classList.remove("is-map-2d");
 
   function parseHash() {
     const h = (location.hash || "#trafic").replace(/^#/, "");
@@ -108,6 +98,14 @@
   let introAboutArmed = true;
   const traficQBoot = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
   if (traficQBoot) introAboutArmed = false;
+  const bootTab = parseHash()[0];
+  if (introAboutArmed && bootTab !== "setup") {
+    if (bootTab === "apropos") history.replaceState(null, "", "#trafic");
+    setPanelOpen(false);
+  } else {
+    introAboutArmed = false;
+    setPanelOpen(true);
+  }
 
   document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1428,13 +1426,6 @@
         refreshMap();
       }
       pauseGlobe();
-      if (boot && introAboutArmed && parseHash()[0] === "trafic") {
-        window.setTimeout(() => {
-          if (!introAboutArmed) return;
-          showTab("apropos");
-          setPanelOpen(true);
-        }, 900);
-      }
       return;
     }
     if (first3d) {
