@@ -809,20 +809,23 @@
     const hdr = li.querySelector(".globe-vac");
     if (hdr) hdr.setAttribute("aria-expanded", "true");
     li.appendChild(mixRoot);
-    mixRoot.hidden = false;
     mixRoot.setAttribute("data-vid", v.id || "");
     mixRoot.setAttribute("data-started", v.started_at || "");
     openVid = v.id;
     let tracks = mixerTracks(v);
-    try {
-      const full = await fetch("/api/trafic/" + encodeURIComponent(v.id)).then((r) => r.json());
-      if (openVid !== v.id) return;
-      if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) tracks = full.mixer_tracks;
-      else if ((full.channels || []).length) tracks = mixerTracks(full);
-    } catch {
-      /* carte globe */
+    if (!tracks.length) {
+      try {
+        const full = await fetch("/api/trafic/" + encodeURIComponent(v.id)).then((r) => r.json());
+        if (openVid !== v.id) return;
+        if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) tracks = full.mixer_tracks;
+        else if ((full.channels || []).length) tracks = mixerTracks(full);
+      } catch {
+        /* carte globe */
+      }
     }
     if (openVid !== v.id) return;
+    mixRoot.hidden = false;
+    document.body.classList.add("kiwi-mix-on");
     if (window.GgrMixer) {
       window.GgrMixer.mount({
         root: mixRoot,

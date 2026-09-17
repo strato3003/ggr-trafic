@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.0.5 — 2026-09-17
+
+- Accordéon Trafic : afficher tout de suite les lignes mux (volume / mute / QRG / waterfall) au lieu d’attendre `/api/trafic/…` — l’accordéon restait vide (lecture + « — TU » seulement).
+
 ## 1.0.4 — 2026-09-17
 
 - Mixer : volume, mute, QRG/SDR, puis waterfall (plus l’inverse).

@@ -983,6 +983,7 @@ body.kiwi-panel-off .kiwi-toggle__arr {
 .mix__desk {
   display: flex;
   flex-direction: column;
+  min-height: var(--vac-row);
   max-height: calc(6 * var(--vac-row));
   overflow-x: hidden;
   overflow-y: auto;
