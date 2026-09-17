@@ -25,7 +25,7 @@
       <div class="mix__desk" id="mix-strips"></div>
     </div>
     <div class="mix__transport">
-      <button type="button" class="btn" id="mix-play" aria-pressed="false">Lecture</button>
+      <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
       <span class="mix__clock" id="mix-time">— TU</span>
       <label class="mix__seek">
         Heure TU
@@ -42,5 +42,5 @@
 </article>
 {% endblock %}
 {% block extra_js %}
-<script src="/static/js/mixer.js?v={{ version }}-kiwi14"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi21"></script>
 {% endblock %}

@@ -739,6 +739,16 @@
     });
   }
 
+  function audioSdrs(v) {
+    if (Number.isFinite(v.sdrs)) return Math.max(0, v.sdrs);
+    const keys = new Set();
+    (v.channels || []).forEach((c, i) => {
+      if (!(c.has_audio || c.audio)) return;
+      keys.add(c.kiwi || c.id || String(i));
+    });
+    return keys.size;
+  }
+
   function fillVacList(root, rows, emptyText) {
     if (!root) return;
     if (!rows.length) {
@@ -749,9 +759,11 @@
       .map((v) => {
         const when = (v.started_at || "").replace("T", " ").slice(0, 16);
         const tag = v.is_buddy ? "Buddy call" : v.is_test ? "Test" : "Bulletin météo";
+        const n = audioSdrs(v);
         return (
           `<li><button type="button" class="globe-vac" data-vid="${esc(v.id)}">` +
-          `<span class="badge">${esc(tag)}</span> ${esc(when)} · ${esc(v.title || v.id)}</button></li>`
+          `<span class="badge">${esc(tag)}</span> ${esc(when)} · ${esc(v.title || v.id)}` +
+          `<span class="globe-vac__sdr">${n} SDR</span></button></li>`
         );
       })
       .join("");

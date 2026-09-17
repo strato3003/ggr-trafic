@@ -329,6 +329,7 @@ def test_channel_place_and_globe_keeps_mute_channels():
         }
     )
     assert card["is_buddy"] is True
+    assert card["sdrs"] == 1
     assert [c["has_audio"] for c in card["channels"]] == [True, False]
     assert card["channels"][0]["place"] == "Amarante, Portugal"
     assert card["channels"][1]["place"] == "Montmorillon 86500 FRANCE"
@@ -356,6 +357,7 @@ def test_mixer_tracks_include_silent_channels():
     assert meta["mixer_tracks"][0]["has_audio"] is True
     assert meta["mixer_tracks"][1]["has_audio"] is False
     assert not meta["mixer_tracks"][1]["src"]
+    assert meta["sdrs"] == 1
 
 
 def test_finalize_pending_promotes_orphan_with_audio(tmp_path):

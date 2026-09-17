@@ -40,6 +40,15 @@ def vacations_root(cfg: dict[str, Any] | None = None) -> Path:
     return data_dir(cfg) / "vacations"
 
 
+def _sdr_key(ch: dict[str, Any], index: int = 0) -> str:
+    kiwi = ch.get("kiwi")
+    if isinstance(kiwi, dict):
+        name = kiwi.get("name")
+    else:
+        name = kiwi
+    return str(name or ch.get("id") or index)
+
+
 def _decorate(meta: dict[str, Any]) -> dict[str, Any]:
     thumb = None
     tx = None
@@ -68,6 +77,9 @@ def _decorate(meta: dict[str, Any]) -> dict[str, Any]:
         }
         for ch in (meta.get("channels") or [])
     ]
+    meta["sdrs"] = len(
+        {_sdr_key(ch, i) for i, ch in enumerate(meta.get("channels") or []) if ch.get("has_audio")}
+    )
     return meta
 
 
@@ -100,6 +112,7 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
             }
         )
     tx = decorated.get("tx") or {}
+    sdrs = {_sdr_key(c, i) for i, c in enumerate(channels) if c.get("has_audio")}
     return {
         "id": decorated.get("id"),
         "title": decorated.get("title"),
@@ -112,6 +125,7 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
         "fmt": aim.get("fmt") or fleet.get("fmt") or decorated.get("fleet_fmt"),
         "thumb": decorated.get("thumb"),
         "video": tx.get("video"),
+        "sdrs": len(sdrs),
         "channels": channels[:12],
     }
 

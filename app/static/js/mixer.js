@@ -48,6 +48,7 @@ window.GgrMixer = (function () {
   const timeEl = document.getElementById("mix-time");
   const seekEl = document.getElementById("mix-seek");
   if (!deskEl || !playBtn || !seekEl) return null;
+  setPlayUi(false);
 
   const TIME = 420;
   const FREQ = 128;
@@ -59,6 +60,7 @@ window.GgrMixer = (function () {
   let playing = false;
   let t0 = 0;
   let dragging = false;
+  let seekDragging = false;
   let resumeAfterDrag = false;
   let raf = 0;
   let tickTimer = 0;
@@ -312,7 +314,7 @@ window.GgrMixer = (function () {
     tracks.forEach((tr) => {
       if (tr.head) tr.head.style.top = (1 - pct) * 100 + "%";
     });
-    if (!dragging) seekEl.value = String(t);
+    if (!seekDragging) seekEl.value = String(t);
     if (timeEl) timeEl.textContent = fmtTu(t) + " · " + fmtTu(duration);
     seekEl.max = String(duration);
     const startMark = deskEl.querySelector(".mix__tu-start");
@@ -353,13 +355,18 @@ window.GgrMixer = (function () {
     go();
   }
 
+  function setPlayUi(on) {
+    playBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    playBtn.setAttribute("aria-label", on ? "Pause" : "Lecture");
+    playBtn.title = on ? "Pause" : "Lecture";
+  }
+
   function startSources(offset) {
     const off = Math.max(0, offset || 0);
     t0 = off;
     playing = true;
     tracks.forEach((tr) => ensureReady(tr, off));
-    playBtn.textContent = "Pause";
-    playBtn.setAttribute("aria-pressed", "true");
+    setPlayUi(true);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
     tick();
@@ -376,8 +383,7 @@ window.GgrMixer = (function () {
     tracks.forEach((tr) => {
       if (tr.el) tr.el.pause();
     });
-    playBtn.textContent = "Lecture";
-    playBtn.setAttribute("aria-pressed", "false");
+    setPlayUi(false);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
     updateHead();
@@ -392,6 +398,8 @@ window.GgrMixer = (function () {
 
   function previewSeek(t) {
     t0 = Math.max(0, Math.min(duration || t, t));
+    seekEl.value = String(t0);
+    if (duration) seekEl.max = String(duration);
     if (playing) {
       playing = false;
       tracks.forEach((tr) => {
@@ -444,6 +452,7 @@ window.GgrMixer = (function () {
   seekEl.addEventListener("pointerdown", () => {
     resumeAfterDrag = playing;
     dragging = true;
+    seekDragging = true;
     if (playing) pauseAt(nowT());
   }, sig);
   seekEl.addEventListener("input", () => {
@@ -451,6 +460,7 @@ window.GgrMixer = (function () {
   }, sig);
   seekEl.addEventListener("change", () => {
     dragging = false;
+    seekDragging = false;
     if (resumeAfterDrag) startSources(t0);
     resumeAfterDrag = false;
   }, sig);

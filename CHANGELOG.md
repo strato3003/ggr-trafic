@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.0.2 — 2026-09-17
+
+- Mixer : lecture / pause en symboles (triangle / barres), plus de texte.
+- Glisser le curseur waterfall déplace aussi la timeline **Heure TU**.
+- Listes météo et buddy : nombre de KiwiSDR distincts ayant de l’audio, pas le nombre de QRG.
+
 ## 1.0.1 — 2026-09-17
 
 - UI : badge **enregistrement en cours** avec décompte restant `hh:mm:ss` (globe même panneau replié, barre QRG). `/health` expose la fin prévue.
