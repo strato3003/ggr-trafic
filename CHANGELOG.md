@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 0.3.9 — 2026-09-17
+
+- Carte 2D : initialiser Leaflet (`L.map`) — le commutateur 2D n’affichait qu’un fond vide.
+
 ## 0.3.8 — 2026-09-17
 
 - Globe : carte OpenStreetMap 2D avec commutateur 2D / 3D (même flotte, Kiwi, QTH ; le choix est mémorisé).

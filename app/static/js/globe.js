@@ -1364,7 +1364,7 @@
   }
 
   function initMap() {
-    if (!mapEl || map || typeof L !== "function") return;
+    if (!mapEl || map || typeof L === "undefined" || typeof L.map !== "function") return;
     const dest = fleetView();
     map = L.map(mapEl, {
       zoomControl: true,
@@ -1381,6 +1381,7 @@
       placeTxAt(ev.latlng.lat, ev.latlng.lng);
     });
     refreshMap();
+    window.setTimeout(() => map && map.invalidateSize(), 50);
   }
 
   function syncModeButtons() {
