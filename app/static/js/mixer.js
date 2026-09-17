@@ -404,7 +404,10 @@ window.GgrMixer = (function () {
     const off = Math.max(0, offset || 0);
     t0 = off;
     playing = true;
-    tracks.forEach((tr) => ensureReady(tr, off));
+    tracks.forEach((tr) => {
+      if (tr.el && tr.el.preload !== "auto") tr.el.preload = "auto";
+      ensureReady(tr, off);
+    });
     setPlayUi(true);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
@@ -627,13 +630,13 @@ window.GgrMixer = (function () {
 
   function attachAudio(tr) {
     if (tr.dead || !tr.src) {
-      bakeSpec(tr, false);
+      if (!tr.storedWf) bakeSpec(tr, false);
       drawTrack(tr);
       return;
     }
     const url = media(tr.src);
     tr.el = new Audio(url);
-    tr.el.preload = "auto";
+    tr.el.preload = "metadata";
     tr.el.controls = false;
     tr.el.hidden = true;
     tr.el.setAttribute("aria-hidden", "true");
@@ -695,11 +698,13 @@ window.GgrMixer = (function () {
   }
 
   function loadStoredWf(tr) {
-    if (tr.dead || !tr.waterfall) return Promise.resolve(false);
+    const name = tr.waterfall || (tr.id ? "waterfall-" + tr.id + ".png" : "");
+    if (tr.dead || !name) return Promise.resolve(false);
+    tr.waterfall = name;
     return new Promise((resolve) => {
       const img = new Image();
-      img.decoding = "async";
-      img.onload = () => {
+      img.fetchPriority = "high";
+      const paint = () => {
         if (!tr.specBmp) {
           tr.specBmp = document.createElement("canvas");
           tr.specBmp.width = TIME;
@@ -713,8 +718,12 @@ window.GgrMixer = (function () {
         drawTrack(tr);
         resolve(true);
       };
+      img.onload = () => {
+        if (img.decode) img.decode().then(paint).catch(paint);
+        else paint();
+      };
       img.onerror = () => resolve(false);
-      img.src = media(tr.waterfall);
+      img.src = media(name);
     });
   }
 
@@ -790,7 +799,7 @@ window.GgrMixer = (function () {
         head: null,
         loadEl: null,
         specDb: false,
-        waterfall: row.waterfall || "",
+        waterfall: row.waterfall || (row.id ? "waterfall-" + row.id + ".png" : ""),
         storedWf: false,
       });
     });
@@ -800,51 +809,36 @@ window.GgrMixer = (function () {
       return;
     }
     renderDesk();
-    tracks.forEach((tr) => {
-      if (!tr.dead && !tr.waterfall) setExtract(tr, 0);
-    });
     requestAnimationFrame(() => {
       tracks.forEach((tr) => {
         if (!tr.storedWf) bakeSpec(tr, false);
         drawTrack(tr);
       });
     });
-    if (statusEl) statusEl.textContent = "Waterfall : chargement…";
+    if (statusEl) statusEl.textContent = "Waterfall USB…";
     playBtn.disabled = true;
+    await Promise.all(tracks.map((tr) => loadStoredWf(tr)));
+    const painted = tracks.filter((tr) => tr.storedWf).length;
     tracks.forEach(attachAudio);
-    await Promise.all(
-      tracks.map(async (tr) => {
-        const specJob = (async () => {
-          if (await loadStoredWf(tr)) return;
-          await paintSpec(tr, await fetchWav(tr));
-        })();
-        await Promise.all([specJob, waitDuration(tr, 20000)]);
-      })
-    );
-    if (!duration) {
-      const live = tracks.filter((tr) => !tr.dead);
-      if (live.length) {
-        if (statusEl)
-          statusEl.textContent =
-            live.length +
-            "/" +
-            tracks.length +
-            " voies audio · waterfall USB 0–2,7 kHz (début à gauche) · mute / volume.";
-        updateHead();
-        return;
-      }
-      if (statusEl) statusEl.textContent = "Aucune piste audio décodable (voies grisées).";
-      playBtn.disabled = true;
+    void Promise.all(tracks.map((tr) => waitDuration(tr, 20000)));
+    tracks.forEach((tr) => {
+      if (tr.storedWf || tr.dead) return;
+      fetchWav(tr).then((wav) => paintSpec(tr, wav));
+    });
+    const live = tracks.filter((tr) => !tr.dead).length;
+    if (painted || live) {
+      playBtn.disabled = live === 0;
+      if (statusEl)
+        statusEl.textContent =
+          live +
+          "/" +
+          tracks.length +
+          " voies audio · waterfall USB 0–2,7 kHz (début à gauche) · mute / volume.";
+      updateHead();
       return;
     }
-    const live = tracks.filter((tr) => !tr.dead).length;
-    if (statusEl)
-      statusEl.textContent =
-        live +
-        "/" +
-        tracks.length +
-        " voies audio · waterfall USB 0–2,7 kHz (début à gauche) · mute / volume.";
-    updateHead();
+    if (statusEl) statusEl.textContent = "Aucune piste audio décodable (voies grisées).";
+    playBtn.disabled = true;
   }
 
   function destroy() {
