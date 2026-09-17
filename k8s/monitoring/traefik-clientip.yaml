@@ -1,0 +1,12 @@
+# k3s ServiceLB / Traefik : garder l’IP publique du visiteur (carte Grafana).
+# Un nœud unique : Local ne perd pas de trafic. Ne touche pas au NS grafana.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    service:
+      spec:
+        externalTrafficPolicy: Local

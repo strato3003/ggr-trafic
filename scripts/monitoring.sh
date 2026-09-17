@@ -37,6 +37,7 @@ fi
 
 echo "Manifests monitoring (sans NS grafana)…"
 kc apply -k "$ROOT/k8s/monitoring"
+kc apply -f "$ROOT/k8s/monitoring/traefik-clientip.yaml"
 kc -n monitoring rollout restart deploy/prometheus
 kc -n monitoring rollout restart deploy/k3s-grafana
 
