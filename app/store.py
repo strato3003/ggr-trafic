@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -159,6 +159,100 @@ def media_path(vacation_id: str, filename: str, cfg: dict[str, Any] | None = Non
 
 def recording_in_progress(cfg: dict[str, Any] | None = None) -> bool:
     return (data_dir(cfg) / ".recording.lock").exists()
+
+
+def _parse_iso(raw: str | None) -> datetime | None:
+    if not raw or not str(raw).strip():
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _running_vacation(cfg: dict[str, Any] | None) -> dict[str, Any] | None:
+    root = vacations_root(cfg)
+    if not root.exists():
+        return None
+    best: dict[str, Any] | None = None
+    best_started: datetime | None = None
+    for folder in root.iterdir():
+        meta_path = folder / "metadata.json"
+        if not folder.is_dir() or not meta_path.is_file():
+            continue
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if meta.get("status") != "running":
+            continue
+        started = _parse_iso(meta.get("started_at"))
+        if best is None or (started and (best_started is None or started > best_started)):
+            best = meta
+            best_started = started
+    return best
+
+
+def _recording_label(reason: str) -> str:
+    if reason.startswith("buddy"):
+        return "Buddy call"
+    if reason in ("test-20m", "test-hunt"):
+        return "Test 20 m"
+    if reason == "manual-qrg":
+        return "Record"
+    return "Bulletin"
+
+
+def recording_state(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Cadenas + vacation « running » : libellé et fin prévue pour le décompte UI."""
+    cfg = cfg or load_config()
+    idle = {
+        "active": False,
+        "started_at": None,
+        "ends_at": None,
+        "label": None,
+        "id": None,
+        "remaining_hms": "00:00:00",
+    }
+    lock = data_dir(cfg) / ".recording.lock"
+    if not lock.is_file():
+        return idle
+    started = _parse_iso(lock.read_text(encoding="utf-8"))
+    running = _running_vacation(cfg)
+    reason = str((running or {}).get("reason") or "")
+    label = _recording_label(reason) if running else "Enregistrement"
+    minutes = None
+    if running and running.get("duration_minutes") is not None:
+        try:
+            minutes = max(1, int(running["duration_minutes"]))
+        except (TypeError, ValueError):
+            minutes = None
+    if minutes is None:
+        if label == "Buddy call":
+            minutes = int((cfg.get("buddy") or {}).get("duration_minutes") or 15)
+        elif label == "Record":
+            minutes = 2
+        else:
+            minutes = int((cfg.get("schedule") or {}).get("duration_minutes") or 10)
+    if running:
+        started = started or _parse_iso(running.get("started_at"))
+    if started is None:
+        started = datetime.fromtimestamp(lock.stat().st_mtime, tz=timezone.utc)
+    ends = started + timedelta(minutes=minutes)
+    remain = max(0, int((ends - datetime.now(timezone.utc)).total_seconds()))
+    hh, rem = divmod(remain, 3600)
+    mm, ss = divmod(rem, 60)
+    return {
+        "active": True,
+        "started_at": started.isoformat(),
+        "ends_at": ends.isoformat(),
+        "label": label,
+        "id": (running or {}).get("id"),
+        "remaining_hms": f"{hh:02d}:{mm:02d}:{ss:02d}",
+    }
 
 
 def delete_vacation(vacation_id: str, cfg: dict[str, Any] | None = None) -> str | None:

@@ -6,6 +6,9 @@
 #   ./scripts/update.sh pull     # image ghcr.io/<owner>/ggr-trafic:latest (ou ancien dépôt)
 #   ./scripts/update.sh copy-pvc # copie les archives PVC ggr-vacations → ggr-trafic
 #
+# Recreate : un rollout tue l’enregistreur. Refus si .recording.lock
+# (buddy 12:00 TU / bulletin 18:00 TU). Urgence : GGR_FORCE_UPDATE=1.
+#
 # Kubernetes ne peut pas renommer un namespace : ce script crée / met à jour
 # ggr-trafic. Les enregistrements live restent dans ggr-vacations jusqu'à
 # copy-pvc. Ne PAS supprimer l'ancien namespace automatiquement.
@@ -105,6 +108,35 @@ pv_host_path() {
   printf '%s' "$path"
 }
 
+# True si un bulletin / buddy / record manuel tient le cadenas PVC.
+recording_active() {
+  local pod pv path
+  pv="$(kc -n "$KNS" get pvc ggr-trafic-data -o jsonpath='{.spec.volumeName}' 2>/dev/null || true)"
+  if [[ -n "$pv" ]]; then
+    path="$(pv_host_path "$pv")"
+    if [[ -n "$path" ]] && as_root test -f "${path}/.recording.lock"; then
+      return 0
+    fi
+  fi
+  pod="$(kc -n "$KNS" get pod -l app.kubernetes.io/name=ggr-trafic -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [[ -n "$pod" ]] && kc -n "$KNS" exec --request-timeout=8s "$pod" -- test -f /data/.recording.lock >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+refuse_if_recording() {
+  if [[ "${GGR_FORCE_UPDATE:-}" == "1" ]]; then
+    echo "GGR_FORCE_UPDATE=1 : déploiement malgré un possible enregistrement." >&2
+    return 0
+  fi
+  if recording_active; then
+    echo "Enregistrement en cours (.recording.lock) : pas de Recreate." >&2
+    echo "Réessayer après 12:00 / 18:00 TU (fin du créneau). Urgence : GGR_FORCE_UPDATE=1 $0 ${MODE}" >&2
+    exit 1
+  fi
+}
+
 # Copie les archives du PVC local-path ancien → nouveau (rsync du hostPath k3s).
 # À lancer APRÈS le premier apply (PVC ggr-trafic-data Bound) et AVANT
 # de supprimer le namespace ggr-vacations. Hors créneau d'enregistrement.
@@ -165,9 +197,12 @@ apply_clusterissuer() {
 }
 
 if [[ "$MODE" == "copy-pvc" ]]; then
+  refuse_if_recording
   copy_pvc_data
   exit 0
 fi
+
+refuse_if_recording
 
 IMAGE=""
 case "$MODE" in

@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.0.1 — 2026-09-17
+
+- UI : badge **enregistrement en cours** avec décompte restant `hh:mm:ss` (globe même panneau replié, barre QRG). `/health` expose la fin prévue.
+- `update.sh` refuse un Recreate s’il y a un `.recording.lock` : le deploy visites du 17/09 à 12:03 TU a tué le buddy call 4483 / 6516 kHz, l’audio n’était encore qu’en RAM.
+
 ## 1.0.0 — 2026-09-17
 
 - Première version de production : bulletin 14.135 MHz USB près de l’émetteur (F6KUF, puis Tahiti après Bonne-Espérance) et près de la flotte ; ACK 16.551 / 12.418 MHz ; buddy call 4483 / 6516 kHz.

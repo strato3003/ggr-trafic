@@ -2,9 +2,10 @@
   const TOKEN_KEY = "ggr-admin-token";
   const token = () => localStorage.getItem(TOKEN_KEY) || "";
 
+  const pad = (n) => String(n).padStart(2, "0");
+
   document.querySelectorAll(".js-countdown[data-iso]").forEach((el) => {
     const target = new Date(el.dataset.iso);
-    const pad = (n) => String(n).padStart(2, "0");
     const tick = () => {
       const ms = target.getTime() - Date.now();
       if (ms <= 0) {
@@ -21,6 +22,57 @@
     tick();
     setInterval(tick, 1000);
   });
+
+  (function bindRecording() {
+    const nodes = () => document.querySelectorAll(".js-rec");
+    if (!nodes().length) return;
+    const first = document.querySelector(".js-rec");
+    let rec = {
+      recording: first && !first.hidden,
+      recording_label: (first && first.querySelector(".js-rec-label")
+        ? first.querySelector(".js-rec-label").textContent.replace(/\s+en cours\s*$/, "")
+        : "Enregistrement"),
+      recording_ends_at: first ? first.dataset.ends || "" : "",
+    };
+    function hms(ms) {
+      const s = Math.max(0, Math.floor(ms / 1000));
+      return pad(Math.floor(s / 3600)) + ":" + pad(Math.floor((s % 3600) / 60)) + ":" + pad(s % 60);
+    }
+    function paint() {
+      nodes().forEach((el) => {
+        if (!rec.recording) {
+          el.hidden = true;
+          return;
+        }
+        el.hidden = false;
+        const name = rec.recording_label || "Enregistrement";
+        const label = el.querySelector(".js-rec-label");
+        if (label) label.textContent = name + " en cours";
+        if (rec.recording_ends_at) el.dataset.ends = rec.recording_ends_at;
+        const clock = el.querySelector(".js-rec-clock");
+        const ends = Date.parse(el.dataset.ends || "");
+        if (clock) clock.textContent = Number.isFinite(ends) ? hms(ends - Date.now()) : "—";
+      });
+    }
+    paint();
+    setInterval(paint, 1000);
+    const sync = () => {
+      fetch("/health", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((st) => {
+          if (!st) return;
+          rec = {
+            recording: !!st.recording,
+            recording_label: st.recording_label || "Enregistrement",
+            recording_ends_at: st.recording_ends_at || "",
+          };
+          paint();
+        })
+        .catch(() => {});
+    };
+    sync();
+    setInterval(sync, 5000);
+  })();
 
   const hasToken = !!token();
   document.querySelectorAll(".js-del-vac").forEach((btn) => {

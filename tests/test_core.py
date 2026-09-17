@@ -237,6 +237,62 @@ def test_delete_vacation_refuses_running(tmp_path):
     assert folder.exists()
 
 
+def test_recording_state_idle_without_lock(tmp_path):
+    from app.store import recording_state
+
+    cfg = {"storage": {"data_dir": str(tmp_path)}}
+    st = recording_state(cfg)
+    assert st["active"] is False
+    assert st["ends_at"] is None
+
+
+def test_recording_state_buddy_countdown(tmp_path):
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    from app.store import recording_state
+
+    started = datetime(2026, 9, 17, 11, 59, tzinfo=timezone.utc)
+    cfg = {
+        "storage": {"data_dir": str(tmp_path)},
+        "buddy": {"duration_minutes": 15},
+        "schedule": {"duration_minutes": 10},
+    }
+    (tmp_path / ".recording.lock").write_text(started.isoformat(), encoding="utf-8")
+    folder = tmp_path / "vacations" / "2026-09-17T1159Z-buddy"
+    folder.mkdir(parents=True)
+    (folder / "metadata.json").write_text(
+        json.dumps(
+            {
+                "id": "2026-09-17T1159Z-buddy",
+                "status": "running",
+                "reason": "buddy",
+                "started_at": started.isoformat(),
+                "duration_minutes": 15,
+            }
+        ),
+        encoding="utf-8",
+    )
+    st = recording_state(cfg)
+    assert st["active"] is True
+    assert st["label"] == "Buddy call"
+    assert st["id"] == "2026-09-17T1159Z-buddy"
+    ends = datetime.fromisoformat(st["ends_at"])
+    assert ends == started + timedelta(minutes=15)
+    assert st["remaining_hms"].count(":") == 2
+
+
+def test_recording_state_falls_back_to_mtime_if_lock_unreadable(tmp_path):
+    from app.store import recording_state
+
+    cfg = {"storage": {"data_dir": str(tmp_path)}, "schedule": {"duration_minutes": 10}}
+    (tmp_path / ".recording.lock").write_text("pas-une-date", encoding="utf-8")
+    st = recording_state(cfg)
+    assert st["active"] is True
+    assert st["label"] == "Enregistrement"
+    assert st["ends_at"]
+
+
 def test_channel_place_and_globe_keeps_mute_channels():
     from app.store import channel_place, globe_vacation
 

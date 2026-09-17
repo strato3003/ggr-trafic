@@ -51,7 +51,35 @@ a:hover { text-decoration: underline; }
 .qrg__k { display: block; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
 .qrg__v { font-family: var(--mono); font-size: 1.05rem; color: var(--brass); }
 .qrg__h { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; }
-.live { display: inline-block; margin-top: 0.35rem; color: var(--rx); font-weight: 600; font-size: 0.8rem; }
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  color: var(--rx);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+.live[hidden] { display: none; }
+.live__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--rx);
+  box-shadow: 0 0 0 0 rgba(61, 186, 122, 0.7);
+  animation: live-pulse 1.4s ease-out infinite;
+}
+.live .js-rec-clock {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--foam);
+}
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(61, 186, 122, 0.55); }
+  70% { box-shadow: 0 0 0 0.45rem rgba(61, 186, 122, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(61, 186, 122, 0); }
+}
 
 .wrap { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
 .intro p, .prose p { color: #c5d5d1; line-height: 1.55; max-width: 70ch; }
@@ -248,6 +276,22 @@ body.globe-page .wrap {
   font-size: 1rem;
   text-shadow: 0 1px 8px #02050a;
 }
+.globe-rec {
+  position: absolute;
+  top: 2.55rem;
+  left: 6.5rem;
+  z-index: 6;
+  pointer-events: none;
+}
+.globe-rec .live {
+  margin: 0;
+  padding: 0.22rem 0.55rem 0.22rem 0.45rem;
+  background: rgba(8, 22, 36, 0.88);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  text-shadow: none;
+}
 .globe-osm-copy {
   position: absolute;
   left: 0.85rem;
@@ -338,6 +382,10 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   margin: 0.25rem 0 0;
   color: var(--muted);
   font-size: 0.75rem;
+}
+.kiwi-ident__clock .live {
+  display: flex;
+  margin: 0.35rem 0 0;
 }
 .kiwi-tabs {
   display: flex;

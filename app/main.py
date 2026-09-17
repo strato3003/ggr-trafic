@@ -117,6 +117,7 @@ def _ctx(request: Request, **extra):
         "buddy_iso": buddy_at.isoformat(),
         "buddy_label": buddy_at.strftime("%d/%m %H:%M"),
         "recording": store.recording_in_progress(cfg),
+        "recording_state": store.recording_state(cfg),
         "admin_configured": _admin_configured(cfg),
         **qrg,
         **extra,
@@ -160,7 +161,15 @@ def _buddy_clock_utc(cfg) -> datetime:
 @app.get("/health")
 async def health():
     cfg = load_config()
-    return {"ok": True, "version": version(cfg), "recording": store.recording_in_progress(cfg)}
+    rec = store.recording_state(cfg)
+    return {
+        "ok": True,
+        "version": version(cfg),
+        "recording": rec["active"],
+        "recording_label": rec["label"],
+        "recording_started_at": rec["started_at"],
+        "recording_ends_at": rec["ends_at"],
+    }
 
 
 @app.get("/metrics")
