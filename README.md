@@ -119,7 +119,7 @@ make run          # http://127.0.0.1:8080
 
 Le Grafana applicatif [https://dashboard.k3s.lpb.ovh](https://dashboard.k3s.lpb.ovh) n’est **pas** modifié.
 
-Un Grafana **k3s** séparé : [https://monitoring.k3s.lpb.ovh](https://monitoring.k3s.lpb.ovh) (NS `monitoring`, Prometheus 7 j / PVC 1 Gio, node-exporter, kube-state-metrics). Dashboard **k3s + GGR Trafic** (CPU/RAM nœud et par namespace, disque, pods, PVC, enregistrement GGR). `./scripts/update.sh` ne déploie pas ce NS.
+Un Grafana **k3s** séparé : [https://monitoring.k3s.lpb.ovh](https://monitoring.k3s.lpb.ovh) (NS `monitoring`, Prometheus 7 j / PVC 1 Gio, node-exporter, kube-state-metrics). Dashboard **k3s + GGR Trafic** (CPU/RAM nœud et par namespace, disque, pods, PVC, enregistrement GGR, visites de l’URL et carte des origines). `./scripts/update.sh` ne déploie pas ce NS.
 
 Sur le VPS, hors 12:00 / 18:00 TU :
 

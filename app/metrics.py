@@ -6,7 +6,7 @@ import shutil
 
 from prometheus_client import Gauge, Info, generate_latest, CONTENT_TYPE_LATEST
 
-from app import store
+from app import store, visitors  # noqa: F401 — enregistre ggr_http_visits_total / ggr_http_visitors
 from recorder.config import data_dir, load_config, version
 
 GGR_RECORDING = Gauge("ggr_recording", "1 si un enregistrement bulletin/buddy/test est en cours")

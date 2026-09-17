@@ -202,6 +202,141 @@ data:
               "refId": "A"
             }
           ]
+        },
+        {
+          "title": "Visites URL (période)",
+          "description": "Chargements de https://ggr-trafic.k3s.lpb.ovh (pages / et /trafic). Hors sondes, API, tuiles OSM, static.",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 28 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+          },
+          "fieldConfig": { "defaults": { "decimals": 0, "unit": "short" } },
+          "targets": [
+            {
+              "expr": "sum(increase(ggr_http_visits_total[$__range]))",
+              "legendFormat": "visites",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Visiteurs uniques (pod)",
+          "description": "IP publiques distinctes depuis le dernier redémarrage du pod. Les IP ne sont pas stockées dans Prometheus.",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 6, "x": 6, "y": 28 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+          },
+          "fieldConfig": { "defaults": { "decimals": 0, "unit": "short" } },
+          "targets": [
+            { "expr": "ggr_http_visitors", "legendFormat": "uniques", "refId": "A" }
+          ]
+        },
+        {
+          "title": "Visites / min",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "short" } },
+          "targets": [
+            {
+              "expr": "60 * sum(rate(ggr_http_visits_total[5m]))",
+              "legendFormat": "visites/min",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Origine des visites",
+          "description": "Ville du client (ipwho.is / ip-api), agrégée. Pas d’adresse IP sur la carte.",
+          "type": "geomap",
+          "gridPos": { "h": 14, "w": 16, "x": 0, "y": 36 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (country, city, latitude, longitude) (increase(ggr_http_visits_total{latitude!=\"none\"}[$__range]))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "convertFieldType",
+              "options": {
+                "conversions": [
+                  { "destinationType": "number", "targetField": "latitude" },
+                  { "destinationType": "number", "targetField": "longitude" }
+                ]
+              }
+            }
+          ],
+          "options": {
+            "basemap": { "name": "CartoDB Positron", "type": "default" },
+            "controls": {
+              "mouseWheelZoom": true,
+              "showAttribution": true,
+              "showDebug": false,
+              "showMeasure": false,
+              "showScale": false,
+              "showZoom": true
+            },
+            "layers": [
+              {
+                "type": "markers",
+                "name": "Visites",
+                "tooltip": true,
+                "location": {
+                  "mode": "coords",
+                  "latitude": "latitude",
+                  "longitude": "longitude"
+                },
+                "config": {
+                  "showLegend": true,
+                  "style": {
+                    "color": { "fixed": "dark-orange" },
+                    "opacity": 0.8,
+                    "size": { "field": "Value", "fixed": 6, "max": 18, "min": 4 },
+                    "symbol": { "fixed": "img/icons/marker/circle.svg", "mode": "fixed" }
+                  }
+                }
+              }
+            ],
+            "tooltip": { "mode": "details" },
+            "view": { "allLayers": true, "id": "zero", "lat": 20, "lon": 0, "zoom": 1.5 }
+          }
+        },
+        {
+          "title": "Visites par ville",
+          "type": "table",
+          "gridPos": { "h": 14, "w": 8, "x": 16, "y": 36 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (country, city) (increase(ggr_http_visits_total[$__range]))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+          ],
+          "fieldConfig": {
+            "defaults": { "decimals": 0 },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Visites" }] },
+              { "matcher": { "id": "byName", "options": "country" }, "properties": [{ "id": "displayName", "value": "Pays" }] },
+              { "matcher": { "id": "byName", "options": "city" }, "properties": [{ "id": "displayName", "value": "Ville" }] }
+            ]
+          }
         }
       ],
       "refresh": "30s",
@@ -211,7 +346,7 @@ data:
       "timezone": "browser",
       "title": "k3s + GGR Trafic",
       "uid": "k3s-ggr-trafic",
-      "version": 1
+      "version": 2
     }
 ---
 apiVersion: apps/v1

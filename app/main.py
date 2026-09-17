@@ -65,6 +65,14 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="GGR Trafic", version=version(CFG), lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
+
+
+@app.middleware("http")
+async def observe_visits(request: Request, call_next):
+    from app import visitors
+
+    visitors.schedule(request)
+    return await call_next(request)
 jinja = Environment(
     loader=FileSystemLoader(str(ROOT / "templates")),
     autoescape=select_autoescape(["html", "xml"]),

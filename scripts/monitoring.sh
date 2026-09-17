@@ -38,6 +38,7 @@ fi
 echo "Manifests monitoring (sans NS grafana)…"
 kc apply -k "$ROOT/k8s/monitoring"
 kc -n monitoring rollout restart deploy/prometheus
+kc -n monitoring rollout restart deploy/k3s-grafana
 
 # Plus d’Alertmanager (pas d’alertes mail).
 kc -n monitoring delete deploy alertmanager --ignore-not-found

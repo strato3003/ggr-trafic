@@ -909,4 +909,61 @@ def test_metrics_payload_exposes_ggr_gauges(tmp_path, monkeypatch):
     assert "ggr_recording" in text
     assert "ggr_data_used_bytes" in text
     assert "ggr_data_total_bytes" in text
+    assert "ggr_http_visitors" in text
     assert "text/plain" in media
+
+
+def _starlette_request(path: str, *, method: str = "GET", forwarded: str | None = None, client: str = "10.42.0.1"):
+    from starlette.requests import Request
+
+    headers = []
+    if forwarded:
+        headers.append((b"x-forwarded-for", forwarded.encode()))
+    return Request(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": method,
+            "scheme": "https",
+            "path": path,
+            "raw_path": path.encode(),
+            "query_string": b"",
+            "headers": headers,
+            "client": (client, 12345),
+            "server": ("127.0.0.1", 443),
+        }
+    )
+
+
+def test_visitors_count_public_page_not_probes():
+    from app import visitors
+
+    visitors.reset_for_tests()
+    visitors._geo_cache["8.8.8.8"] = {
+        "country": "France",
+        "city": "Paris",
+        "latitude": "48.86",
+        "longitude": "2.35",
+    }
+    before = sum(s.value for s in visitors.VISITS.collect()[0].samples if s.name == "ggr_http_visits_total")
+    visitors.schedule(_starlette_request("/", forwarded="8.8.8.8"))
+    visitors.schedule(_starlette_request("/health", forwarded="8.8.8.8"))
+    visitors.schedule(_starlette_request("/api/trafic", forwarded="8.8.8.8"))
+    visitors.schedule(_starlette_request("/api/globe/osm/3/2/1.png", forwarded="8.8.8.8"))
+    visitors.schedule(_starlette_request("/", forwarded="10.42.0.9"))
+    labelled = [s for s in visitors.VISITS.collect()[0].samples if s.name == "ggr_http_visits_total"]
+    assert labelled
+    assert sum(s.value for s in labelled) == before + 1
+    assert visitors.UNIQUE._value.get() == 1
+
+
+def test_visitors_client_ip_leftmost_public():
+    from app import visitors
+
+    req = _starlette_request("/", forwarded="8.8.8.8, 10.42.0.1")
+    assert visitors.client_ip(req) == "8.8.8.8"
+    assert visitors.is_page_visit("GET", "/")
+    assert visitors.is_page_visit("GET", "/trafic/2026-09-16T1759Z")
+    assert not visitors.is_page_visit("GET", "/metrics")
+    assert not visitors.is_page_visit("POST", "/")
