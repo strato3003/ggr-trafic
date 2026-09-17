@@ -1347,10 +1347,15 @@
     refreshMap();
   }
 
+  function sizeGlobe() {
+    if (!globe || !el) return;
+    globe.width(el.clientWidth);
+    globe.height(el.clientHeight);
+  }
+
   function pauseGlobe() {
     if (!globe) return;
     try {
-      if (typeof globe.pauseAnimation === "function") globe.pauseAnimation();
       globe.controls().enabled = false;
     } catch {
       /* globe.gl */
@@ -1365,7 +1370,9 @@
     } catch {
       /* globe.gl */
     }
+    sizeGlobe();
     window.dispatchEvent(new Event("resize"));
+    window.setTimeout(sizeGlobe, 50);
   }
 
   function initMap() {
@@ -1430,8 +1437,12 @@
       }
       return;
     }
-    if (first3d) initGlobe({ intro: boot });
-    else resumeGlobe();
+    if (first3d) {
+      initGlobe({ intro: boot });
+      requestAnimationFrame(sizeGlobe);
+    } else {
+      resumeGlobe();
+    }
   }
 
   function initGlobe(opts) {
@@ -1528,12 +1539,8 @@
       }
     }
 
-    const size = () => {
-      globe.width(el.clientWidth);
-      globe.height(el.clientHeight);
-    };
-    size();
-    window.addEventListener("resize", size);
+    sizeGlobe();
+    window.addEventListener("resize", sizeGlobe);
     el.addEventListener("pointerdown", () => {
       globe.controls().autoRotate = false;
     });
