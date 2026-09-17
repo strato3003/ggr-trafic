@@ -350,6 +350,8 @@ def test_channel_place_and_globe_keeps_mute_channels():
     assert [c["has_audio"] for c in card["channels"]] == [True, False]
     assert card["channels"][0]["place"] == "Amarante, Portugal"
     assert card["channels"][1]["place"] == "Montmorillon 86500 FRANCE"
+    assert card["channels"][0]["waterfall"] == ""
+    assert card["channels"][1]["waterfall"] == ""
 
 
 def test_mixer_tracks_include_silent_channels():
@@ -363,6 +365,7 @@ def test_mixer_tracks_include_silent_channels():
                     "audio": "audio-nvis-main.wav",
                     "freq_khz": 4483.0,
                     "kiwi": {"loc": "Amarante, Portugal"},
+                    "waterfall": "waterfall-nvis-main.png",
                 },
                 {"id": "far-alt", "freq_khz": 6516.0, "kiwi": {"loc": "Borås"}},
             ]
@@ -372,8 +375,10 @@ def test_mixer_tracks_include_silent_channels():
     assert meta["mixer_tracks"][0]["place"] == "Amarante, Portugal"
     assert meta["mixer_tracks"][0]["src"] == "audio-nvis-main.wav"
     assert meta["mixer_tracks"][0]["has_audio"] is True
+    assert meta["mixer_tracks"][0]["waterfall"] == "waterfall-nvis-main.png"
     assert meta["mixer_tracks"][1]["has_audio"] is False
     assert not meta["mixer_tracks"][1]["src"]
+    assert not meta["mixer_tracks"][1]["waterfall"]
     assert meta["sdrs"] == 1
 
 
@@ -402,7 +407,76 @@ def test_finalize_pending_promotes_orphan_with_audio(tmp_path):
     saved = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
     assert saved["status"] == "complete"
     assert saved["channels"][0]["audio"] == "audio-tx.wav"
+    assert "waterfall" not in saved["channels"][0]
     assert "error" not in saved
+
+
+def _write_tone_wav(path, sr=12000, seconds=0.6, freq=800.0):
+    import math
+    import wave
+
+    n = int(sr * seconds)
+    with wave.open(str(path), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        frames = b"".join(
+            struct.pack("<h", int(16000 * math.sin(2 * math.pi * freq * i / sr))) for i in range(n)
+        )
+        wf.writeframes(frames)
+
+
+def test_waterfall_png_from_usb_tone(tmp_path):
+    from PIL import Image
+
+    from recorder.spectrogram import FREQ, TIME, write_channel_waterfall, write_waterfall
+
+    wav = tmp_path / "audio-tx.wav"
+    _write_tone_wav(wav)
+    name = write_channel_waterfall(tmp_path, "tx", wav)
+    assert name == "waterfall-tx.png"
+    png = tmp_path / name
+    img = Image.open(png)
+    assert img.size == (TIME, FREQ)
+    extrema = img.convert("RGB").getextrema()
+    assert max(hi for _lo, hi in extrema) > 80
+    mtime = png.stat().st_mtime
+    assert write_waterfall(wav, png) is True
+    assert png.stat().st_mtime == mtime
+
+
+def test_waterfall_rejects_stub_wav(tmp_path):
+    from recorder.spectrogram import write_channel_waterfall
+
+    wav = tmp_path / "audio-tx.wav"
+    wav.write_bytes(b"RIFF" + b"\x00" * 80)
+    assert write_channel_waterfall(tmp_path, "tx", wav) is None
+    assert not (tmp_path / "waterfall-tx.png").exists()
+
+
+def test_finalize_pending_writes_waterfall(tmp_path):
+    import json
+
+    from recorder.session import finalize_pending_sessions
+
+    cfg = {"storage": {"data_dir": str(tmp_path)}}
+    folder = tmp_path / "vacations" / "2026-09-17T1759Z"
+    folder.mkdir(parents=True)
+    _write_tone_wav(folder / "audio-tx.wav")
+    (folder / "metadata.json").write_text(
+        json.dumps(
+            {
+                "id": "2026-09-17T1759Z",
+                "status": "complete",
+                "channels": [{"id": "tx", "audio": "audio-tx.wav"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert finalize_pending_sessions(cfg) >= 1
+    saved = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
+    assert saved["channels"][0]["waterfall"] == "waterfall-tx.png"
+    assert (folder / "waterfall-tx.png").is_file()
 
 
 def test_hold_page_stops_if_chromium_frozen(monkeypatch):

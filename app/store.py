@@ -74,6 +74,7 @@ def _decorate(meta: dict[str, Any]) -> dict[str, Any]:
             "site_label": ch.get("site_label"),
             "label": ch.get("label"),
             "has_audio": bool(ch.get("audio")),
+            "waterfall": ch.get("waterfall") or "",
         }
         for ch in (meta.get("channels") or [])
     ]
@@ -109,6 +110,7 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
                 "place": ch.get("place"),
                 "has_audio": bool(ch.get("has_audio")),
                 "site_label": ch.get("site_label"),
+                "waterfall": ch.get("waterfall") or "",
             }
         )
     tx = decorated.get("tx") or {}

@@ -544,7 +544,9 @@ window.GgrMixer = (function () {
           '"></canvas>' +
           (tr.dead
             ? ""
-            : '<div class="mix__wf-load">Extraction bande son en cours… 0 %</div>') +
+            : '<div class="mix__wf-load"' +
+              (tr.waterfall ? " hidden" : "") +
+              ">Extraction bande son en cours… 0 %</div>") +
           '<div class="mix__head"></div>' +
           "</div></div>"
         );
@@ -568,7 +570,7 @@ window.GgrMixer = (function () {
         muteBtn.setAttribute("aria-pressed", tr.muted ? "true" : "false");
         el.classList.toggle("is-mute", tr.muted);
         applyGain(tr);
-        bakeSpec(tr, !!tr.specDb);
+        if (!tr.storedWf) bakeSpec(tr, !!tr.specDb);
         drawTrack(tr);
       });
       vol.addEventListener("input", (ev) => {
@@ -692,6 +694,56 @@ window.GgrMixer = (function () {
     }
   }
 
+  function loadStoredWf(tr) {
+    if (tr.dead || !tr.waterfall) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => {
+        if (!tr.specBmp) {
+          tr.specBmp = document.createElement("canvas");
+          tr.specBmp.width = TIME;
+          tr.specBmp.height = FREQ;
+        }
+        const ctx = tr.specBmp.getContext("2d");
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0, TIME, FREQ);
+        tr.storedWf = true;
+        setExtract(tr, 100, true);
+        drawTrack(tr);
+        resolve(true);
+      };
+      img.onerror = () => resolve(false);
+      img.src = media(tr.waterfall);
+    });
+  }
+
+  function waitDuration(tr, ms) {
+    if (tr.dead || !tr.el) return Promise.resolve();
+    if (Number.isFinite(tr.el.duration) && tr.el.duration > 0) {
+      noteDuration(tr.el.duration);
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(tid);
+        tr.el.removeEventListener("loadedmetadata", onMeta);
+        tr.el.removeEventListener("error", onMeta);
+        resolve();
+      };
+      const onMeta = () => {
+        noteDuration(tr.el.duration);
+        finish();
+      };
+      const tid = setTimeout(finish, ms || 8000);
+      tr.el.addEventListener("loadedmetadata", onMeta, { once: true });
+      tr.el.addEventListener("error", onMeta, { once: true });
+    });
+  }
+
   async function paintSpec(tr, wav) {
     if (!wav) {
       tr.specDb = false;
@@ -738,6 +790,8 @@ window.GgrMixer = (function () {
         head: null,
         loadEl: null,
         specDb: false,
+        waterfall: row.waterfall || "",
+        storedWf: false,
       });
     });
     if (!tracks.length) {
@@ -747,19 +801,26 @@ window.GgrMixer = (function () {
     }
     renderDesk();
     tracks.forEach((tr) => {
-      if (!tr.dead) setExtract(tr, 0);
+      if (!tr.dead && !tr.waterfall) setExtract(tr, 0);
     });
     requestAnimationFrame(() => {
       tracks.forEach((tr) => {
-        bakeSpec(tr, false);
+        if (!tr.storedWf) bakeSpec(tr, false);
         drawTrack(tr);
       });
     });
     if (statusEl) statusEl.textContent = "Waterfall : chargement…";
     playBtn.disabled = true;
     tracks.forEach(attachAudio);
-    const wavJobs = tracks.map((tr) => fetchWav(tr));
-    for (let i = 0; i < tracks.length; i++) await paintSpec(tracks[i], await wavJobs[i]);
+    await Promise.all(
+      tracks.map(async (tr) => {
+        const specJob = (async () => {
+          if (await loadStoredWf(tr)) return;
+          await paintSpec(tr, await fetchWav(tr));
+        })();
+        await Promise.all([specJob, waitDuration(tr, 8000)]);
+      })
+    );
     if (!duration) {
       if (statusEl) statusEl.textContent = "Aucune piste audio décodable (voies grisées).";
       playBtn.disabled = true;

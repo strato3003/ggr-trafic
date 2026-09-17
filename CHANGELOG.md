@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.0.6 — 2026-09-17
+
+- Waterfall USB calculé et stocké (`waterfall-{id}.png`) dès la fin de chaque WAV (en parallèle des autres voies) ; le mux charge ce PNG au lieu de refaire la FFT à chaque ouverture.
+
 ## 1.0.5 — 2026-09-17
 
 - Accordéon Trafic : afficher tout de suite les lignes mux (volume / mute / QRG / waterfall) au lieu d’attendre `/api/trafic/…` — l’accordéon restait vide (lecture + « — TU » seulement).

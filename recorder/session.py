@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -24,11 +25,25 @@ from recorder.kiwi_list import (
 )
 from recorder.postprocess import mux_screencast, thumbnail
 from recorder.screencast import record_screencast
+from recorder.spectrogram import write_channel_waterfall
 from recorder.kiwi_wf import HUNT_CF_KHZ, HUNT_HI_KHZ, HUNT_LO_KHZ, HUNT_ZOOM, hunt_usb_signal
 
 log = logging.getLogger(__name__)
 LOCK_NAME = ".recording.lock"
 RECORDING_GRACE_S = 180
+
+
+async def _with_waterfall(job: Any, session_dir: Path, channel_id: str, wav: Path) -> Any:
+    """Calcule le PNG waterfall USB dès que le WAV de cette voie est fermé."""
+    try:
+        result = await job
+    except Exception as exc:
+        result = exc
+    try:
+        await asyncio.to_thread(write_channel_waterfall, session_dir, str(channel_id), wav)
+    except Exception:
+        log.exception("Waterfall USB %s", channel_id)
+    return result
 
 
 def _kiwi_snap(kiwi: dict[str, Any] | None, **extra: Any) -> dict[str, Any]:
@@ -448,30 +463,40 @@ async def run_vacation(
                     "kiwi": kiwi.get("name"),
                 }
                 jobs.append(
-                    record_screencast(
-                        kiwi,
-                        ch["freq_khz"],
-                        webm,
-                        duration,
-                        mode=str(radio.get("mode") or "usb"),
-                        zoom=int(ch.get("zoom") or 10),
-                        viewport=viewport,
-                        overlay=overlay,
-                        snd_wav=wav,
+                    _with_waterfall(
+                        record_screencast(
+                            kiwi,
+                            ch["freq_khz"],
+                            webm,
+                            duration,
+                            mode=str(radio.get("mode") or "usb"),
+                            zoom=int(ch.get("zoom") or 10),
+                            viewport=viewport,
+                            overlay=overlay,
+                            snd_wav=wav,
+                        ),
+                        session_dir,
+                        ch["id"],
+                        wav,
                     )
                 )
                 ch_out["screencast_raw"] = str(webm.name)
             else:
                 jobs.append(
-                    record_kiwi_wav(
-                        kiwi,
-                        ch["freq_khz"],
+                    _with_waterfall(
+                        record_kiwi_wav(
+                            kiwi,
+                            ch["freq_khz"],
+                            wav,
+                            duration,
+                            mode=str(radio.get("mode") or "usb"),
+                            low_hz=int(filt.get("low_hz") or 300),
+                            high_hz=int(filt.get("high_hz") or 2700),
+                            ident=f"{ident}-{ch.get('site') or ch['id']}" if ch.get("kind") == "ack" else ident,
+                        ),
+                        session_dir,
+                        ch["id"],
                         wav,
-                        duration,
-                        mode=str(radio.get("mode") or "usb"),
-                        low_hz=int(filt.get("low_hz") or 300),
-                        high_hz=int(filt.get("high_hz") or 2700),
-                        ident=f"{ident}-{ch.get('site') or ch['id']}" if ch.get("kind") == "ack" else ident,
                     )
                 )
             meta["channels"].append(ch_out)
@@ -663,30 +688,40 @@ async def run_buddy_call(
                     "kiwi": kiwi.get("name"),
                 }
                 jobs.append(
-                    record_screencast(
-                        kiwi,
-                        ch["freq_khz"],
-                        webm,
-                        duration,
-                        mode=mode,
-                        zoom=int(ch.get("zoom") or 10),
-                        viewport=viewport,
-                        overlay=overlay,
-                        snd_wav=wav,
+                    _with_waterfall(
+                        record_screencast(
+                            kiwi,
+                            ch["freq_khz"],
+                            webm,
+                            duration,
+                            mode=mode,
+                            zoom=int(ch.get("zoom") or 10),
+                            viewport=viewport,
+                            overlay=overlay,
+                            snd_wav=wav,
+                        ),
+                        session_dir,
+                        ch["id"],
+                        wav,
                     )
                 )
                 ch_out["screencast_raw"] = str(webm.name)
             else:
                 jobs.append(
-                    record_kiwi_wav(
-                        kiwi,
-                        ch["freq_khz"],
+                    _with_waterfall(
+                        record_kiwi_wav(
+                            kiwi,
+                            ch["freq_khz"],
+                            wav,
+                            duration,
+                            mode=mode,
+                            low_hz=int(filt.get("low_hz") or 300),
+                            high_hz=int(filt.get("high_hz") or 2700),
+                            ident=f"{ident}-buddy-{ch.get('site') or ch['id']}",
+                        ),
+                        session_dir,
+                        ch["id"],
                         wav,
-                        duration,
-                        mode=mode,
-                        low_hz=int(filt.get("low_hz") or 300),
-                        high_hz=int(filt.get("high_hz") or 2700),
-                        ident=f"{ident}-buddy-{ch.get('site') or ch['id']}",
                     )
                 )
             meta["channels"].append(ch_out)
@@ -1005,7 +1040,7 @@ def recover_orphaned(cfg: dict[str, Any] | None = None) -> int:
 
 
 def finalize_pending_sessions(cfg: dict[str, Any] | None = None) -> int:
-    """Mux WAV/WebM restants une fois l’UI déjà joignable."""
+    """Mux WAV/WebM restants et backfill des waterfalls USB, une fois l’UI déjà joignable."""
     cfg = cfg or load_config()
     vac_root = data_dir(cfg) / "vacations"
     if not vac_root.exists():
@@ -1062,15 +1097,40 @@ def _mux_channel(session_dir: Path, ch: dict[str, Any], raw: Path) -> None:
         raw.unlink(missing_ok=True)
 
 
+def _apply_waterfalls(session_dir: Path, jobs: list[tuple[dict[str, Any], Path]]) -> None:
+    """Calcule en parallèle les PNG waterfall USB manquants (idempotent si déjà à jour)."""
+    if not jobs:
+        return
+    workers = min(2, len(jobs))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = {
+            pool.submit(write_channel_waterfall, session_dir, str(ch.get("id") or "tx"), wav): ch
+            for ch, wav in jobs
+        }
+        for fut, ch in futs.items():
+            name = None
+            try:
+                name = fut.result()
+            except Exception:
+                log.exception("Waterfall USB %s", ch.get("id"))
+            if name:
+                ch["waterfall"] = name
+            else:
+                ch.pop("waterfall", None)
+
+
 def _finalize_media(session_dir: Path, meta: dict[str, Any]) -> None:
-    """Mux WAV/WebM restants, y compris un .webm Playwright au nom hashé."""
+    """Mux WAV/WebM restants et fige le waterfall USB de chaque voie."""
     channels = meta.setdefault("channels", [])
+    wav_jobs: list[tuple[dict[str, Any], Path]] = []
     for ch in channels:
         wav = session_dir / (ch.get("audio_file") or ch.get("audio") or f"audio-{ch['id']}.wav")
         if wav.is_file() and wav.stat().st_size > 64:
             ch["audio"] = wav.name
+            wav_jobs.append((ch, wav))
         else:
             ch.pop("audio", None)
+            ch.pop("waterfall", None)
         ch.pop("audio_file", None)
         raw_name = ch.get("screencast_raw")
         raw = session_dir / raw_name if raw_name else session_dir / f"screencast-{ch['id']}.webm"
@@ -1079,22 +1139,23 @@ def _finalize_media(session_dir: Path, meta: dict[str, Any]) -> None:
         ch.pop("screencast_raw", None)
 
     leftovers = [p for p in session_dir.glob("*.webm") if p.is_file() and p.stat().st_size > 64]
-    if not leftovers:
-        return
-    host = next((c for c in channels if c.get("id") == "tx" or c.get("screencast")), None)
-    if host is None and channels:
-        host = channels[0]
-    if host is None:
-        host = {
-            "id": "tx",
-            "kind": "tx",
-            "freq_khz": 14135.0,
-            "label": "Bulletin météo F6KUF",
-            "screencast": True,
-        }
-        channels.insert(0, host)
-    if not host.get("video"):
-        _mux_channel(session_dir, host, max(leftovers, key=lambda p: p.stat().st_size))
+    if leftovers:
+        host = next((c for c in channels if c.get("id") == "tx" or c.get("screencast")), None)
+        if host is None and channels:
+            host = channels[0]
+        if host is None:
+            host = {
+                "id": "tx",
+                "kind": "tx",
+                "freq_khz": 14135.0,
+                "label": "Bulletin météo F6KUF",
+                "screencast": True,
+            }
+            channels.insert(0, host)
+        if not host.get("video"):
+            _mux_channel(session_dir, host, max(leftovers, key=lambda p: p.stat().st_size))
+
+    _apply_waterfalls(session_dir, wav_jobs)
 
 
 def _write_meta(session_dir: Path, meta: dict[str, Any]) -> None:

@@ -299,6 +299,8 @@ async def media(trafic_id: str, filename: str):
     headers = {"Cache-Control": "public, max-age=86400"}
     if path.suffix.lower() == ".wav":
         return FileResponse(path, media_type="audio/wav", headers=headers)
+    if path.suffix.lower() == ".png":
+        return FileResponse(path, media_type="image/png", headers=headers)
     return FileResponse(path, headers=headers)
 
 
