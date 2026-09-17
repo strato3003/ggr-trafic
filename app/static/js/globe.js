@@ -1,5 +1,6 @@
 (() => {
   const el = document.getElementById("ggr-globe");
+  const mapEl = document.getElementById("ggr-map");
   const blob = document.getElementById("ggr-globe-data");
   if (!el || !blob) return;
 
@@ -18,6 +19,12 @@
   const TX_MAX = 5;
   let txSites = (data.tx_sites || []).filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon)).slice(0, TX_MAX);
   let placingTx = false;
+  let mapMode = "3d";
+  try {
+    if (localStorage.getItem("ggr-view") === "2d") mapMode = "2d";
+  } catch {
+    /* ignore */
+  }
 
   const selEl = document.getElementById("globe-sel");
   const vacsEl = document.getElementById("globe-vacs");
@@ -45,7 +52,10 @@
       /* ignore */
     }
     window.dispatchEvent(new Event("resize"));
-    window.setTimeout(() => window.dispatchEvent(new Event("resize")), 200);
+    window.setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+      if (map) map.invalidateSize();
+    }, 200);
   }
 
   if (kiwiToggle) {
@@ -58,6 +68,8 @@
   } catch {
     /* ignore */
   }
+  document.body.classList.toggle("is-map-2d", mapMode === "2d");
+  document.body.classList.toggle("is-map-3d", mapMode !== "2d");
 
   function parseHash() {
     const h = (location.hash || "#trafic").replace(/^#/, "");
@@ -629,9 +641,14 @@
   function setPlacingTx(on) {
     placingTx = !!on;
     el.classList.toggle("is-placing-tx", placingTx);
+    if (mapEl) mapEl.classList.toggle("is-placing-tx", placingTx);
     if (txPlaceBtn) {
       txPlaceBtn.classList.toggle("is-placing", placingTx);
-      txPlaceBtn.textContent = placingTx ? "Cliquer le globe… (annuler)" : "Poser un QTH sur le globe";
+      txPlaceBtn.textContent = placingTx
+        ? mapMode === "2d"
+          ? "Cliquer la carte… (annuler)"
+          : "Cliquer le globe… (annuler)"
+        : "Poser un QTH sur le globe";
     }
   }
 
@@ -806,9 +823,7 @@
         started: v.started_at,
       });
     }
-    if (Number.isFinite(v.lat) && globe) {
-      globe.pointOfView({ lat: v.lat, lng: v.lon, altitude: 1.6 }, 900);
-    }
+    if (Number.isFinite(v.lat)) lookAt(v.lat, v.lon, 1.6, 900);
   }
 
   function onPointClick(d) {
@@ -853,7 +868,7 @@
           onPointClick({ ...d, inBuddy: skippers.has(d.name) });
         });
       }
-      if (globe) globe.pointOfView({ lat: d.lat, lng: d.lon, altitude: 1.4 }, 800);
+      lookAt(d.lat, d.lon, 1.4, 800);
       return;
     }
     if (d.kind === "kiwi" || d.kind === "buddy_kiwi") {
@@ -866,7 +881,7 @@
           `<p>${km != null ? km + " km" : ""} · SNR HF ${esc(d.snr_hf)} · ${esc(d.free_slots)}/${esc(d.users_max)} places${zone}</p>` +
           (d.url ? `<p><a href="${esc(d.url)}" rel="noreferrer">Ouvrir le KiwiSDR</a></p>` : "")
       );
-      if (globe) globe.pointOfView({ lat: d.lat, lng: d.lng, altitude: 1.5 }, 800);
+      lookAt(d.lat, d.lng || d.lon, 1.5, 800);
       return;
     }
     if (d.kind === "trafic" || d.kind === "vacation") {
@@ -886,14 +901,51 @@
               `<p>Azimut antenne (vrai nord) : <strong>${esc(fmtAz(aim.az))}</strong></p>`
             : "<p class=\"hint\">Centroïde indisponible.</p>")
       );
-      if (globe && Number.isFinite(d.lat)) globe.pointOfView({ lat: d.lat, lng: d.lon, altitude: 1.6 }, 800);
+      lookAt(d.lat, d.lon, 1.6, 800);
       return;
     }
     showSel(`<h3>${esc(d.name || d.label || d.kind)}</h3><p class="meta">${esc(d.fmt || "")}</p>`);
-    if (globe && Number.isFinite(d.lat)) globe.pointOfView({ lat: d.lat, lng: d.lng, altitude: 1.8 }, 800);
+    lookAt(d.lat, d.lng || d.lon, 1.8, 800);
   }
 
   let globe = null;
+  let map = null;
+  let mapLayers = null;
+
+  function altitudeToZoom(alt) {
+    const a = Number(alt);
+    if (!Number.isFinite(a)) return 5;
+    return Math.max(3, Math.min(11, Math.round(9.2 - a * 2.4)));
+  }
+
+  function lookAt(lat, lng, altitude, ms) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (mapMode === "2d" && map) {
+      map.flyTo([lat, lng], altitudeToZoom(altitude), { duration: Math.max(0.2, (ms || 800) / 1000) });
+      return;
+    }
+    if (globe) globe.pointOfView({ lat, lng, altitude: altitude || 1.5 }, ms || 800);
+  }
+
+  function placeTxAt(lat, lng) {
+    if (listedTxSites().length >= TX_MAX) {
+      sayTx("Cinq QTH d’émission au maximum.", false);
+      setPlacingTx(false);
+      return;
+    }
+    txSites = listedTxSites().concat([
+      {
+        label: "Émission " + (listedTxSites().length + 1),
+        lat: Math.round(lat * 1e5) / 1e5,
+        lon: Math.round(lng * 1e5) / 1e5,
+      },
+    ]);
+    setPlacingTx(false);
+    renderTxList();
+    refreshGlobe();
+    sayTx("QTH posé. Sauver pour mémoriser.", true);
+    showTab("setup");
+  }
 
   // Bandeau GGR : or #DEB200 + Montserrat 800 (h1 goldengloberace.com).
   const GGR_BANNER = "GGR 2026 - trafic HF";
@@ -1239,15 +1291,141 @@
     }, BANNER_HOLD_MS + BANNER_INTRO_MS);
   }
 
-  function refreshGlobe() {
-    if (!globe) return;
-    globe.htmlElementsData(points());
-    if (typeof globe.pathsData === "function") globe.pathsData(paths());
-    if (typeof globe.polygonsData === "function") globe.polygonsData([]);
-    if (typeof globe.arcsData === "function") globe.arcsData([]);
+  function refreshMap() {
+    if (!map || !mapLayers || typeof L !== "function") return;
+    mapLayers.clearLayers();
+    paths().forEach((p) => {
+      const latlngs = (p.coords || [])
+        .filter((c) => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]))
+        .map((c) => [c[0], c[1]]);
+      if (latlngs.length < 2) return;
+      L.polyline(latlngs, {
+        color: p.color || "#c9a227",
+        weight: p.stroke != null ? p.stroke : 1,
+        opacity: 0.9,
+        interactive: false,
+      }).addTo(mapLayers);
+    });
+    points()
+      .filter((d) => d.kind !== "ggr_banner")
+      .forEach((d) => {
+        if (!Number.isFinite(d.lat)) return;
+        const lon = Number.isFinite(d.lon) ? d.lon : d.lng;
+        if (!Number.isFinite(lon)) return;
+        const boat = d.kind === "boat";
+        const node = markerEl(d);
+        const m = L.marker([d.lat, lon], {
+          icon: L.divIcon({
+            className: "ggr-leaflet-icon",
+            html: "",
+            iconSize: boat ? [22, 22] : [12, 12],
+            iconAnchor: boat ? [11, 11] : [6, 6],
+          }),
+          interactive: d.kind !== "link_km" && d.kind !== "tx_km",
+          keyboard: false,
+        }).addTo(mapLayers);
+        const host = m.getElement();
+        if (host) {
+          host.innerHTML = "";
+          host.appendChild(node);
+        }
+      });
   }
 
-  function initGlobe() {
+  function refreshGlobe() {
+    if (globe) {
+      globe.htmlElementsData(points());
+      if (typeof globe.pathsData === "function") globe.pathsData(paths());
+      if (typeof globe.polygonsData === "function") globe.polygonsData([]);
+      if (typeof globe.arcsData === "function") globe.arcsData([]);
+    }
+    refreshMap();
+  }
+
+  function pauseGlobe() {
+    if (!globe) return;
+    try {
+      if (typeof globe.pauseAnimation === "function") globe.pauseAnimation();
+      globe.controls().enabled = false;
+    } catch {
+      /* globe.gl */
+    }
+  }
+
+  function resumeGlobe() {
+    if (!globe) return;
+    try {
+      if (typeof globe.resumeAnimation === "function") globe.resumeAnimation();
+      globe.controls().enabled = true;
+    } catch {
+      /* globe.gl */
+    }
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  function initMap() {
+    if (!mapEl || map || typeof L !== "function") return;
+    const dest = fleetView();
+    map = L.map(mapEl, {
+      zoomControl: true,
+      attributionControl: false,
+      worldCopyJump: true,
+    });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+    }).addTo(map);
+    map.setView([dest.lat, dest.lng], altitudeToZoom(dest.altitude));
+    mapLayers = L.layerGroup().addTo(map);
+    map.on("click", (ev) => {
+      if (!placingTx || !ev || !ev.latlng) return;
+      placeTxAt(ev.latlng.lat, ev.latlng.lng);
+    });
+    refreshMap();
+  }
+
+  function syncModeButtons() {
+    document.querySelectorAll(".map-mode [data-map-mode]").forEach((btn) => {
+      const on = btn.getAttribute("data-map-mode") === mapMode;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function applyMapMode(mode, opts) {
+    const boot = !!(opts && opts.boot);
+    const next = mode === "2d" ? "2d" : "3d";
+    const first3d = next === "3d" && !globe;
+    mapMode = next;
+    document.body.classList.toggle("is-map-2d", mapMode === "2d");
+    document.body.classList.toggle("is-map-3d", mapMode !== "2d");
+    try {
+      localStorage.setItem("ggr-view", mapMode);
+    } catch {
+      /* ignore */
+    }
+    syncModeButtons();
+    if (mapMode === "2d") {
+      if (!map) initMap();
+      else {
+        map.invalidateSize();
+        refreshMap();
+      }
+      pauseGlobe();
+      if (boot && introAboutArmed && parseHash()[0] === "trafic") {
+        window.setTimeout(() => {
+          if (!introAboutArmed) return;
+          showTab("apropos");
+          setPanelOpen(true);
+        }, 900);
+      }
+      return;
+    }
+    if (first3d) initGlobe({ intro: boot });
+    else resumeGlobe();
+  }
+
+  function initGlobe(opts) {
+    const intro = !opts || opts.intro !== false;
     if (typeof Globe !== "function") {
       showSel("<p class=\"err\">Globe 3D indisponible (WebGL / script). Les tableaux restent utilisables plus bas.</p>");
       return;
@@ -1320,19 +1498,24 @@
     }
 
     const dest = fleetView();
-    globe.pointOfView({ lat: 8, lng: dest.lng + 40, altitude: 2.7 }, 0);
+    if (intro) {
+      globe.pointOfView({ lat: 8, lng: dest.lng + 40, altitude: 2.7 }, 0);
+      scheduleIntroCamera(globe, dest);
+    } else {
+      globe.pointOfView(dest, 0);
+    }
     globe.controls().autoRotate = false;
     globe.controls().enableDamping = true;
     tuneOsmTiles(globe);
-    scheduleIntroCamera(globe, dest);
-
-    const bootBanner = () => startGgrEquatorBanner(globe);
-    if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);
-    const afterFont = () => bootBanner();
-    if (document.fonts && document.fonts.load) {
-      document.fonts.load("800 200px Montserrat").then(afterFont, afterFont);
-    } else {
-      afterFont();
+    if (intro) {
+      const bootBanner = () => startGgrEquatorBanner(globe);
+      if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);
+      const afterFont = () => bootBanner();
+      if (document.fonts && document.fonts.load) {
+        document.fonts.load("800 200px Montserrat").then(afterFont, afterFont);
+      } else {
+        afterFont();
+      }
     }
 
     const size = () => {
@@ -1355,23 +1538,7 @@
         if (!placingTx) return;
         const pos = clickLatLng(a, b);
         if (!pos) return;
-        if (listedTxSites().length >= TX_MAX) {
-          sayTx("Cinq QTH d’émission au maximum.", false);
-          setPlacingTx(false);
-          return;
-        }
-        txSites = listedTxSites().concat([
-          {
-            label: "Émission " + (listedTxSites().length + 1),
-            lat: Math.round(pos.lat * 1e5) / 1e5,
-            lon: Math.round(pos.lng * 1e5) / 1e5,
-          },
-        ]);
-        setPlacingTx(false);
-        renderTxList();
-        refreshGlobe();
-        sayTx("QTH posé. Sauver pour mémoriser.", true);
-        showTab("setup");
+        placeTxAt(pos.lat, pos.lng);
       });
     }
     } catch (err) {
@@ -1462,7 +1629,7 @@
         return;
       }
       setPlacingTx(true);
-      sayTx("Cliquer le globe pour poser un QTH.", true);
+      sayTx("Cliquer la carte ou le globe pour poser un QTH.", true);
     });
   }
 
@@ -1508,7 +1675,10 @@
   renderVacList();
   renderTxList();
 
-  initGlobe();
+  document.querySelectorAll(".map-mode [data-map-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => applyMapMode(btn.getAttribute("data-map-mode")));
+  });
+  applyMapMode(mapMode, { boot: true });
 
   const traficQ = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
   if (traficQ) {

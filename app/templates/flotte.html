@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{% endblock %}
 {% block body_class %}globe-page{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+{% endblock %}
 {% block content %}
 <div class="globe-app">
   <div class="globe-stage">
@@ -8,6 +11,11 @@
       <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
     </p>
     <div id="ggr-globe" class="ggr-globe" role="region" aria-label="Globe 3D flotte GGR et KiwiSDR"></div>
+    <div id="ggr-map" class="ggr-map-2d" role="region" aria-label="Carte 2D flotte GGR et KiwiSDR"></div>
+    <div class="map-mode" role="group" aria-label="Vue 2D ou 3D">
+      <button type="button" data-map-mode="2d" aria-pressed="false">2D</button>
+      <button type="button" data-map-mode="3d" class="is-on" aria-pressed="true">3D</button>
+    </div>
     <p class="globe-osm-copy">© <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a></p>
   </div>
   <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="true" aria-controls="globe-dock" aria-label="Replier le panneau" title="Replier">
@@ -43,7 +51,7 @@
     </div>
 
     <div class="kiwi-ident-sel" id="globe-sel">
-      <p class="hint">Cliquer un bateau, un Kiwi ou un QTH. Molette pour zoomer. Replier le panneau si besoin.</p>
+      <p class="hint">Cliquer un bateau, un Kiwi ou un QTH. Molette pour zoomer. Vue 2D ou 3D en haut à gauche.</p>
     </div>
 
     <div class="kiwi-page" data-page="trafic" id="page-trafic">
@@ -84,7 +92,7 @@
         {% if buddy_aim and buddy_aim.warning %}<p class="err">{{ buddy_aim.warning }}</p>{% endif %}
       </div>
       {% endif %}
-      <p class="hint">QTH d’émission : poser un point sur le globe, puis sauver.</p>
+      <p class="hint">QTH d’émission : poser un point sur la carte ou le globe, puis sauver.</p>
       <ul class="tx-list" id="globe-tx-list"></ul>
       <p class="settings__actions">
         <button type="button" class="btn" id="globe-tx-place">Poser un QTH sur le globe</button>
@@ -158,8 +166,9 @@
 } | tojson }}</script>
 {% endblock %}
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi14"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi14"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi14"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi15"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi15"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi15"></script>
 {% endblock %}

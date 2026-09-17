@@ -140,7 +140,61 @@ h2 { font-size: 1.15rem; margin-top: 2rem; }
   overflow: hidden;
 }
 .ggr-globe { width: 100%; height: 100%; }
-.ggr-globe.is-placing-tx { cursor: crosshair; }
+.ggr-map-2d {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  background: #071019;
+}
+.ggr-globe { position: relative; z-index: 1; }
+body.is-map-2d .ggr-globe { visibility: hidden; pointer-events: none; }
+body.is-map-3d .ggr-map-2d { visibility: hidden; pointer-events: none; }
+.ggr-leaflet-icon {
+  background: none !important;
+  border: none !important;
+  overflow: visible !important;
+}
+.map-mode {
+  position: absolute;
+  top: 2.55rem;
+  left: 0.85rem;
+  z-index: 6;
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(8, 22, 36, 0.88);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.map-mode button {
+  margin: 0;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.map-mode button.is-on {
+  color: var(--bg);
+  background: var(--brass);
+}
+.ggr-map-2d.leaflet-container { background: #071019; font-family: var(--sans); }
+.ggr-map-2d .leaflet-pane { z-index: 2; }
+.ggr-map-2d .leaflet-map-pane { z-index: 2; }
+.ggr-map-2d .leaflet-tile-pane { z-index: 2; }
+.ggr-map-2d .leaflet-overlay-pane { z-index: 3; }
+.ggr-map-2d .leaflet-marker-pane { z-index: 4; }
+.ggr-map-2d .leaflet-tooltip-pane,
+.ggr-map-2d .leaflet-popup-pane { z-index: 5; }
+.ggr-map-2d .leaflet-control-container { z-index: 6; }
+.ggr-map-2d .leaflet-top.leaflet-left { top: 4.8rem; }
+.ggr-globe.is-placing-tx,
+.ggr-map-2d.is-placing-tx { cursor: crosshair; }
 body.globe-page {
   height: 100vh;
   overflow: hidden;
@@ -401,7 +455,7 @@ body.kiwi-panel-off .kiwi-toggle__arr {
 }
 .globe-skipper-tip {
   position: absolute;
-  z-index: 12;
+  z-index: 25;
   width: 16.8rem;
   max-width: calc(100% - 1.4rem);
   margin: 0;
@@ -965,7 +1019,8 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   body.globe-page .wrap { height: 100vh; }
   .globe-app { height: 100vh; }
   .globe-app .globe-stage { position: absolute; inset: 0; height: 100%; }
-  .globe-app .ggr-globe { height: 100%; }
+  .globe-app .ggr-globe,
+  .globe-app .ggr-map-2d { height: 100%; }
   .globe-rail {
     top: var(--rail-gap);
     right: var(--rail-gap);
