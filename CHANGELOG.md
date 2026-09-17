@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.0.0 — 2026-09-17
+
+- Première version de production : bulletin 14.135 MHz USB près de l’émetteur (F6KUF, puis Tahiti après Bonne-Espérance) et près de la flotte ; ACK 16.551 / 12.418 MHz ; buddy call 4483 / 6516 kHz.
+- Globe 3D OSM au démarrage (sans panneau), carte 2D OSM commutée, marqueurs bateaux et Kiwi ; À propos après l’intro.
+- Déploiement k3s (`ggr-trafic`), métriques Prometheus, replay des archives.
+
 ## 0.3.9 — 2026-09-17
 
 - Carte 2D : initialiser Leaflet (`L.map`) — le commutateur 2D n’affichait qu’un fond vide.
