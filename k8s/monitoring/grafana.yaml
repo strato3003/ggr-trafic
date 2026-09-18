@@ -281,10 +281,10 @@ data:
           "options": {
             "basemap": {
               "config": {
-                "attribution": "&copy; OpenStreetMap contributors &copy; CARTO",
-                "url": "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+                "attribution": "Tiles © Esri",
+                "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
               },
-              "name": "CARTO Dark",
+              "name": "Esri Street",
               "type": "xyz"
             },
             "controls": {
@@ -353,7 +353,7 @@ data:
       "timezone": "browser",
       "title": "k3s + GGR Trafic",
       "uid": "k3s-ggr-trafic",
-      "version": 2
+      "version": 3
     }
 ---
 apiVersion: apps/v1
