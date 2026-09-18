@@ -279,7 +279,11 @@ data:
             }
           ],
           "options": {
-            "basemap": { "name": "OpenStreetMap", "type": "osm" },
+            "basemap": {
+              "config": { "theme": "auto", "showLabels": true },
+              "name": "CARTO",
+              "type": "carto"
+            },
             "controls": {
               "mouseWheelZoom": true,
               "showAttribution": true,
@@ -398,10 +402,10 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 96Mi
+              memory: 128Mi
             limits:
               cpu: 300m
-              memory: 256Mi
+              memory: 384Mi
           readinessProbe:
             httpGet:
               path: /api/health
