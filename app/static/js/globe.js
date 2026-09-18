@@ -39,6 +39,14 @@
   let txSites = (data.tx_sites || []).filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon)).slice(0, TX_MAX);
   let placingTx = false;
   let mapMode = "3d";
+  let metareaFc = null;
+  let metareaOn = true;
+  try {
+    metareaOn = localStorage.getItem("ggr-metarea") !== "off";
+  } catch {
+    metareaOn = true;
+  }
+  const metareaBtn = document.getElementById("ggr-metarea");
 
   const selEl = document.getElementById("globe-sel");
   const vacsEl = document.getElementById("globe-vacs");
@@ -325,6 +333,7 @@
     kiwiKmPoints().forEach((p) => rows.push(p));
     txKmPoints().forEach((p) => rows.push(p));
     htmlBannerPoints().forEach((p) => rows.push(p));
+    metareaLabelPoints().forEach((p) => rows.push(p));
     return rows;
   }
 
@@ -422,7 +431,17 @@
     wrap.style.cssText =
       d.kind === "boat"
         ? "width:22px;height:22px;margin:0;padding:0;overflow:visible;pointer-events:auto;"
-        : "width:12px;height:12px;margin:0;padding:0;overflow:visible;";
+        : d.kind === "metarea"
+          ? "width:auto;height:auto;margin:0;padding:0;overflow:visible;pointer-events:none;"
+          : "width:12px;height:12px;margin:0;padding:0;overflow:visible;";
+    if (d.kind === "metarea") {
+      const lab = document.createElement("span");
+      lab.className = "globe-mark__metarea";
+      lab.textContent = d.roman || d.name || "";
+      wrap.appendChild(lab);
+      wrap.title = d.name || "";
+      return wrap;
+    }
     if (d.kind === "link_km" || d.kind === "tx_km") {
       const km = document.createElement("span");
       km.className = "globe-mark__km";
@@ -992,8 +1011,12 @@
   let bannerIntroDone = false;
   let bannerWatchOn = false;
 
+  function applyBannerVisibility() {
+    if (bannerBelt && bannerBelt.mesh) bannerBelt.mesh.visible = !metareaOn;
+  }
+
   function htmlBannerPoints() {
-    if (!bannerHtml.on) return [];
+    if (!bannerHtml.on || metareaOn) return [];
     const n = 8;
     const rows = [];
     for (let i = 0; i < n; i++) {
@@ -1190,6 +1213,7 @@
     const mesh = new gfx.Mesh(geo, mat);
     mesh.name = "ggr-eq-banner";
     mesh.renderOrder = 4;
+    mesh.visible = !metareaOn;
     scene.add(mesh);
     return { mesh, mat };
   }
@@ -1323,6 +1347,115 @@
     }, BANNER_HOLD_MS + BANNER_INTRO_MS);
   }
 
+  function hexToRgba(hex, a) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length !== 6) return "rgba(201,162,39," + a + ")";
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+  }
+
+  function metareaPolygons() {
+    if (!metareaOn || !metareaFc) return [];
+    return metareaFc.features || [];
+  }
+
+  function metareaLabelPoints() {
+    if (!metareaOn || !metareaFc) return [];
+    return (metareaFc.features || [])
+      .map((f) => {
+        const p = f.properties || {};
+        if (!Number.isFinite(p.label_lat) || !Number.isFinite(p.label_lon)) return null;
+        return {
+          lat: p.label_lat,
+          lon: p.label_lon,
+          lng: p.label_lon,
+          kind: "metarea",
+          roman: p.roman || p.name,
+          name: "METAREA " + (p.roman || p.name) + " — " + (p.coordinator || ""),
+          coordinator: p.coordinator,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function paintMetareaMap() {
+    if (!map || typeof L === "undefined") return;
+    if (map.metareaLayer) {
+      map.removeLayer(map.metareaLayer);
+      map.metareaLayer = null;
+    }
+    if (!metareaOn || !metareaFc) return;
+    if (typeof map.getPane === "function" && !map.getPane("metarea")) {
+      map.createPane("metarea");
+      map.getPane("metarea").style.zIndex = 350;
+    }
+    const grp = L.layerGroup();
+    L.geoJSON(metareaFc, {
+      pane: "metarea",
+      style: (feat) => {
+        const p = (feat && feat.properties) || {};
+        return {
+          color: p.stroke || "#1a1a1a",
+          weight: 1.15,
+          fillColor: p.fill || "#c9a227",
+          fillOpacity: 0.38,
+          opacity: 0.92,
+        };
+      },
+      onEachFeature: (feat, layer) => {
+        const p = (feat && feat.properties) || {};
+        const t = "METAREA " + (p.roman || p.name || "") + " — " + (p.coordinator || "");
+        layer.bindTooltip(t, { sticky: true, opacity: 0.92 });
+        layer.on("click", () => {
+          if (placingTx) return;
+          showSel(
+            '<p class="badge">METAREA</p><h3>' +
+              esc(p.roman || p.name || "") +
+              "</h3><p class=\"meta\">" +
+              esc(p.coordinator || "") +
+              "</p>"
+          );
+        });
+      },
+    }).addTo(grp);
+    (metareaFc.features || []).forEach((f) => {
+      const p = f.properties || {};
+      if (!Number.isFinite(p.label_lat) || !Number.isFinite(p.label_lon)) return;
+      L.marker([p.label_lat, p.label_lon], {
+        pane: "metarea",
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: "ggr-leaflet-icon ggr-metarea-lab",
+          html: "<span>" + esc(p.roman || p.name || "") + "</span>",
+          iconSize: [52, 18],
+          iconAnchor: [26, 9],
+        }),
+      }).addTo(grp);
+    });
+    grp.addTo(map);
+    map.metareaLayer = grp;
+  }
+
+  function setMetarea(on) {
+    metareaOn = !!on;
+    try {
+      localStorage.setItem("ggr-metarea", metareaOn ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
+    if (metareaBtn) {
+      metareaBtn.classList.toggle("is-on", metareaOn);
+      metareaBtn.setAttribute("aria-pressed", metareaOn ? "true" : "false");
+    }
+    applyBannerVisibility();
+    if (globe && typeof globe.polygonsData === "function") globe.polygonsData(metareaPolygons());
+    if (globe) globe.htmlElementsData(points());
+    paintMetareaMap();
+  }
+
   function refreshMap() {
     if (!map || !mapLayers || typeof L === "undefined" || typeof L.marker !== "function") return;
     mapLayers.clearLayers();
@@ -1339,7 +1472,7 @@
       }).addTo(mapLayers);
     });
     points()
-      .filter((d) => d.kind !== "ggr_banner")
+      .filter((d) => d.kind !== "ggr_banner" && d.kind !== "metarea")
       .forEach((d) => {
         if (!Number.isFinite(d.lat)) return;
         const lon = Number.isFinite(d.lon) ? d.lon : d.lng;
@@ -1373,7 +1506,7 @@
     if (globe) {
       globe.htmlElementsData(points());
       if (typeof globe.pathsData === "function") globe.pathsData(paths());
-      if (typeof globe.polygonsData === "function") globe.polygonsData([]);
+      if (typeof globe.polygonsData === "function") globe.polygonsData(metareaPolygons());
       if (typeof globe.arcsData === "function") globe.arcsData([]);
     }
     refreshMap();
@@ -1419,12 +1552,17 @@
       maxZoom: 19,
     }).addTo(map);
     map.setView([dest.lat, dest.lng], altitudeToZoom(dest.altitude));
+    if (typeof map.getPane === "function" && !map.getPane("metarea")) {
+      map.createPane("metarea");
+      map.getPane("metarea").style.zIndex = 350;
+    }
     mapLayers = L.layerGroup().addTo(map);
     map.on("click", (ev) => {
       if (!placingTx || !ev || !ev.latlng) return;
       placeTxAt(ev.latlng.lat, ev.latlng.lng);
     });
     refreshMap();
+    paintMetareaMap();
     window.setTimeout(() => {
       if (!map) return;
       map.invalidateSize();
@@ -1532,7 +1670,29 @@
     }
 
     if (typeof globe.polygonsData === "function") {
-      globe.polygonsData([]);
+      globe.polygonsData(metareaPolygons());
+      if (typeof globe.polygonGeoJsonGeometry === "function") globe.polygonGeoJsonGeometry((d) => d.geometry);
+      if (typeof globe.polygonCapColor === "function")
+        globe.polygonCapColor((d) => hexToRgba((d.properties && d.properties.fill) || "#c9a227", 0.4));
+      if (typeof globe.polygonSideColor === "function") globe.polygonSideColor(() => "rgba(8,16,24,0.18)");
+      if (typeof globe.polygonStrokeColor === "function")
+        globe.polygonStrokeColor((d) => (d.properties && d.properties.stroke) || "#1a1a1a");
+      if (typeof globe.polygonAltitude === "function") globe.polygonAltitude(0.003);
+      if (typeof globe.polygonCapCurvatureResolution === "function") globe.polygonCapCurvatureResolution(4);
+      if (typeof globe.onPolygonClick === "function") {
+        globe.onPolygonClick((poly) => {
+          if (placingTx) return;
+          const p = poly && poly.properties;
+          if (!p) return;
+          showSel(
+            '<p class="badge">METAREA</p><h3>' +
+              esc(p.roman || p.name || "") +
+              "</h3><p class=\"meta\">" +
+              esc(p.coordinator || "") +
+              "</p>"
+          );
+        });
+      }
     }
 
     if (typeof globe.htmlOcclude === "function") {
@@ -1720,6 +1880,19 @@
   document.querySelectorAll(".map-mode [data-map-mode]").forEach((btn) => {
     btn.addEventListener("click", () => applyMapMode(btn.getAttribute("data-map-mode")));
   });
+  if (metareaBtn) {
+    metareaBtn.classList.toggle("is-on", metareaOn);
+    metareaBtn.setAttribute("aria-pressed", metareaOn ? "true" : "false");
+    metareaBtn.addEventListener("click", () => setMetarea(!metareaOn));
+  }
+  fetch("/static/geo/metareas.json")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((fc) => {
+      if (!fc || fc.type !== "FeatureCollection") return;
+      metareaFc = fc;
+      setMetarea(metareaOn);
+    })
+    .catch(() => {});
   applyMapMode(mapMode, { boot: true });
 
   const traficQ = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");

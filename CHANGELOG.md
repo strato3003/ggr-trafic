@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.1.0 — 2026-09-18
+
+- Globe 2D/3D : calque METAREA (limites OHI, teintes OMM), découpé sur l’océan pour suivre les côtes ; le bandeau GGR est masqué tant que le calque est allumé.
+
 ## 1.0.9 — 2026-09-18
 
 - Mixer : PNG waterfall via `fetch` (cache + préchargement liste Trafic), sans WAV ni FFT ; tuiles OSM sur un pool séparé pour ne plus bloquer `/media`.

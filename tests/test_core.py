@@ -1129,3 +1129,57 @@ def test_visitors_client_ip_leftmost_public():
     assert visitors.is_page_visit("GET", "/trafic/2026-09-16T1759Z")
     assert not visitors.is_page_visit("GET", "/metrics")
     assert not visitors.is_page_visit("POST", "/")
+
+
+def _pip(lon: float, lat: float, ring: list) -> bool:
+    inside = False
+    n = len(ring)
+    if n < 4:
+        return False
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi + 1e-18) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _metarea_has(feat: dict, lat: float, lon: float) -> bool:
+    geom = feat["geometry"]
+    polys = geom["coordinates"] if geom["type"] == "MultiPolygon" else [geom["coordinates"]]
+    for poly in polys:
+        if not _pip(lon, lat, poly[0]):
+            continue
+        if any(_pip(lon, lat, hole) for hole in poly[1:]):
+            continue
+        return True
+    return False
+
+
+def test_metareas_geojson_iho_omm():
+    import json
+    from pathlib import Path
+
+    raw = json.loads((Path("app/static/geo/metareas.json")).read_text(encoding="utf-8"))
+    assert raw["type"] == "FeatureCollection"
+    feats = raw["features"]
+    names = [f["properties"]["name"] for f in feats]
+    assert names == [
+        "I", "II", "III", "IV", "V", "VI", "VII", "VIII-N", "VIII-S", "IX", "X", "XI",
+        "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI",
+    ]
+    by = {f["properties"]["name"]: f for f in feats}
+    assert by["II"]["properties"]["coordinator"] == "France"
+    assert by["XVI"]["properties"]["coordinator"] == "Pérou"
+    assert by["VIII-S"]["properties"]["roman"] == "VIII(S)"
+    # Géométries OHI découpées sur l’océan : points en mer, pas sur les continents.
+    assert _metarea_has(by["I"], 50.5, -8.0)
+    assert _metarea_has(by["II"], 45.0, -10.0)
+    assert _metarea_has(by["III"], 37.5, 16.3)
+    assert _metarea_has(by["X"], -32.0, 114.5)
+    assert _metarea_has(by["XV"], -33.4, -75.0)
+    assert not _metarea_has(by["I"], 45.0, -10.0)
+    assert not _metarea_has(by["II"], 46.50, -1.79)
+    assert not _metarea_has(by["II"], 12.0, 8.0)
