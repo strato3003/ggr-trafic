@@ -22,7 +22,7 @@
   <h2>Fonctionnement</h2>
   <ul>
     <li>Centroïde des skippers suivis via le tracker Yellowbrick GGR 2026.</li>
-    <li>Carte 2D ou globe 3D (commutateur) : flotte, Kiwi, QTH d’émission. Calque <strong>METAREA</strong> (zones météo maritimes OMM / OHI). Le panneau droit (Trafic / Setup / À propos) se replie comme un KiwiSDR.</li>
+    <li>Carte 2D ou globe 3D (commutateur) : flotte, Kiwi, QTH d’émission. Calque <strong>METAREA</strong> (limites OMM / OHI) et calque <strong>sous-zones</strong> (découpages haute mer des METAREA occupées par la flotte). L’onglet METAREA suit tout seul le bulletin WWMIWS de la zone où sont les bateaux — avis haute mer, et bulletin côtier (Las Palmas, Tarifa, Corsen…) seulement si la flotte est dans la zone de service. Le texte proposé à l’antenne est un <strong>condensé automatique</strong> : l’OM doit le vérifier sur le bulletin officiel. Le panneau droit se replie comme un KiwiSDR.</li>
     <li>Bulletin 14.135 MHz : Kiwi près de F6KUF (ou Tahiti après le cap de Bonne-Espérance) et Kiwi près des skippers cochés, VFO calé sur 14.135000 MHz.</li>
     <li>Screencast de l’interface SDR (waterfall / VFO) muxé avec l’audio USB 12 kHz.</li>
     <li>Replay multipistes : volume, mute et timeline TU.</li>
@@ -34,6 +34,7 @@
     <li>Opérateurs KiwiSDR — récepteurs HF publics.</li>
     <li>Fonds de carte du globe : © <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a>.</li>
     <li>Limites METAREA : Organisation hydrographique internationale (Iridium SafetyCast), découpées sur l’océan (côtes Natural Earth). Teintes d’après la carte OMM <em>Limits of METAREAS</em>, mai 2021.</li>
+    <li>Bulletins haute mer : WWMIWS / EGC, METAREA détectée d’après la position de toute la flotte (II aujourd’hui, puis VII, VIII-S, X, XIV, XV sur la route du GGR). Sous-zones intérieures encodées pour la METAREA II (FQNT52 LFPW, Météo-France). Avis WONT50 retenus s’ils touchent une sous-zone occupée ou voisine ; sinon mention qu’un avis existe hors zone. Bulletins côtiers de la page WWMIWS (Las Palmas, Tarifa, et plus tard FQZA30, etc.) seulement si c’est pertinent, sans doublon de zone ni de texte d’un bulletin à l’autre. Condensé automatique : à recouper avec l’officiel avant lecture.</li>
     <li>Liste des récepteurs : rx.linkfanel.net (agrégation kiwisdr.com).</li>
   </ul>
   <p>Licence MIT — code source du dépôt <code>ggr-trafic</code>.</p>

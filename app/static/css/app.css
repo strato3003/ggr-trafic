@@ -237,25 +237,45 @@ body.is-map-3d .ggr-map-2d {
   background: var(--brass);
 }
 .map-layer {
-  position: absolute;
-  top: 4.15rem;
-  left: 0.85rem;
-  z-index: 6;
   margin: 0;
   padding: 0.22rem 0.55rem;
   font-size: 0.72rem;
   letter-spacing: 0.06em;
   color: var(--muted);
-  background: rgba(8, 22, 36, 0.88);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.map-layers {
+  position: absolute;
+  top: 4.15rem;
+  left: 0.85rem;
+  z-index: 6;
+  display: flex;
+  align-items: stretch;
+  margin: 0;
   border: 1px solid var(--line);
   border-radius: 6px;
-  cursor: pointer;
+  overflow: hidden;
+  background: rgba(8, 22, 36, 0.88);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.map-layers__sep {
+  display: flex;
+  align-items: center;
+  padding: 0 0.12rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  opacity: 0.7;
+  pointer-events: none;
 }
 .map-layer.is-on {
   color: var(--bg);
   background: var(--brass);
-  border-color: var(--brass);
+}
+.map-layer--sub.is-on {
+  background: #c45c26;
+  color: #f4efe4;
 }
 .globe-mark--metarea {
   width: auto !important;
@@ -285,7 +305,7 @@ body.is-map-3d .ggr-map-2d {
 .ggr-map-2d .leaflet-tooltip-pane,
 .ggr-map-2d .leaflet-popup-pane { z-index: 5; }
 .ggr-map-2d .leaflet-control-container { z-index: 6; }
-.ggr-map-2d .leaflet-top.leaflet-left { top: 6.2rem; }
+.ggr-map-2d .leaflet-top.leaflet-left { top: 5.55rem; }
 .ggr-globe.is-placing-tx,
 .ggr-map-2d.is-placing-tx { cursor: crosshair; }
 body.globe-page {
@@ -453,9 +473,9 @@ body.kiwi-panel-off .kiwi-toggle__arr {
 .kiwi-tabs button {
   flex: 1;
   font-family: var(--sans);
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
   background: transparent;
@@ -504,6 +524,51 @@ body.kiwi-panel-off .kiwi-toggle__arr {
 .kiwi-status { margin: 0 0 0.55rem; font-size: 0.82rem; }
 .kiwi-about { font-size: 0.88rem; }
 .kiwi-about h1 { font-size: 1.12rem; margin-top: 0; }
+.kiwi-metarea { font-size: 0.88rem; }
+.kiwi-metarea h1 { font-size: 1.08rem; margin: 0 0 0.45rem; }
+.kiwi-metarea h2 { font-size: 0.92rem; margin: 0.95rem 0 0.35rem; }
+.kiwi-metarea .meta { margin: 0.15rem 0; }
+.kiwi-metarea .ggr-metarea-om {
+  margin: 0 0 0.7rem;
+  padding: 0.45rem 0.55rem;
+  border-left: 3px solid var(--brass, #c4a35a);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.kiwi-metarea .ggr-metarea-lecture p {
+  max-width: none;
+  line-height: 1.5;
+  margin: 0.35rem 0;
+  padding: 0;
+}
+.kiwi-metarea .lecture--head {
+  color: var(--foam);
+}
+.kiwi-metarea .lecture--warn {
+  color: #e8a090;
+}
+.kiwi-metarea .lecture--warn-out {
+  color: #d49a8c;
+}
+.kiwi-metarea .lecture--syn {
+  color: #9ec9e8;
+}
+.kiwi-metarea .lecture--zone {
+  color: #8fd4ab;
+}
+.kiwi-metarea .lecture--out {
+  color: #e0c878;
+}
+.kiwi-metarea .lecture--coast {
+  color: #e0a070;
+  font-weight: 600;
+}
+.kiwi-metarea .lecture--coast-zone {
+  color: #d4b08a;
+}
+.kiwi-metarea .lecture--empty {
+  color: var(--muted);
+}
 .kiwi-page .settings { max-width: none; margin: 0.75rem 0 0; }
 .kiwi-page .settings fieldset { padding: 0.7rem 0.75rem 0.8rem; }
 .globe-rail__brand .logo { font-size: 1.12rem; }

@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.1 — 2026-09-19
+
+- Globe : calque **METAREA / Sous-zone** ; l’onglet METAREA suit le bulletin WWMIWS de la zone occupée par toute la flotte (II aujourd’hui, puis VII, VIII-S, X, XIV, XV).
+- Lecture OM : condensé automatique (avis voisins, côtiers seulement si la zone de service recouvre la flotte, sans doublon de zone ni de texte) ; l’OM doit le recouper avec l’officiel.
+
 ## 1.1.0 — 2026-09-18
 
 - Globe 2D/3D : calque METAREA (limites OHI, teintes OMM), découpé sur l’océan pour suivre les côtes ; le bandeau GGR est masqué tant que le calque est allumé.

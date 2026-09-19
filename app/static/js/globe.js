@@ -47,6 +47,15 @@
     metareaOn = true;
   }
   const metareaBtn = document.getElementById("ggr-metarea");
+  let subzoneFc = null;
+  let subzonesOn = true;
+  try {
+    subzonesOn = localStorage.getItem("ggr-subzones") !== "off";
+  } catch {
+    subzonesOn = true;
+  }
+  const subzoneBtn = document.getElementById("ggr-subzones");
+  let metareaSnap = null;
 
   const selEl = document.getElementById("globe-sel");
   const vacsEl = document.getElementById("globe-vacs");
@@ -91,6 +100,7 @@
   function parseHash() {
     const h = (location.hash || "#trafic").replace(/^#/, "");
     if (h === "setup") return "setup";
+    if (h === "metarea") return "metarea";
     if (h === "apropos" || h === "a-propos") return "apropos";
     return "trafic";
   }
@@ -334,6 +344,7 @@
     txKmPoints().forEach((p) => rows.push(p));
     htmlBannerPoints().forEach((p) => rows.push(p));
     metareaLabelPoints().forEach((p) => rows.push(p));
+    subzoneLabelPoints().forEach((p) => rows.push(p));
     return rows;
   }
 
@@ -431,10 +442,10 @@
     wrap.style.cssText =
       d.kind === "boat"
         ? "width:22px;height:22px;margin:0;padding:0;overflow:visible;pointer-events:auto;"
-        : d.kind === "metarea"
+        : d.kind === "metarea" || d.kind === "subzone"
           ? "width:auto;height:auto;margin:0;padding:0;overflow:visible;pointer-events:none;"
           : "width:12px;height:12px;margin:0;padding:0;overflow:visible;";
-    if (d.kind === "metarea") {
+    if (d.kind === "metarea" || d.kind === "subzone") {
       const lab = document.createElement("span");
       lab.className = "globe-mark__metarea";
       lab.textContent = d.roman || d.name || "";
@@ -1357,8 +1368,10 @@
   }
 
   function metareaPolygons() {
-    if (!metareaOn || !metareaFc) return [];
-    return metareaFc.features || [];
+    const rows = [];
+    if (metareaOn && metareaFc) rows.push(...(metareaFc.features || []));
+    if (subzonesOn && subzoneFc) rows.push(...(subzoneFc.features || []));
+    return rows;
   }
 
   function metareaLabelPoints() {
@@ -1380,63 +1393,129 @@
       .filter(Boolean);
   }
 
+  function subzoneLabelPoints() {
+    if (!subzonesOn || !subzoneFc) return [];
+    return (subzoneFc.features || [])
+      .map((f) => {
+        const p = f.properties || {};
+        if (!Number.isFinite(p.label_lat) || !Number.isFinite(p.label_lon)) return null;
+        return {
+          lat: p.label_lat,
+          lon: p.label_lon,
+          lng: p.label_lon,
+          kind: "subzone",
+          roman: p.name,
+          name: p.name,
+        };
+      })
+      .filter(Boolean);
+  }
+
   function paintMetareaMap() {
     if (!map || typeof L === "undefined") return;
     if (map.metareaLayer) {
       map.removeLayer(map.metareaLayer);
       map.metareaLayer = null;
     }
-    if (!metareaOn || !metareaFc) return;
     if (typeof map.getPane === "function" && !map.getPane("metarea")) {
       map.createPane("metarea");
       map.getPane("metarea").style.zIndex = 350;
     }
     const grp = L.layerGroup();
-    L.geoJSON(metareaFc, {
-      pane: "metarea",
-      style: (feat) => {
-        const p = (feat && feat.properties) || {};
-        return {
-          color: p.stroke || "#1a1a1a",
-          weight: 1.15,
-          fillColor: p.fill || "#c9a227",
-          fillOpacity: 0.38,
-          opacity: 0.92,
-        };
-      },
-      onEachFeature: (feat, layer) => {
-        const p = (feat && feat.properties) || {};
-        const t = "METAREA " + (p.roman || p.name || "") + " — " + (p.coordinator || "");
-        layer.bindTooltip(t, { sticky: true, opacity: 0.92 });
-        layer.on("click", () => {
-          if (placingTx) return;
-          showSel(
-            '<p class="badge">METAREA</p><h3>' +
-              esc(p.roman || p.name || "") +
-              "</h3><p class=\"meta\">" +
-              esc(p.coordinator || "") +
-              "</p>"
-          );
-        });
-      },
-    }).addTo(grp);
-    (metareaFc.features || []).forEach((f) => {
-      const p = f.properties || {};
-      if (!Number.isFinite(p.label_lat) || !Number.isFinite(p.label_lon)) return;
-      L.marker([p.label_lat, p.label_lon], {
+    if (metareaOn && metareaFc) {
+      L.geoJSON(metareaFc, {
         pane: "metarea",
-        interactive: false,
-        keyboard: false,
-        icon: L.divIcon({
-          className: "ggr-leaflet-icon ggr-metarea-lab",
-          html: "<span>" + esc(p.roman || p.name || "") + "</span>",
-          iconSize: [52, 18],
-          iconAnchor: [26, 9],
-        }),
+        style: (feat) => {
+          const p = (feat && feat.properties) || {};
+          return {
+            color: p.stroke || "#1a1a1a",
+            weight: 1.15,
+            fillColor: p.fill || "#c9a227",
+            fillOpacity: 0.38,
+            opacity: 0.92,
+          };
+        },
+        onEachFeature: (feat, layer) => {
+          const p = (feat && feat.properties) || {};
+          const t = "METAREA " + (p.roman || p.name || "") + " — " + (p.coordinator || "");
+          layer.bindTooltip(t, { sticky: true, opacity: 0.92 });
+          layer.on("click", () => {
+            if (placingTx) return;
+            showSel(
+              '<p class="badge">METAREA</p><h3>' +
+                esc(p.roman || p.name || "") +
+                "</h3><p class=\"meta\">" +
+                esc(p.coordinator || "") +
+                "</p>"
+            );
+          });
+        },
       }).addTo(grp);
-    });
-    grp.addTo(map);
-    map.metareaLayer = grp;
+      (metareaFc.features || []).forEach((f) => {
+        const p = f.properties || {};
+        if (!Number.isFinite(p.label_lat) || !Number.isFinite(p.label_lon)) return;
+        L.marker([p.label_lat, p.label_lon], {
+          pane: "metarea",
+          interactive: false,
+          keyboard: false,
+          icon: L.divIcon({
+            className: "ggr-leaflet-icon ggr-metarea-lab",
+            html: "<span>" + esc(p.roman || p.name || "") + "</span>",
+            iconSize: [52, 18],
+            iconAnchor: [26, 9],
+          }),
+        }).addTo(grp);
+      });
+    }
+    if (subzonesOn && subzoneFc) {
+      L.geoJSON(subzoneFc, {
+        pane: "metarea",
+        style: (feat) => {
+          const p = (feat && feat.properties) || {};
+          return {
+            color: "#f4efe4",
+            weight: 1.6,
+            fillColor: p.fill || "#c45c26",
+            fillOpacity: 0.42,
+            opacity: 0.95,
+          };
+        },
+        onEachFeature: (feat, layer) => {
+          const p = (feat && feat.properties) || {};
+          layer.bindTooltip(p.name || "sous-zone", { sticky: true, opacity: 0.92 });
+          layer.on("click", () => {
+            if (placingTx) return;
+            showSel('<p class="badge">sous-zone</p><h3>' + esc(p.name || "") + "</h3>");
+          });
+        },
+      }).addTo(grp);
+      (subzoneFc.features || []).forEach((f) => {
+        const p = f.properties || {};
+        if (!Number.isFinite(p.label_lat) || !Number.isFinite(p.label_lon)) return;
+        L.marker([p.label_lat, p.label_lon], {
+          pane: "metarea",
+          interactive: false,
+          keyboard: false,
+          icon: L.divIcon({
+            className: "ggr-leaflet-icon ggr-metarea-lab",
+            html: "<span>" + esc(p.name || "") + "</span>",
+            iconSize: [88, 18],
+            iconAnchor: [44, 9],
+          }),
+        }).addTo(grp);
+      });
+    }
+    if (grp.getLayers().length) {
+      grp.addTo(map);
+      map.metareaLayer = grp;
+    }
+  }
+
+  function paintPolygons() {
+    applyBannerVisibility();
+    if (globe && typeof globe.polygonsData === "function") globe.polygonsData(metareaPolygons());
+    if (globe) globe.htmlElementsData(points());
+    paintMetareaMap();
   }
 
   function setMetarea(on) {
@@ -1450,10 +1529,21 @@
       metareaBtn.classList.toggle("is-on", metareaOn);
       metareaBtn.setAttribute("aria-pressed", metareaOn ? "true" : "false");
     }
-    applyBannerVisibility();
-    if (globe && typeof globe.polygonsData === "function") globe.polygonsData(metareaPolygons());
-    if (globe) globe.htmlElementsData(points());
-    paintMetareaMap();
+    paintPolygons();
+  }
+
+  function setSubzones(on) {
+    subzonesOn = !!on;
+    try {
+      localStorage.setItem("ggr-subzones", subzonesOn ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
+    if (subzoneBtn) {
+      subzoneBtn.classList.toggle("is-on", subzonesOn);
+      subzoneBtn.setAttribute("aria-pressed", subzonesOn ? "true" : "false");
+    }
+    paintPolygons();
   }
 
   function refreshMap() {
@@ -1472,7 +1562,7 @@
       }).addTo(mapLayers);
     });
     points()
-      .filter((d) => d.kind !== "ggr_banner" && d.kind !== "metarea")
+      .filter((d) => d.kind !== "ggr_banner" && d.kind !== "metarea" && d.kind !== "subzone")
       .forEach((d) => {
         if (!Number.isFinite(d.lat)) return;
         const lon = Number.isFinite(d.lon) ? d.lon : d.lng;
@@ -1673,17 +1763,29 @@
       globe.polygonsData(metareaPolygons());
       if (typeof globe.polygonGeoJsonGeometry === "function") globe.polygonGeoJsonGeometry((d) => d.geometry);
       if (typeof globe.polygonCapColor === "function")
-        globe.polygonCapColor((d) => hexToRgba((d.properties && d.properties.fill) || "#c9a227", 0.4));
+        globe.polygonCapColor((d) => {
+          const p = (d && d.properties) || {};
+          const a = p.layer === "subzone" ? 0.48 : 0.4;
+          return hexToRgba(p.fill || (p.layer === "subzone" ? "#c45c26" : "#c9a227"), a);
+        });
       if (typeof globe.polygonSideColor === "function") globe.polygonSideColor(() => "rgba(8,16,24,0.18)");
       if (typeof globe.polygonStrokeColor === "function")
-        globe.polygonStrokeColor((d) => (d.properties && d.properties.stroke) || "#1a1a1a");
-      if (typeof globe.polygonAltitude === "function") globe.polygonAltitude(0.003);
+        globe.polygonStrokeColor((d) => {
+          const p = (d && d.properties) || {};
+          return p.layer === "subzone" ? "#f4efe4" : p.stroke || "#1a1a1a";
+        });
+      if (typeof globe.polygonAltitude === "function")
+        globe.polygonAltitude((d) => ((d && d.properties && d.properties.layer) === "subzone" ? 0.006 : 0.003));
       if (typeof globe.polygonCapCurvatureResolution === "function") globe.polygonCapCurvatureResolution(4);
       if (typeof globe.onPolygonClick === "function") {
         globe.onPolygonClick((poly) => {
           if (placingTx) return;
           const p = poly && poly.properties;
           if (!p) return;
+          if (p.layer === "subzone") {
+            showSel('<p class="badge">sous-zone</p><h3>' + esc(p.name || "") + "</h3>");
+            return;
+          }
           showSel(
             '<p class="badge">METAREA</p><h3>' +
               esc(p.roman || p.name || "") +
@@ -1880,10 +1982,118 @@
   document.querySelectorAll(".map-mode [data-map-mode]").forEach((btn) => {
     btn.addEventListener("click", () => applyMapMode(btn.getAttribute("data-map-mode")));
   });
+  function lectureClass(text, inCoast) {
+    const t = String(text || "").trim();
+    if (/^bulletin haute mer/i.test(t)) return { cls: "lecture--head", coast: false };
+    if (/^avis de coup de vent/i.test(t) || /^avis\./i.test(t)) return { cls: "lecture--warn", coast: inCoast };
+    if (/hors des sous-zones/i.test(t)) return { cls: "lecture--warn-out", coast: false };
+    if (/^situation générale/i.test(t)) return { cls: "lecture--syn", coast: false };
+    if (/^tendance\b/i.test(t)) return { cls: "lecture--out", coast: false };
+    if (/^bulletin côtier/i.test(t)) return { cls: "lecture--coast", coast: true };
+    if (/^pas de prévision/i.test(t)) return { cls: "lecture--empty", coast: false };
+    if (inCoast) return { cls: "lecture--coast-zone", coast: true };
+    return { cls: "lecture--zone", coast: false };
+  }
+
+  function lectureParagraphs(rows) {
+    let inCoast = false;
+    return (rows || [])
+      .map((p) => {
+        const hit = lectureClass(p, inCoast);
+        inCoast = hit.coast;
+        return "<p class=\"" + hit.cls + "\">" + esc(p) + "</p>";
+      })
+      .join("");
+  }
+
+  function renderMetareaTab(snap) {
+    const host = document.getElementById("ggr-metarea-page");
+    if (!host) return;
+    if (!snap || !snap.ok) {
+      host.innerHTML =
+        "<h1>METAREA — haute mer</h1><p class=\"err\">" +
+        esc((snap && (snap.error || snap.lecture)) || "Bulletin WWMIWS indisponible.") +
+        "</p>";
+      return;
+    }
+    const roman = snap.metarea || "—";
+    const links = snap.links || {};
+    const lis = [];
+    if (links.metarea) lis.push('<li><a href="' + esc(links.metarea) + '" rel="noreferrer">WWMIWS METAREA ' + esc(roman) + "</a></li>");
+    if (links.forecast) lis.push('<li><a href="' + esc(links.forecast) + '" rel="noreferrer">Bulletin haute mer officiel</a></li>');
+    if (links.warning) lis.push('<li><a href="' + esc(links.warning) + '" rel="noreferrer">Avis officiels</a></li>');
+    if (links.json) lis.push('<li><a href="' + esc(links.json) + '" rel="noreferrer">JSON officiel</a></li>');
+    const coastalLis = (snap.coastal || []).map((c) => {
+      const label = (c.title || c.gts || "côtier").replace(/\s+$/, "");
+      if (c.url) return '<li><a href="' + esc(c.url) + '" rel="noreferrer">Bulletin côtier ' + esc(label) + "</a></li>";
+      return "<li>Bulletin côtier " + esc(label) + "</li>";
+    });
+    const zones = (snap.fleet_zones || []).join(", ") || "—";
+    const extra = (snap.extra_zones || []).join(", ");
+    const sched = (snap.schedule_utc || []).join(" et ");
+    const paras = lectureParagraphs(snap.paragraphs || []);
+    const zoneMeta = snap.has_subzones
+      ? "<p class=\"meta\">Sous-zones de la flotte : <strong>" +
+        esc(zones) +
+        "</strong>" +
+        (extra ? " · côtier proche : <strong>" + esc(extra) + "</strong>" : "") +
+        "</p>"
+      : "<p class=\"meta\">Découpage intérieur non encodé pour cette METAREA : lecture du bulletin officiel complet.</p>";
+    const disclaimer =
+      "<p class=\"ggr-metarea-om\" role=\"note\">" +
+      esc(snap.disclaimer || "") +
+      "</p>";
+    host.innerHTML =
+      "<h1>METAREA " +
+      esc(roman) +
+      " — haute mer</h1>" +
+      disclaimer +
+      "<p class=\"meta\">Mise à disposition officielle : <strong>" +
+      esc(snap.official_label || "—") +
+      "</strong>" +
+      (sched ? " (calculs SafetyNET " + esc(sched) + " TU)" : "") +
+      ".</p>" +
+      "<p class=\"meta\">Récupération WWMIWS : " +
+      esc(snap.retrieved_label || snap.wwmiws_date || "—") +
+      (snap.gts ? " · GTS " + esc(snap.gts) : "") +
+      "</p>" +
+      zoneMeta +
+      "<h2>Liens officiels</h2>" +
+      "<ul class=\"ggr-metarea-links\">" +
+      lis.join("") +
+      coastalLis.join("") +
+      "</ul>" +
+      "<h2>Lecture pour l’OM</h2>" +
+      "<div class=\"ggr-metarea-lecture\" lang=\"fr\">" +
+      paras +
+      "</div>";
+  }
+
+  function loadMetareaSnapshot() {
+    fetch("/api/metarea")
+      .then((r) => r.json())
+      .then((snap) => {
+        metareaSnap = snap;
+        if (snap && snap.geojson && snap.geojson.type === "FeatureCollection") {
+          subzoneFc = snap.geojson;
+        }
+        renderMetareaTab(snap);
+        setSubzones(subzonesOn);
+      })
+      .catch(() => {
+        renderMetareaTab({ ok: false, error: "Bulletin WWMIWS indisponible." });
+      });
+  }
+
   if (metareaBtn) {
     metareaBtn.classList.toggle("is-on", metareaOn);
     metareaBtn.setAttribute("aria-pressed", metareaOn ? "true" : "false");
     metareaBtn.addEventListener("click", () => setMetarea(!metareaOn));
+  }
+  if (subzoneBtn) {
+    subzoneBtn.classList.toggle("is-on", subzonesOn);
+    subzoneBtn.setAttribute("aria-pressed", subzonesOn ? "true" : "false");
+    subzoneBtn.addEventListener("click", () => setSubzones(!subzonesOn));
   }
   fetch("/static/geo/metareas.json")
     .then((r) => (r.ok ? r.json() : null))
@@ -1893,6 +2103,8 @@
       setMetarea(metareaOn);
     })
     .catch(() => {});
+  loadMetareaSnapshot();
+  window.setInterval(loadMetareaSnapshot, 10 * 60 * 1000);
   applyMapMode(mapMode, { boot: true });
 
   const traficQ = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");

@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from app import globe_tiles, store
+from app import globe_tiles, metarea, store
 from recorder.config import ack_label, fmt_khz, fmt_mhz, load_config, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_qth, fetch_ranked_kiwis, fleet_uses_tahiti_tx
@@ -289,6 +289,19 @@ async def osm_land_tile(z: int, x: int, y: int):
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=86400"},
     )
+
+
+@app.get("/api/metarea")
+async def api_metarea():
+    """Bulletin haute mer WWMIWS filtré sur les METAREA occupées par la flotte GGR."""
+    cfg = load_config()
+    try:
+        fleet = await fetch_fleet(cfg, with_wx=False)
+    except Exception:
+        log.exception("Flotte pour METAREA")
+        fleet = {"boats": []}
+    body = await metarea.snapshot(fleet.get("boats") or [])
+    return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/media/{trafic_id}/{filename}")

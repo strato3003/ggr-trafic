@@ -1183,3 +1183,355 @@ def test_metareas_geojson_iho_omm():
     assert not _metarea_has(by["I"], 45.0, -10.0)
     assert not _metarea_has(by["II"], 46.50, -1.79)
     assert not _metarea_has(by["II"], 12.0, 8.0)
+
+
+def test_metarea2_subzones_ocean_grid():
+    from app.metarea import zone_at
+
+    assert zone_at(28.0, -16.0) == "CANARIAS"
+    assert zone_at(33.2, -18.0) == "MADEIRA"
+    assert zone_at(37.7, -25.7) == "ACORES"
+    assert zone_at(46.5, -25.0) == "FARADAY"
+    assert zone_at(43.0, -34.0) == "ALTAIR"
+    assert zone_at(16.5, -24.0) == "CAPE VERDE"
+    assert zone_at(31.0, -28.0) == "METEOR"
+    assert zone_at(29.0, -12.0) == "AGADIR"
+    assert zone_at(28.86, -13.82) == "CANARIAS"
+
+
+def test_metarea_at_follows_iho_for_ggr_route():
+    from app.metarea import metarea_at
+
+    assert metarea_at(45.0, -10.0)["name"] == "II"
+    assert metarea_at(28.0, -16.0)["n"] == 2
+    assert metarea_at(-32.0, 114.5)["name"] == "X"
+    assert metarea_at(-33.4, -75.0)["name"] == "XV"
+    assert metarea_at(46.50, -1.79) is None
+
+
+def test_metarea2_fqnt52_digest_canarias():
+    from app.metarea import assemble, fr_marine
+
+    assert "mer agitée" in fr_marine("North or Northeast 3 or 4, at times 5 near islands. Moderate.").lower()
+    raw = {
+        "title": "Bulletinset for METAREA 2",
+        "date": "2026-09-19 05:16:43",
+        "bulletin": [
+            {
+                "label": "HIGH SEAS WARNING",
+                "content": {
+                    "1": "WONT50 LFPW 181823",
+                    "2": "SECURITE ON METAREA 2, METEO-FRANCE,",
+                    "3": "WARNING NR 353, FRIDAY 18 SEPTEMBER 2026 AT 1820 UTC",
+                    "4": "EAST OF CADIZ, GIBRALTAR STRAIT.",
+                    "5": "EAST 8 IN AND LEEWARD STRAIT. GUSTS.",
+                    "6": "BT",
+                },
+            },
+            {
+                "label": "HIGH SEAS FORECAST",
+                "content": {
+                    "1": "FQNT52 LFPW 181834",
+                    "2": "Weather bulletin on METAREA 2,",
+                    "3": "METEO-FRANCE Toulouse, Friday 18 September 2026 at 2215 UTC.",
+                    "4": "Part 1 : WARNING NR 353.",
+                    "5": "Part 2 : General synopsis, Friday 18 at 12 UTC",
+                    "6": "Low 1011 over Morocco, with little change.",
+                    "7": "Part 3 : Area forecasts to Sunday 20 at 00 UTC",
+                    "8": "CANARIAS.",
+                    "9": "North or Northeast 3 or 4, at times 5 near islands.",
+                    "10": "Moderate.",
+                    "11": "FARADAY.",
+                    "12": "Southwest 5 or 6.",
+                    "13": "Part 4 : outlook for next 24 hours",
+                    "14": "Threat of Southwesterly near gale over FARADAY.",
+                },
+            },
+        ],
+    }
+    body = assemble(raw, [{"name": "Skipper test", "sail": "FRA 1", "lat": 28.0, "lon": -16.0}])
+    assert body["ok"] is True
+    assert body["fleet_zones"] == ["CANARIAS"]
+    assert body["official_label"].startswith("vendredi 18 septembre 2026 à 22:15")
+    assert body["geojson"]["features"]
+    assert body["geojson"]["features"][0]["properties"]["name"] == "CANARIAS"
+    lecture = body["lecture"]
+    assert "CANARIAS" in lecture
+    assert "Skipper test" not in lecture
+    assert "FARADAY" not in lecture
+    assert "Gibraltar" not in lecture
+    assert "hors zones" not in lecture.lower()
+    assert "nord ou nord-est 3 ou 4" in lecture.lower()
+    assert "22:15" in body["official_label"]
+    assert body["has_subzones"] is True
+    assert body["metarea"] == "II"
+    assert body["disclaimer"].startswith("Ce texte est un condensé automatique")
+    assert body["warning"]["for_fleet"] is False
+    assert body["warning"]["outside"] is True
+    assert "hors des sous-zones" in lecture
+
+
+def test_metarea_warning_kept_for_casablanca_neighbor():
+    from app.metarea import assemble
+
+    raw = {
+        "title": "Bulletinset for METAREA 2",
+        "date": "2026-09-19 05:16:43",
+        "bulletin": [
+            {
+                "label": "HIGH SEAS WARNING",
+                "content": {
+                    "1": "WONT50 LFPW 181823",
+                    "2": "SECURITE ON METAREA 2, METEO-FRANCE,",
+                    "3": "WARNING NR 353, FRIDAY 18 SEPTEMBER 2026 AT 1820 UTC",
+                    "4": "EAST OF CADIZ, GIBRALTAR STRAIT.",
+                    "5": "EAST 8 IN AND LEEWARD STRAIT. GUSTS.",
+                    "6": "BT",
+                },
+            },
+            {
+                "label": "HIGH SEAS FORECAST",
+                "content": {
+                    "1": "FQNT52 LFPW 181834",
+                    "2": "Weather bulletin on METAREA 2,",
+                    "3": "METEO-FRANCE Toulouse, Friday 18 September 2026 at 2215 UTC.",
+                    "4": "Part 3 : Area forecasts to Sunday 20 at 00 UTC",
+                    "5": "CASABLANCA.",
+                    "6": "North or Northeast 4 or 5.",
+                    "7": "CANARIAS.",
+                    "8": "North 3.",
+                },
+            },
+        ],
+    }
+    body = assemble(raw, [{"name": "Selim", "lat": 34.67, "lon": -9.94}])
+    assert body["fleet_zones"] == ["CASABLANCA"]
+    assert body["warning"]["for_fleet"] is True
+    assert "Gibraltar" in body["lecture"]
+    assert "CANARIAS" not in body["lecture"]
+    assert "Selim" not in body["lecture"]
+
+
+def test_metarea_near_coastal_lanzarote_pulls_agadir():
+    from app.metarea import near_coastal_names, zone_at
+
+    assert zone_at(28.86, -13.82) == "CANARIAS"
+    assert "AGADIR" in near_coastal_names(28.86, -13.82, "CANARIAS")
+    assert near_coastal_names(28.0, -16.0, "CANARIAS") == []
+
+
+def test_metarea_coastal_las_palmas_only_occupied_zones():
+    from app.metarea import assemble, parse_coastal
+
+    raw = {
+        "title": "Bulletinset for METAREA 2",
+        "date": "2026-09-19 05:16:43",
+        "bulletin": [
+            {
+                "label": "HIGH SEAS FORECAST",
+                "content": {
+                    "1": "FQNT52 LFPW 181834",
+                    "2": "Weather bulletin on METAREA 2, Friday 18 September 2026 at 2215 UTC.",
+                    "3": "Part 3 : Area forecasts to Sunday 20 at 00 UTC",
+                    "4": "CANARIAS.",
+                    "5": "North or Northeast 3 or 4.",
+                },
+            }
+        ],
+    }
+    parsed = parse_coastal(
+        [
+            "FQNT72 LEMM 181600",
+            "STATE MET AGENCY OF SPAIN",
+            "CANARIAS NAVTEX SERVICE AREA",
+            "GALE WARNINGS: NONE.",
+            "24 HOURS FCST:",
+            "MADEIRA: N OR NE 4 OR 5, LOC 6 NEARS ISLANDS.",
+            "CANARIAS: N OR NE 4 OR 5, LOC 6 BETWEEN ISLANDS.",
+            "TARFAYA: N OR NE 4 OR 5.",
+        ]
+    )
+    coastal = [{**parsed, "title": "LAS PALMAS FORECAST", "gts": "FQNT72", "url": "https://wwmiws.wmo.int/x"}]
+    body = assemble(raw, [{"lat": 28.0, "lon": -16.0}], coastal=coastal)
+    lecture = body["lecture"]
+    assert "Bulletin côtier LAS PALMAS FORECAST" in lecture
+    assert "entre les îles" in lecture.lower()
+    assert "TARFAYA" not in lecture
+    assert "MADEIRA" not in lecture
+    assert body["coastal"][0]["gts"] == "FQNT72"
+    assert extra_catalog_has_las_palmas()
+
+
+def test_metarea_coastal_dedupes_casablanca_between_tarifa_and_las_palmas():
+    from app.metarea import assemble, parse_coastal
+
+    raw = {
+        "title": "Bulletinset for METAREA 2",
+        "date": "2026-09-19 05:16:43",
+        "bulletin": [
+            {
+                "label": "HIGH SEAS FORECAST",
+                "content": {
+                    "1": "FQNT52 LFPW 181834",
+                    "2": "Weather bulletin on METAREA 2, Friday 18 September 2026 at 2215 UTC.",
+                    "3": "Part 3 : Area forecasts to Sunday 20 at 00 UTC",
+                    "4": "CASABLANCA.",
+                    "5": "North or Northeast 4 or 5.",
+                    "6": "CANARIAS.",
+                    "7": "North 3.",
+                },
+            }
+        ],
+    }
+    tarifa = {
+        **parse_coastal(
+            [
+                "FQMQ72 LEMM 181600",
+                "GALE OR NEAR GALE WARNINGS: NONE.",
+                "24 HOURS FCST:",
+                "CASABLANCA: N OR NE 4 OR 5, EXCEPT VRB 1 TO 3 IN NE.=",
+                "CADIZ: E OR NE 5 TO 7.",
+            ]
+        ),
+        "title": "TARIFA FORECAST",
+        "gts": "FQMQ72",
+        "url": "https://wwmiws.wmo.int/tarifa",
+    }
+    las = {
+        **parse_coastal(
+            [
+                "FQNT72 LEMM 181600",
+                "GALE WARNINGS: NONE.",
+                "24 HOURS FCST:",
+                "CASABLANCA: N OR NE 4 OR 5, EXCEPT VRB 1 TO 3 IN NE.",
+                "CANARIAS: N OR NE 4 OR 5, LOC 6 BETWEEN ISLANDS.",
+            ]
+        ),
+        "title": "LAS PALMAS FORECAST",
+        "gts": "FQNT72",
+        "url": "https://wwmiws.wmo.int/laspalmas",
+    }
+    body = assemble(
+        raw,
+        [{"lat": 28.0, "lon": -16.0}, {"lat": 34.67, "lon": -9.94}],
+        coastal=[tarifa, las],
+    )
+    lecture = body["lecture"]
+    assert lecture.count("Bulletin côtier") == 1
+    assert "LAS PALMAS FORECAST" in lecture
+    assert "TARIFA FORECAST" not in lecture
+    assert [c["gts"] for c in body["coastal"]] == ["FQNT72"]
+
+
+def test_needed_coastal_includes_unknown_metarea_products():
+    from app.metarea import needed_coastal
+
+    cat = [
+        {"gts": "FQNT53", "title": "CROSS CORSEN FORECAST", "url": "a"},
+        {"gts": "FQNT72", "title": "LAS PALMAS FORECAST", "url": "b"},
+        {"gts": "FQZA30", "title": "COASTAL FORECAST", "url": "c"},
+    ]
+    assert [c["gts"] for c in needed_coastal(cat, ["CANARIAS"])] == ["FQNT72", "FQZA30"]
+    assert [c["gts"] for c in needed_coastal(cat, ["IROISE"])] == ["FQNT53", "FQZA30"]
+
+
+def test_metarea_coastal_dedup_without_metarea2_grid():
+    from app.metarea import assemble, parse_coastal
+
+    raw = {
+        "title": "Bulletinset for METAREA 7",
+        "date": "2026-09-19 05:16:43",
+        "bulletin": [
+            {
+                "label": "HIGH SEAS FORECAST",
+                "content": {
+                    "1": "FQZA31 FAPR 181200",
+                    "2": "High seas forecast for METAREA 7, Tuesday 15 September 2026 at 1200 UTC.",
+                    "3": "Southwest 5 or 6. Moderate.",
+                },
+            }
+        ],
+    }
+    first = {
+        **parse_coastal(
+            [
+                "FQZA30 FAPR 181200",
+                "CAPE COLUMBINE TO CAPE AGULHAS.",
+                "SW 5 TO 6. MODERATE.",
+                "WALVIS BAY TO LUDERITZ.",
+                "S 4.",
+            ],
+            strict=False,
+        ),
+        "title": "COASTAL FORECAST",
+        "gts": "FQZA30",
+    }
+    dup = {
+        **parse_coastal(
+            [
+                "FQXX99 XXXX 181200",
+                "CAPE COLUMBINE TO CAPE AGULHAS.",
+                "SW 5 TO 6. MODERATE.",
+            ],
+            strict=False,
+        ),
+        "title": "OTHER COASTAL",
+        "gts": "FQXX99",
+    }
+    body = assemble(
+        raw,
+        [{"name": "Skipper", "lat": -34.5, "lon": 18.2}],
+        area={"n": 7, "name": "VII", "roman": "VII", "coordinator": "South Africa"},
+        coastal=[dup, first],
+    )
+    lecture = body["lecture"]
+    assert lecture.count("CAPE COLUMBINE TO CAPE AGULHAS") == 1
+    assert "WALVIS BAY TO LUDERITZ" in lecture
+    assert "Skipper" not in lecture
+    assert "OTHER COASTAL" not in lecture
+    assert [c["gts"] for c in body["coastal"]] == ["FQZA30"]
+
+
+def extra_catalog_has_las_palmas():
+    from app.metarea import extra_catalog
+
+    html = (
+        """<a class="bull bullnormal bullnavtex" """
+        """href="javascript:ouvre_popup('https://wwmiws.wmo.int/index.php/metareas/display/bulletin/FQNT72_LEMM/20260918190540865453')" """
+        """data-tip="Bulletin display in popup" > LAS PALMAS FORECAST&nbsp; </a>"""
+        """<a href="javascript:ouvre_popup('https://wwmiws.wmo.int/index.php/metareas/display/bulletin/FQNT52_LFPW/1')" > HIGH SEAS FORECAST&nbsp; </a>"""
+    )
+    cat = extra_catalog(html)
+    assert [c["gts"] for c in cat] == ["FQNT72"]
+    return True
+
+
+def test_metarea_without_grid_reads_full_official_bulletin():
+    from app.metarea import assemble
+
+    raw = {
+        "title": "Bulletinset for METAREA 10",
+        "date": "2026-09-19 05:16:43",
+        "bulletin": [
+            {
+                "label": "HIGH SEAS FORECAST",
+                "content": {
+                    "1": "FQAU01 AMMC 181200",
+                    "2": "High seas forecast for METAREA 10, Tuesday 15 September 2026 at 1200 UTC.",
+                    "3": "Northeast 4 or 5. Moderate.",
+                },
+            }
+        ],
+    }
+    body = assemble(
+        raw,
+        [{"name": "Skipper test", "lat": -32.0, "lon": 114.5}],
+        area={"n": 10, "name": "X", "roman": "X", "coordinator": "Australia"},
+    )
+    assert body["ok"] is True
+    assert body["metarea"] == "X"
+    assert body["has_subzones"] is False
+    assert body["fleet_zones"] == []
+    assert "Skipper test" not in body["lecture"]
+    assert "METAREA X" in body["lecture"]
+    assert "nord-est 4 ou 5" in body["lecture"].lower()

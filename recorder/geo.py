@@ -48,3 +48,36 @@ def fmt_latlon(lat: float, lon: float) -> str:
     ns = "N" if lat >= 0 else "S"
     ew = "E" if lon >= 0 else "W"
     return f"{abs(lat):.3f}°{ns} {abs(lon):.3f}°{ew}"
+
+
+def point_in_ring(lon: float, lat: float, ring: list) -> bool:
+    """Ray-casting dans un anneau GeoJSON [lon, lat] (sans shapely)."""
+    inside = False
+    n = len(ring)
+    if n < 4:
+        return False
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi + 1e-18) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def point_in_feature(lat: float, lon: float, feat: dict) -> bool:
+    """True si (lat, lon) est dans le polygone GeoJSON (trous exclus)."""
+    geom = (feat or {}).get("geometry") or {}
+    gtype = geom.get("type")
+    coords = geom.get("coordinates")
+    if not coords:
+        return False
+    polys = coords if gtype == "MultiPolygon" else [coords]
+    for poly in polys:
+        if not poly or not point_in_ring(lon, lat, poly[0]):
+            continue
+        if any(point_in_ring(lon, lat, hole) for hole in poly[1:]):
+            continue
+        return True
+    return False
