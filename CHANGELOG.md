@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.5 — 2026-09-20
+
+- Boucle A–B : la lecture reste entre les bornes (plus de départ avant A ni de dépassement après B).
+- Zoom d’une voie : mute retiré ; piste amplitude façon Audacity sous le spectrogramme, avec légende des couleurs USB.
+
 ## 1.1.4 — 2026-09-20
 
 - Annuaire KiwiSDR local, rafraîchi toutes les heures : le calque SDR potentiels ne dépend plus d’un fetch à la demande.

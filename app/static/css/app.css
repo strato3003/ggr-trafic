@@ -1296,9 +1296,31 @@ body.kiwi-mix-focus .mix__ch-ctrl {
   gap: 0.35rem;
 }
 body.kiwi-mix-focus .mix__fader { display: none; }
+body.kiwi-mix-focus .mix__mute { display: none; }
 body.kiwi-mix-focus .mix__wf-wrap {
   min-width: 12rem;
-  overflow: visible;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+body.kiwi-mix-focus .mix__wf {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+body.kiwi-mix-focus .mix__wave {
+  display: block;
+  flex: 0 0 4.4rem;
+  height: 4.4rem;
+  width: 100%;
+  border-top: 1px solid #1c3348;
+  background: #121a22;
+}
+body.kiwi-mix-focus .mix__wf-legend {
+  display: block;
+}
+body.kiwi-mix-focus .mix__loop {
+  box-shadow: 0 0 0 9999px rgba(2, 8, 14, 0.55);
 }
 body.kiwi-mix-focus .mix__transport {
   order: 2;
@@ -1419,6 +1441,25 @@ body.kiwi-mix-focus .mix__seek {
   display: block;
   width: 100%;
   height: 100%;
+}
+.mix__wave { display: none; }
+.mix__wf-legend {
+  display: none;
+  position: absolute;
+  left: 0.35rem;
+  top: 0.28rem;
+  z-index: 2;
+  margin: 0;
+  padding: 0.08rem 0.28rem;
+  max-width: calc(100% - 0.7rem);
+  font: 600 0.58rem/1.25 var(--sans);
+  color: #e8f4fc;
+  text-shadow: 0 1px 2px #000;
+  background: rgba(4, 12, 20, 0.62);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .mix__wf-load {
   position: absolute;

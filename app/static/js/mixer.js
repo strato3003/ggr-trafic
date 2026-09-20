@@ -81,6 +81,7 @@ window.GgrMixer = (function () {
   let loopB = NaN;
   let loopOn = false;
   let handleDrag = null;
+  let loopBusy = false;
   const ac = new AbortController();
   const sig = { signal: ac.signal };
   const ICO_EXPAND =
@@ -285,25 +286,43 @@ window.GgrMixer = (function () {
     out[2] = b;
   }
 
-  function masterEl() {
-    return (
-      tracks.find((tr) => tr.el && !tr.el.paused && Number.isFinite(tr.el.currentTime)) ||
-      (tracks[0] && tracks[0].el) ||
-      null
-    );
+  function clockTrack() {
+    if (focusId) {
+      const hit = tracks.find((tr) => tr.id === focusId && tr.el && !tr.dead);
+      if (hit) return hit;
+    }
+    return tracks.find((tr) => tr.el && !tr.dead) || null;
   }
 
   function nowT() {
     if (playing) {
-      let t = t0;
-      tracks.forEach((tr) => {
-        if (tr.el && Number.isFinite(tr.el.currentTime) && !tr.el.paused) {
-          t = Math.max(t, tr.el.currentTime);
-        }
-      });
-      return duration ? Math.min(duration, t) : t;
+      const tr = clockTrack();
+      const el = tr && tr.el;
+      if (el && Number.isFinite(el.currentTime)) {
+        const t = el.currentTime;
+        return duration ? Math.min(duration, Math.max(0, t)) : Math.max(0, t);
+      }
+      return t0;
     }
     return t0;
+  }
+
+  function loopBounds() {
+    if (!loopOk()) return null;
+    const a = Math.min(loopA, loopB);
+    const b = Math.max(loopA, loopB);
+    return { a: a, b: b };
+  }
+
+  function clampLoopTime(t) {
+    const span = timeSpan();
+    let x = Math.max(0, Number.isFinite(t) ? t : 0);
+    if (span) x = Math.min(span, x);
+    const lp = loopOn ? loopBounds() : null;
+    if (!lp) return x;
+    if (x < lp.a) return lp.a;
+    if (x >= lp.b - 0.04) return lp.a;
+    return x;
   }
 
   function resizeCanvas(tr) {
@@ -363,6 +382,66 @@ window.GgrMixer = (function () {
     ctx2d.fillStyle = "#000";
     ctx2d.fillRect(0, 0, w, h);
     if (tr.specBmp) ctx2d.drawImage(tr.specBmp, 0, 0, w, h);
+    drawWave(tr);
+  }
+
+  function computePeaks(samples, cols) {
+    const n = samples.length;
+    const mins = new Float32Array(cols);
+    const maxs = new Float32Array(cols);
+    if (n < 2) return { mins: mins, maxs: maxs };
+    const step = n / cols;
+    for (let i = 0; i < cols; i++) {
+      const a = Math.floor(i * step);
+      const b = Math.min(n, Math.floor((i + 1) * step) + 1);
+      let lo = 1;
+      let hi = -1;
+      for (let j = a; j < b; j++) {
+        const v = samples[j] / 32768;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      mins[i] = lo;
+      maxs[i] = hi;
+    }
+    return { mins: mins, maxs: maxs };
+  }
+
+  function drawWave(tr) {
+    const canvas = tr.wave;
+    if (!canvas || focusId !== tr.id) return;
+    const wrap = canvas.parentElement;
+    const cssW = Math.max(64, (wrap && wrap.clientWidth) || canvas.clientWidth || 140);
+    const cssH = Math.max(28, canvas.clientHeight || 48);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.floor(cssW * dpr);
+    const h = Math.floor(cssH * dpr);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    if (!w || !h) return;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#121a22";
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "rgba(212, 230, 242, 0.18)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, h / 2);
+    ctx.lineTo(w, h / 2);
+    ctx.stroke();
+    const peaks = tr.peaks;
+    if (!peaks) return;
+    const mid = h / 2;
+    const amp = mid * 0.92;
+    ctx.fillStyle = "#4aa8e0";
+    const cols = peaks.mins.length;
+    for (let x = 0; x < w; x++) {
+      const i = Math.min(cols - 1, Math.floor((x / w) * cols));
+      const y1 = mid - peaks.maxs[i] * amp;
+      const y2 = mid - peaks.mins[i] * amp;
+      ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+    }
   }
 
   function draw() {
@@ -477,7 +556,7 @@ window.GgrMixer = (function () {
   }
 
   function startSources(offset) {
-    const off = Math.max(0, offset || 0);
+    const off = clampLoopTime(Math.max(0, offset || 0));
     t0 = off;
     playing = true;
     noteReplayPlay();
@@ -511,21 +590,36 @@ window.GgrMixer = (function () {
   }
 
   function tick() {
-    if (!playing) return;
+    if (!playing || loopBusy) return;
     const t = nowT();
     updateHead();
-    if (loopOn && loopOk()) {
-      const b = Math.max(loopA, loopB);
-      if (t >= b - 0.04) {
-        startSources(Math.min(loopA, loopB));
+    const lp = loopOn ? loopBounds() : null;
+    if (lp) {
+      if (t < lp.a - 0.05 || t >= lp.b - 0.04) {
+        restartLoop(lp.a);
         return;
       }
     }
     if (duration && t >= duration - 0.03) pauseAt(duration);
   }
 
+  function restartLoop(a) {
+    if (loopBusy) return;
+    loopBusy = true;
+    tracks.forEach((tr) => {
+      if (!tr.el) return;
+      try {
+        tr.el.pause();
+      } catch {
+        /* ignore */
+      }
+    });
+    startSources(a);
+    loopBusy = false;
+  }
+
   function previewSeek(t) {
-    t0 = Math.max(0, Math.min(duration || t, t));
+    t0 = clampLoopTime(Math.max(0, Math.min(duration || t, t)));
     seekEl.value = String(t0);
     if (duration) seekEl.max = String(duration);
     if (playing) {
@@ -562,15 +656,23 @@ window.GgrMixer = (function () {
   }
 
   function ensureLoopRange() {
-    if (loopOk()) {
-      if (duration > 2 && loopB <= 1.05) {
+    const span = timeSpan();
+    if (!loopOk()) {
+      loopA = 0;
+      loopB = span;
+      return loopOk();
+    }
+    if (duration > 2 && loopB <= 1.05 && loopA >= 0 && loopA < 1.05) {
+      if (loopB - loopA < 0.98) {
+        loopA *= duration;
+        loopB *= duration;
+      } else {
         loopA = 0;
         loopB = duration;
       }
-      return true;
     }
-    loopA = 0;
-    loopB = timeSpan();
+    loopA = Math.max(0, Math.min(loopA, span));
+    loopB = Math.max(loopA + 0.12, Math.min(loopB, span));
     return loopOk();
   }
 
@@ -614,8 +716,16 @@ window.GgrMixer = (function () {
     deskEl.querySelectorAll(".mix__ch").forEach((el) => {
       el.classList.toggle("is-focus", focusId && el.getAttribute("data-id") === focusId);
     });
+    tracks.forEach((tr) => {
+      const on = !!(focusId && tr.id === focusId);
+      if (tr.wave) tr.wave.hidden = !on;
+      if (tr.legend) tr.legend.hidden = !on;
+    });
     if (!focusId) {
       loopOn = false;
+    } else {
+      const tr = tracks.find((row) => row.id === focusId);
+      if (tr && !tr.dead) loadWave(tr);
     }
     updateLoopUi();
     if (onFocus) onFocus(focusId);
@@ -652,6 +762,7 @@ window.GgrMixer = (function () {
       if (!handleDrag) return;
       handleDrag = null;
       if (resumeAfterDrag) startSources(Math.min(loopA, loopB));
+      else if (playing) startSources(clampLoopTime(nowT()));
       resumeAfterDrag = false;
     };
     ha.addEventListener("pointerdown", (ev) => start("a", ev));
@@ -664,8 +775,8 @@ window.GgrMixer = (function () {
     hb.addEventListener("pointercancel", stop);
   }
 
-  function bindCanvasSeek(tr) {
-    const canvas = tr.canvas;
+  function bindCanvasSeek(canvas, tr) {
+    if (!canvas) return;
     canvas.addEventListener("pointerdown", (ev) => {
       if (!duration) return;
       resumeAfterDrag = playing;
@@ -745,6 +856,10 @@ window.GgrMixer = (function () {
           " " +
           esc(where) +
           '"></canvas>' +
+          '<canvas class="mix__wave" hidden aria-label="Amplitude ' +
+          esc(qrg) +
+          '"></canvas>' +
+          '<p class="mix__wf-legend" hidden>USB 0 Hz (bas) → 2,7 kHz (haut) · noir/bleu = bruit · cyan/vert = signal · jaune/blanc = fort</p>' +
           (tr.dead
             ? ""
             : '<div class="mix__wf-load"' +
@@ -761,7 +876,9 @@ window.GgrMixer = (function () {
       .join("");
     deskEl.querySelectorAll(".mix__ch").forEach((el, i) => {
       const tr = tracks[i];
-      tr.canvas = el.querySelector("canvas");
+      tr.canvas = el.querySelector("canvas.mix__wf");
+      tr.wave = el.querySelector("canvas.mix__wave");
+      tr.legend = el.querySelector(".mix__wf-legend");
       tr.head = el.querySelector(".mix__head");
       tr.loadEl = el.querySelector(".mix__wf-load");
       tr.loopEl = el.querySelector(".mix__loop");
@@ -774,7 +891,8 @@ window.GgrMixer = (function () {
         if (zoomBtn) zoomBtn.disabled = true;
         return;
       }
-      bindCanvasSeek(tr);
+      bindCanvasSeek(tr.canvas, tr);
+      bindCanvasSeek(tr.wave, tr);
       bindLoopHandles(tr);
       if (zoomBtn) {
         zoomBtn.addEventListener("click", () => setFocus(focusId === tr.id ? null : tr.id));
@@ -798,15 +916,7 @@ window.GgrMixer = (function () {
 
   function playToggle() {
     if (playing) pauseAt(nowT());
-    else {
-      let t = duration && duration - t0 < 0.08 ? 0 : t0;
-      if (loopOn && loopOk()) {
-        const a = Math.min(loopA, loopB);
-        const b = Math.max(loopA, loopB);
-        if (t < a || t >= b - 0.04) t = a;
-      }
-      startSources(t);
-    }
+    else startSources(clampLoopTime(duration && duration - t0 < 0.08 ? 0 : t0));
   }
 
   playBtn.addEventListener("click", playToggle, sig);
@@ -820,6 +930,7 @@ window.GgrMixer = (function () {
         } else {
           loopOn = true;
           ensureLoopRange();
+          if (playing) startSources(clampLoopTime(nowT()));
         }
         updateLoopUi();
       },
@@ -899,7 +1010,13 @@ window.GgrMixer = (function () {
       if (!playing) seekElTo(tr, t0);
     });
     tr.el.addEventListener("ended", () => {
-      if (playing && masterEl() === tr.el) pauseAt(duration || tr.el.currentTime || 0);
+      if (!playing) return;
+      if (loopOn && loopOk()) {
+        restartLoop(Math.min(loopA, loopB));
+        return;
+      }
+      const clock = clockTrack();
+      if (clock && clock.el === tr.el) pauseAt(duration || tr.el.currentTime || 0);
     });
   }
 
@@ -907,11 +1024,11 @@ window.GgrMixer = (function () {
     return String(src || "").replace(/\.(mp3|m4a|aac)$/i, ".wav");
   }
 
-  async function fetchWav(tr) {
+  async function fetchWav(tr, quiet) {
     if (tr.dead || !tr.src) return null;
     const pcm = tr.wav || pcmName(tr.src);
     if (!pcm) return null;
-    setExtract(tr, 0);
+    if (!quiet) setExtract(tr, 0);
     try {
       const res = await fetch(media(pcm));
       if (!res.ok) throw new Error("HTTP " + res.status);
@@ -926,16 +1043,19 @@ window.GgrMixer = (function () {
           if (step.done) break;
           chunks.push(step.value);
           received += step.value.byteLength;
-          if (total) setExtract(tr, (received / total) * 45);
-          else setExtract(tr, Math.min(40, 5 + received / 350000));
+          if (!quiet) {
+            if (total) setExtract(tr, (received / total) * 45);
+            else setExtract(tr, Math.min(40, 5 + received / 350000));
+          }
         }
         raw = await new Blob(chunks).arrayBuffer();
       } else {
         raw = await res.arrayBuffer();
       }
-      setExtract(tr, 45);
+      if (!quiet) setExtract(tr, 45);
       return wavMono16(raw);
     } catch (err) {
+      if (quiet) return null;
       tr.place = (tr.place || tr.id) + " (échec waterfall)";
       const meta =
         tr.canvas &&
@@ -945,6 +1065,19 @@ window.GgrMixer = (function () {
       setExtract(tr, 0, true);
       console.warn("Mixage piste", tr.id, err);
       return null;
+    }
+  }
+
+  async function loadWave(tr) {
+    if (!tr || tr.dead || tr.peaks || tr.waveBusy) return;
+    tr.waveBusy = true;
+    try {
+      const wav = await fetchWav(tr, true);
+      if (!wav) return;
+      tr.peaks = computePeaks(wav.samples, 1024);
+      if (focusId === tr.id) drawWave(tr);
+    } finally {
+      tr.waveBusy = false;
     }
   }
 
@@ -1089,7 +1222,7 @@ window.GgrMixer = (function () {
           live +
           "/" +
           tracks.length +
-          " voies audio · waterfall USB 0–2,7 kHz (début à gauche) · mute / volume.";
+          " voies audio · spectrogramme USB 0–2,7 kHz (temps →) · mute / volume.";
       updateHead();
       return;
     }
