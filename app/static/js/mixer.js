@@ -69,6 +69,7 @@ window.GgrMixer = (function () {
   let resumeAfterDrag = false;
   let raf = 0;
   let tickTimer = 0;
+  let playNoted = false;
   const ac = new AbortController();
   const sig = { signal: ac.signal };
 
@@ -400,10 +401,25 @@ window.GgrMixer = (function () {
     playBtn.title = on ? "Pause" : "Lecture";
   }
 
+  function noteReplayPlay() {
+    if (playNoted || !vacId) return;
+    playNoted = true;
+    try {
+      fetch("/api/trafic/" + encodeURIComponent(vacId) + "/play", {
+        method: "POST",
+        keepalive: true,
+        headers: { Accept: "application/json" },
+      }).catch(function () {});
+    } catch {
+      /* ignore */
+    }
+  }
+
   function startSources(offset) {
     const off = Math.max(0, offset || 0);
     t0 = off;
     playing = true;
+    noteReplayPlay();
     tracks.forEach((tr) => {
       if (tr.el && tr.el.preload !== "auto") tr.el.preload = "auto";
       ensureReady(tr, off);

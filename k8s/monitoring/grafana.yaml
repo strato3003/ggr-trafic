@@ -346,10 +346,62 @@ data:
           }
         },
         {
+          "title": "Replays joués",
+          "description": "Bouton Lecture du mixer, une fois par ouverture de page. Identifiant d’enregistrement (ex. 2026-09-19T1159Z-buddy). Pas d’IP.",
+          "type": "table",
+          "gridPos": { "h": 10, "w": 8, "x": 0, "y": 50 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (replay) (increase(ggr_http_replays_total[$__range]))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+          ],
+          "fieldConfig": {
+            "defaults": { "decimals": 0 },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Lectures" }] },
+              { "matcher": { "id": "byName", "options": "replay" }, "properties": [{ "id": "displayName", "value": "Enregistrement" }] }
+            ]
+          }
+        },
+        {
+          "title": "Replays × origine (hors France)",
+          "description": "Mêmes lectures, par ville, hors visites labellisées France.",
+          "type": "table",
+          "gridPos": { "h": 10, "w": 16, "x": 8, "y": 50 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (replay, country, city) (increase(ggr_http_replays_total{country!=\"France\"}[$__range]))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+          ],
+          "fieldConfig": {
+            "defaults": { "decimals": 0 },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Lectures" }] },
+              { "matcher": { "id": "byName", "options": "replay" }, "properties": [{ "id": "displayName", "value": "Enregistrement" }] },
+              { "matcher": { "id": "byName", "options": "country" }, "properties": [{ "id": "displayName", "value": "Pays" }] },
+              { "matcher": { "id": "byName", "options": "city" }, "properties": [{ "id": "displayName", "value": "Ville" }] }
+            ]
+          }
+        },
+        {
           "title": "Pages consultées",
           "description": "GET / (accueil-globe) et GET /trafic/<id> (replay d’un enregistrement). Pas d’IP, pas de /media ni d’API.",
           "type": "table",
-          "gridPos": { "h": 10, "w": 8, "x": 0, "y": 50 },
+          "gridPos": { "h": 10, "w": 8, "x": 0, "y": 60 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
@@ -374,7 +426,7 @@ data:
           "title": "Pages × origine (hors France)",
           "description": "Même pages, ventilées par ville, sans les visites labellisées France.",
           "type": "table",
-          "gridPos": { "h": 10, "w": 16, "x": 8, "y": 50 },
+          "gridPos": { "h": 10, "w": 16, "x": 8, "y": 60 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {

@@ -1059,6 +1059,7 @@ def test_metrics_payload_exposes_ggr_gauges(tmp_path, monkeypatch):
     assert "ggr_data_used_bytes" in text
     assert "ggr_data_total_bytes" in text
     assert "ggr_http_visitors" in text
+    assert "ggr_http_replays_total" in text
     assert "text/plain" in media
 
 
@@ -1152,6 +1153,30 @@ def test_visitors_records_trafic_path():
     assert hits
     assert visitors.page_label("/trafic/2026-09-19T1159Z-buddy/") == "/trafic/2026-09-19T1159Z-buddy"
     assert visitors.page_label("/") == "/"
+
+
+def test_visitors_records_replay_play():
+    from app import visitors
+
+    visitors.reset_for_tests()
+    visitors._geo_cache["8.8.8.8"] = {
+        "country": "United States",
+        "city": "Ashburn",
+        "latitude": "39.04",
+        "longitude": "-77.49",
+    }
+    visitors.schedule_replay(
+        _starlette_request("/api/trafic/2026-09-19T1159Z-buddy/play", method="POST", forwarded="8.8.8.8"),
+        "2026-09-19T1159Z-buddy",
+    )
+    hits = [
+        s
+        for s in visitors.REPLAYS.collect()[0].samples
+        if s.name == "ggr_http_replays_total"
+        and s.labels.get("replay") == "2026-09-19T1159Z-buddy"
+        and s.labels.get("city") == "Ashburn"
+    ]
+    assert hits
 
 
 def _pip(lon: float, lat: float, ring: list) -> bool:

@@ -33,6 +33,11 @@ UNIQUE = Gauge(
     "ggr_http_visitors",
     "Adresses IP publiques distinctes depuis le démarrage du pod (jamais exposées en label)",
 )
+REPLAYS = Counter(
+    "ggr_http_replays_total",
+    "Lancements de lecture mixer (bouton Lecture), par enregistrement",
+    ["country", "city", "replay"],
+)
 
 _unique_ips: set[str] = set()
 _geo_cache: dict[str, dict[str, str]] = {}
@@ -146,6 +151,60 @@ def _count(ip: str, labels: dict[str, str], path: str) -> None:
     VISITS.labels(**labels, path=page_label(path)).inc()
     _unique_ips.add(ip)
     UNIQUE.set(len(_unique_ips))
+
+
+def _count_replay(ip: str, labels: dict[str, str], replay: str) -> None:
+    REPLAYS.labels(
+        country=labels.get("country") or "inconnu",
+        city=labels.get("city") or "inconnu",
+        replay=replay_label(replay),
+    ).inc()
+    _unique_ips.add(ip)
+    UNIQUE.set(len(_unique_ips))
+
+
+def replay_label(vid: str) -> str:
+    return _lab(vid, fallback="inconnu")[:80]
+
+
+def schedule_replay(request: Request, trafic_id: str) -> None:
+    """Comptage d’une lecture mixer, même géoloc que les visites de page."""
+    ip = client_ip(request)
+    if not ip:
+        return
+    rid = replay_label(trafic_id)
+    if not rid or rid == "inconnu":
+        return
+    cached = _geo_cache.get(ip)
+    if cached is not None:
+        _count_replay(ip, cached, rid)
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _count_replay(ip, _geo_labels(None), rid)
+        return
+    key = "replay:" + ip
+    if key in _pending:
+        return
+    _pending.add(key)
+    loop.create_task(_resolve_and_count_replay(ip, rid, key))
+
+
+async def _resolve_and_count_replay(ip: str, rid: str, key: str) -> None:
+    try:
+        labels = _geo_cache.get(ip)
+        if labels is None:
+            labels = _geo_labels(await geolocate(ip))
+            _geo_cache[ip] = labels
+        _count_replay(ip, labels, rid)
+    except Exception:
+        log.exception("Géoloc replay %s", ip.split(".")[0] + ".x")
+        labels = _geo_labels(None)
+        _geo_cache.setdefault(ip, labels)
+        _count_replay(ip, labels, rid)
+    finally:
+        _pending.discard(key)
 
 
 def schedule(request: Request) -> None:

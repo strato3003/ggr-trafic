@@ -201,6 +201,18 @@ async def trafic_page(request: Request, trafic_id: str):
     return render(request, "trafic.html", trafic=meta)
 
 
+@app.post("/api/trafic/{trafic_id}/play")
+@app.post("/api/vacations/{trafic_id}/play")
+async def api_replay_play(request: Request, trafic_id: str):
+    """Ping mixer : une lecture a démarré (pas d’admin, pas d’IP dans Prometheus)."""
+    if not store.get_vacation(trafic_id, load_config()):
+        raise HTTPException(404, "Trafic introuvable")
+    from app import visitors
+
+    visitors.schedule_replay(request, trafic_id)
+    return {"ok": True}
+
+
 @app.get("/vacations/{vacation_id}")
 async def vacation_redirect(vacation_id: str):
     return RedirectResponse("/trafic/" + vacation_id, status_code=302)
