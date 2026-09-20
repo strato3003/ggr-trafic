@@ -1045,6 +1045,35 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   font-weight: 500;
 }
 .settings-banner.err { border-color: var(--err); color: var(--err); }
+.visit-log { margin: 1.5rem 0 2rem; max-width: none; }
+.visit-log h2 { font-size: 1.05rem; color: var(--brass); margin: 0 0 0.4rem; }
+.visit-log .hint { color: var(--muted); font-size: 0.88rem; margin: 0 0 0.7rem; }
+.visit-log__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+  margin: 0 0 0.6rem;
+}
+.visit-log__bar label { margin: 0; }
+.visit-log__bar input { min-width: 14rem; }
+.visit-log__table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.visit-log__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  font-family: var(--mono);
+}
+.visit-log__table th,
+.visit-log__table td {
+  text-align: left;
+  padding: 0.35rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.visit-log__table th { color: var(--muted); font-weight: 600; }
+.visit-log__ip { cursor: pointer; color: var(--brass); }
+.visit-log__ip:hover { text-decoration: underline; }
 .btn:disabled { opacity: 0.55; cursor: wait; }
 .btn--danger { background: var(--err); color: #fff; }
 .card__del {

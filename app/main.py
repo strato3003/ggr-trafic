@@ -213,6 +213,19 @@ async def api_replay_play(request: Request, trafic_id: str):
     return {"ok": True}
 
 
+@app.get("/api/visits")
+async def api_visits(
+    ip: str | None = None,
+    limit: int = 200,
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    _require_admin(x_admin_token)
+    from app import visitlog
+
+    rows = visitlog.list_events(ip=ip, limit=limit)
+    return {"ok": True, "events": rows, "count": len(rows)}
+
+
 @app.get("/vacations/{vacation_id}")
 async def vacation_redirect(vacation_id: str):
     return RedirectResponse("/trafic/" + vacation_id, status_code=302)

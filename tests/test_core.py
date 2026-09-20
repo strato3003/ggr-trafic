@@ -1095,8 +1095,11 @@ def _starlette_request(
     )
 
 
-def test_visitors_count_public_page_not_probes():
-    from app import visitors
+def test_visitors_count_public_page_not_probes(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from app import visitlog, visitors
+
+    visitlog.reset_for_tests()
 
     visitors.reset_for_tests()
     visitors._geo_cache["8.8.8.8"] = {
@@ -1132,8 +1135,11 @@ def test_visitors_client_ip_leftmost_public():
     assert not visitors.is_page_visit("POST", "/")
 
 
-def test_visitors_records_trafic_path():
-    from app import visitors
+def test_visitors_records_trafic_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from app import visitlog, visitors
+
+    visitlog.reset_for_tests()
 
     visitors.reset_for_tests()
     visitors._geo_cache["8.8.8.8"] = {
@@ -1155,8 +1161,28 @@ def test_visitors_records_trafic_path():
     assert visitors.page_label("/") == "/"
 
 
-def test_visitors_records_replay_play():
-    from app import visitors
+def test_visitlog_ip_timeline(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from app import visitlog
+
+    visitlog.reset_for_tests()
+    visitlog.append("8.8.8.8", "page", "/", "United States", "Ashburn")
+    visitlog.append("8.8.8.8", "replay", "2026-09-19T1159Z-buddy", "United States", "Ashburn")
+    visitlog.append("1.1.1.1", "page", "/", "Australia", "Sydney")
+    mine = visitlog.list_events(ip="8.8.8.8")
+    assert [e["kind"] for e in mine] == ["replay", "page"]
+    assert mine[0]["target"] == "2026-09-19T1159Z-buddy"
+    assert mine[0]["ip"] == "8.8.8.8"
+    assert "T" in mine[0]["ts"]
+    all_rows = visitlog.list_events()
+    assert len(all_rows) == 3
+
+
+def test_visitors_records_replay_play(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from app import visitlog, visitors
+
+    visitlog.reset_for_tests()
 
     visitors.reset_for_tests()
     visitors._geo_cache["8.8.8.8"] = {

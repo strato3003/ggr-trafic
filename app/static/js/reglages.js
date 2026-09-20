@@ -216,4 +216,93 @@
     });
   }
 
+  const visitIp = document.getElementById("visit-ip");
+  const visitLoad = document.getElementById("visit-load");
+  const visitBody = document.getElementById("visit-body");
+  const visitMsg = document.getElementById("visit-msg");
+  const fmtTu = (iso) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso || "—";
+    const p = (n) => String(n).padStart(2, "0");
+    return (
+      p(d.getUTCDate()) +
+      "/" +
+      p(d.getUTCMonth() + 1) +
+      " " +
+      p(d.getUTCHours()) +
+      ":" +
+      p(d.getUTCMinutes()) +
+      ":" +
+      p(d.getUTCSeconds()) +
+      " TU"
+    );
+  };
+  const loadVisits = async (ip) => {
+    if (!visitBody) return;
+    if (visitMsg) {
+      visitMsg.hidden = false;
+      visitMsg.textContent = "Chargement…";
+      visitMsg.classList.remove("err");
+    }
+    const q = (ip || "").trim();
+    const url = "/api/visits?limit=200" + (q ? "&ip=" + encodeURIComponent(q) : "");
+    const res = await fetch(url, { headers: headers() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(_detail(data) || "Jeton invalide");
+    }
+    const rows = data.events || [];
+    visitBody.replaceChildren();
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 5;
+      td.textContent = q ? "Aucune activité pour cette IP." : "Aucune visite enregistrée.";
+      tr.appendChild(td);
+      visitBody.appendChild(tr);
+    } else {
+      rows.forEach((ev) => {
+        const tr = document.createElement("tr");
+        const action = ev.kind === "replay" ? "Replay" : "Page";
+        const lieu = [ev.city, ev.country].filter(Boolean).join(", ") || "—";
+        const cells = [fmtTu(ev.ts), ev.ip || "—", lieu, action, ev.target || "—"];
+        cells.forEach((text, i) => {
+          const td = document.createElement("td");
+          td.textContent = text;
+          if (i === 1) {
+            td.className = "visit-log__ip";
+            td.title = "Filtrer cette IP";
+            td.addEventListener("click", () => {
+              if (visitIp) visitIp.value = String(ev.ip || "");
+              loadVisits(ev.ip).catch((err) => {
+                if (visitMsg) {
+                  visitMsg.hidden = false;
+                  visitMsg.textContent = String(err);
+                  visitMsg.classList.add("err");
+                }
+              });
+            });
+          }
+          tr.appendChild(td);
+        });
+        visitBody.appendChild(tr);
+      });
+    }
+    if (visitMsg) {
+      visitMsg.hidden = false;
+      visitMsg.textContent = rows.length + " événement(s)";
+      visitMsg.classList.remove("err");
+    }
+  };
+  if (visitLoad) {
+    visitLoad.addEventListener("click", () => {
+      loadVisits(visitIp && visitIp.value).catch((err) => {
+        if (visitMsg) {
+          visitMsg.hidden = false;
+          visitMsg.textContent = String(err);
+          visitMsg.classList.add("err");
+        }
+      });
+    });
+  }
 })();

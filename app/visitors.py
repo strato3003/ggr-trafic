@@ -151,16 +151,35 @@ def _count(ip: str, labels: dict[str, str], path: str) -> None:
     VISITS.labels(**labels, path=page_label(path)).inc()
     _unique_ips.add(ip)
     UNIQUE.set(len(_unique_ips))
+    from app import visitlog
+
+    visitlog.append(
+        ip,
+        "page",
+        page_label(path),
+        labels.get("country") or "",
+        labels.get("city") or "",
+    )
 
 
 def _count_replay(ip: str, labels: dict[str, str], replay: str) -> None:
+    rid = replay_label(replay)
     REPLAYS.labels(
         country=labels.get("country") or "inconnu",
         city=labels.get("city") or "inconnu",
-        replay=replay_label(replay),
+        replay=rid,
     ).inc()
     _unique_ips.add(ip)
     UNIQUE.set(len(_unique_ips))
+    from app import visitlog
+
+    visitlog.append(
+        ip,
+        "replay",
+        rid,
+        labels.get("country") or "",
+        labels.get("city") or "",
+    )
 
 
 def replay_label(vid: str) -> str:
