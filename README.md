@@ -36,6 +36,7 @@ sudo ./scripts/update.sh           # tire GHCR si origin GitHub, sinon rebuild
 ```
 
 L’UI est en **HTTPS** via Traefik + Let’s Encrypt : [https://ggr-trafic.k3s.lpb.ovh](https://ggr-trafic.k3s.lpb.ovh).  
+Recette sans enregistreur : `sudo ./scripts/update.sh preview` → [https://ggr-trafic-test.k3s.lpb.ovh](https://ggr-trafic-test.k3s.lpb.ovh).  
 L’ancien hôte `ggr-vacations.k3s.lpb.ovh` redirige (301) vers celui-ci.  
 Le NodePort `http://<IP-du-VPS>:30080` reste disponible en secours.
 

@@ -4,6 +4,7 @@
 #   ./scripts/update.sh          # GHCR si origin GitHub, sinon build local
 #   ./scripts/update.sh local    # build Docker + import k3s
 #   ./scripts/update.sh pull     # image ghcr.io/<owner>/ggr-trafic:latest (ou ancien dépôt)
+#   ./scripts/update.sh preview [ref]  # UI test, sans enregistreur → https://ggr-trafic-test.k3s.lpb.ovh
 #   ./scripts/update.sh copy-pvc # copie les archives PVC ggr-vacations → ggr-trafic
 #
 # Recreate : un rollout tue l’enregistreur. Refus si .recording.lock
@@ -18,8 +19,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 KNS="ggr-trafic"
+PREVIEW_NS="ggr-trafic-preview"
 OLD_KNS="ggr-vacations"
 MODE="${1:-auto}"
+PREVIEW_REF="${2:-}"
 
 as_root() {
   if [[ "$(id -u)" -eq 0 ]]; then
@@ -37,12 +40,14 @@ kc() {
   fi
 }
 
-if [[ -d .git ]]; then
+if [[ "$MODE" != "preview" && -d .git ]]; then
   git pull --ff-only || true
 fi
 
 # Kustomize n'autorise que les fichiers sous k8s/ (restriction de sécurité).
-cp "$ROOT/config/default.yaml" "$ROOT/k8s/config.yaml"
+if [[ "$MODE" != "preview" ]]; then
+  cp "$ROOT/config/default.yaml" "$ROOT/k8s/config.yaml"
+fi
 
 image_from_origin() {
   local remote owner repo
@@ -196,9 +201,72 @@ apply_clusterissuer() {
   return 1
 }
 
+# Révision Git pour la preview (branche, tag ou SHA). Sans argument : arbre courant.
+preview_tree() {
+  if [[ -z "$PREVIEW_REF" ]]; then
+    printf '%s' "$ROOT"
+    return
+  fi
+  [[ -d .git ]] || { echo "Dépôt git requis pour preview <ref>" >&2; exit 1; }
+  git fetch origin --prune || true
+  local rev
+  if ! rev="$(git rev-parse --verify "${PREVIEW_REF}^{commit}" 2>/dev/null)"; then
+    if ! rev="$(git rev-parse --verify "origin/${PREVIEW_REF}^{commit}" 2>/dev/null)"; then
+      echo "Révision inconnue : ${PREVIEW_REF}" >&2
+      exit 1
+    fi
+  fi
+  local work
+  work="$(mktemp -d /tmp/ggr-preview.XXXXXX)"
+  git archive --format=tar "$rev" | tar -x -C "$work"
+  printf '%s' "$work"
+}
+
+build_preview_image() {
+  local src="$1"
+  local img="ggr-trafic:preview"
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker est requis pour le build preview" >&2
+    exit 1
+  fi
+  as_root docker build -t "$img" "$src"
+  as_root docker save "$img" | as_root k3s ctr images import -
+}
+
+deploy_preview() {
+  local src work=""
+  src="$(preview_tree)"
+  if [[ "$src" != "$ROOT" ]]; then
+    work="$src"
+  fi
+  if [[ ! -f "$src/overlays/preview/kustomization.yaml" ]]; then
+    echo "Pas d’overlay overlays/preview dans cette révision." >&2
+    [[ -n "$work" ]] && rm -rf "$work"
+    exit 1
+  fi
+  cp "$src/config/default.yaml" "$src/k8s/config.yaml"
+  build_preview_image "$src"
+  ensure_cert_manager
+  apply_clusterissuer
+  kc apply -f "$src/overlays/preview/namespace.yaml"
+  kc apply -k "$src/overlays/preview"
+  kc -n "$PREVIEW_NS" set image "deploy/ggr-trafic" "web=ggr-trafic:preview"
+  kc -n "$PREVIEW_NS" rollout restart "deploy/ggr-trafic"
+  kc -n "$PREVIEW_NS" rollout status "deploy/ggr-trafic" --timeout=180s
+  [[ -n "$work" ]] && rm -rf "$work"
+  echo "Preview : ggr-trafic:preview"
+  echo "UI test : https://ggr-trafic-test.k3s.lpb.ovh"
+  echo "Pas d’enregistreur (GGR_SCHEDULER=0). Prod inchangée."
+}
+
 if [[ "$MODE" == "copy-pvc" ]]; then
   refuse_if_recording
   copy_pvc_data
+  exit 0
+fi
+
+if [[ "$MODE" == "preview" ]]; then
+  deploy_preview
   exit 0
 fi
 
@@ -225,7 +293,7 @@ case "$MODE" in
     fi
     ;;
   *)
-    echo "usage: $0 [auto|local|pull|copy-pvc]" >&2
+    echo "usage: $0 [auto|local|pull|preview [ref]|copy-pvc]" >&2
     exit 1
     ;;
 esac

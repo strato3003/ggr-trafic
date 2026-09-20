@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ggr-trafic
+spec:
+  template:
+    spec:
+      containers:
+        - name: web
+          env:
+            - name: GGR_SCHEDULER
+              value: "0"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
