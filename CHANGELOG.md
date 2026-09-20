@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.1.10 — 2026-09-20
+
+- À propos : ordre des émetteurs bulletin selon la flotte — Guy F4DAI (cette semaine Philippe F4HWM), puis Cap Town, enfin Michel FO5QB.
+
 ## 1.1.9 — 2026-09-20
 
 - Cette semaine : bulletin France **Philippe F4HWM / F6KUF** depuis Talmont-Saint-Hilaire (lun. et jeu. 18:00 TU).
