@@ -83,6 +83,7 @@
         metarea: !!(form.elements.namedItem("display_metarea") && form.elements.namedItem("display_metarea").checked),
         subzones: !!(form.elements.namedItem("display_subzones") && form.elements.namedItem("display_subzones").checked),
       },
+      unavailable: !!(form.elements.namedItem("unavailable") && form.elements.namedItem("unavailable").checked),
     };
   };
 
@@ -113,6 +114,7 @@
     if (!res.ok) {
       throw new Error(_detail(data) || `Erreur ${res.status}`);
     }
+    if (window.GgrWait) window.GgrWait.force(!!data.unavailable);
     return data;
   };
 
@@ -239,6 +241,28 @@
         say("display", String(err), false);
       } finally {
         busy(saveDisplayBtn, false);
+      }
+    });
+  }
+
+  const saveWaitBtn = document.getElementById("save-wait");
+  if (saveWaitBtn) {
+    saveWaitBtn.addEventListener("click", async () => {
+      busy(saveWaitBtn, true);
+      say("wait", "Sauvegarde de la page d’attente…", true);
+      try {
+        const data = await saveSettings();
+        say(
+          "wait",
+          data.unavailable
+            ? "Page d’attente activée : les visiteurs voient le globe flouté."
+            : "Page d’attente désactivée.",
+          true
+        );
+      } catch (err) {
+        say("wait", String(err), false);
+      } finally {
+        busy(saveWaitBtn, false);
       }
     });
   }

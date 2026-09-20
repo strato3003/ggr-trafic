@@ -103,6 +103,29 @@ jinja = Environment(
 jinja.filters["when"] = store.iso_to_label
 
 
+_UNAVAILABLE_FALLBACK = """<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GGR Trafic — indisponible</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="globe-page kiwi-panel-off is-map-3d is-unavailable" data-ggr-force-wait="1">
+<div class="globe-app" data-ggr-force-wait="1">
+  <div class="globe-stage"><div id="ggr-globe" class="ggr-globe" role="img" aria-hidden="true"></div></div>
+  <div id="ggr-wait" class="ggr-wait" role="status">
+    <p class="ggr-wait__title">Site momentanément indisponible</p>
+    <p class="ggr-wait__text">Le trafic HF F6KUF / Golden Globe Race reviendra dans un instant.</p>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
+<script src="/static/js/wait.js"></script>
+</body>
+</html>
+"""
+
+
 def render(request: Request, name: str, **extra) -> HTMLResponse:
     """Rendu Jinja direct — Starlette TemplateResponse passe parfois le context dict comme nom de template."""
     try:
@@ -111,9 +134,26 @@ def render(request: Request, name: str, **extra) -> HTMLResponse:
         return HTMLResponse(html, headers={"Cache-Control": "no-store"})
     except Exception as exc:
         log.exception("Rendu %s", name)
+        if name == "flotte.html":
+            return render_unavailable(request, status_code=503)
         return HTMLResponse(
             f"<!doctype html><pre>Erreur interne : {type(exc).__name__}: {exc}</pre>",
             status_code=500,
+        )
+
+
+def render_unavailable(request: Request, status_code: int = 503) -> HTMLResponse:
+    """Page d’attente (globe 3D flouté) — incident manifeste ou maintenance."""
+    try:
+        ctx = _ctx(request, unavailable=True)
+        html = jinja.get_template("indisponible.html").render(**ctx)
+        return HTMLResponse(html, status_code=status_code, headers={"Cache-Control": "no-store"})
+    except Exception:
+        log.exception("Page d'attente")
+        return HTMLResponse(
+            _UNAVAILABLE_FALLBACK,
+            status_code=status_code,
+            headers={"Cache-Control": "no-store"},
         )
 
 
@@ -302,12 +342,10 @@ async def _globe_page(request: Request):
             log.exception("KiwiSDR buddy indisponibles")
         qth = bulletin_tx_qth(cfg, float(fleet.get("lat") or 0), float(fleet.get("lon") or 0))
         tahiti_tx = fleet_uses_tahiti_tx(float(fleet.get("lat") or 0), float(fleet.get("lon") or 0))
-    except Exception as exc:
+    except Exception:
         log.exception("Page flotte")
-        return HTMLResponse(
-            f"<!doctype html><pre>Erreur flotte : {type(exc).__name__}: {exc}</pre>",
-            status_code=500,
-        )
+        return render_unavailable(request, status_code=503)
+    wait_q = str(request.query_params.get("wait") or "").lower()
     return render(
         request,
         "flotte.html",
@@ -320,6 +358,7 @@ async def _globe_page(request: Request):
         boats=fleet.get("boats") or [],
         bulletin_tx_label=qth["label"],
         bulletin_tx_from_tahiti=tahiti_tx,
+        unavailable=bool((cfg.get("web") or {}).get("unavailable")) or wait_q in ("1", "true", "oui"),
     )
 
 
@@ -595,11 +634,16 @@ async def api_settings_put(
             patch["tx_sites"] = parse_tx_sites(body.get("tx_sites"))
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+    web_patch: dict = {}
     if "display" in body:
         try:
-            patch["web"] = {"display": parse_display(body.get("display"), display_defaults(cfg))}
+            web_patch["display"] = parse_display(body.get("display"), display_defaults(cfg))
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+    if "unavailable" in body:
+        web_patch["unavailable"] = bool(body.get("unavailable"))
+    if web_patch:
+        patch["web"] = web_patch
     new_cfg = save_runtime_settings(patch, cfg)
     scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler is not None:

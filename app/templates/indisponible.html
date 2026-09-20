@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} — indisponible</title>
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi68">
+</head>
+<body class="globe-page kiwi-panel-off is-map-3d is-unavailable" data-ggr-force-wait="1">
+  <div class="globe-app" data-ggr-force-wait="1">
+    <div class="globe-stage">
+      <div id="ggr-globe" class="ggr-globe" role="img" aria-hidden="true"></div>
+    </div>
+    {% include "_wait.html" %}
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
+  <script src="/static/js/wait.js?v={{ version }}-kiwi1"></script>
+</body>
+</html>

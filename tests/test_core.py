@@ -879,6 +879,19 @@ def test_display_defaults_and_runtime_override(tmp_path, monkeypatch):
     assert qrg["tx_khz"] == 14135.0
 
 
+def test_unavailable_runtime_flag(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from recorder.config import load_config, qrg_context, save_runtime_settings
+
+    assert qrg_context(load_config())["unavailable"] is False
+    save_runtime_settings({"web": {"unavailable": True}})
+    qrg = qrg_context(load_config())
+    assert qrg["unavailable"] is True
+    assert qrg["display"]["banner"] is True
+    save_runtime_settings({"web": {"unavailable": False}})
+    assert qrg_context(load_config())["unavailable"] is False
+
+
 def test_parse_display_rejects_non_object():
     from recorder.config import parse_display
 

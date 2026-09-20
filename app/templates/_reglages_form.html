@@ -184,6 +184,24 @@
   </fieldset>
 
   <fieldset>
+    <legend>Page d’attente</legend>
+    <p class="hint">
+      En cas d’incident manifeste (globe noir, script cassé) ou pour une
+      maintenance : les visiteurs voient « Site momentanément indisponible »
+      devant le globe 3D en faible transparence et flou. Recette :
+      <code>/?wait=1</code>.
+    </p>
+    <label class="settings__check">
+      <input name="unavailable" type="checkbox"{% if unavailable %} checked{% endif %}>
+      Activer la page d’attente
+    </label>
+    <p class="settings__actions">
+      <button type="button" class="btn" id="save-wait">Sauver la page d’attente</button>
+    </p>
+    <p class="settings-msg" data-for="wait" role="status"></p>
+  </fieldset>
+
+  <fieldset>
     <legend>Affichage globe (défauts)</legend>
     {% set disp = display if display is defined else {} %}
     <p class="hint">

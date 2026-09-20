@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{% endblock %}
-{% block body_class %}globe-page kiwi-panel-off is-map-3d{% endblock %}
+{% block body_class %}globe-page kiwi-panel-off is-map-3d{% if unavailable %} is-unavailable{% endif %}{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 {% endblock %}
 {% block content %}
-<div class="globe-app">
+<div class="globe-app"{% if unavailable %} data-ggr-force-wait="1"{% endif %}>
   <div class="globe-stage">
     <p class="globe-brand">
       <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
@@ -164,6 +164,7 @@
       {% include "_about.html" %}
     </div>
   </aside>
+  {% include "_wait.html" %}
 </div>
 
 <script type="application/json" id="ggr-globe-data">{{ {
@@ -187,6 +188,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
 <script src="/static/js/mixer.js?v={{ version }}-kiwi66"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi55"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi64"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi56"></script>
+<script src="/static/js/wait.js?v={{ version }}-kiwi1"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi66"></script>
 {% endblock %}

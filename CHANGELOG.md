@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.8 — 2026-09-20
+
+- Globe : plus d’écran noir à l’arrivée (variables `globe` / `map` initialisées avant l’onglet À propos).
+- Page d’attente « Site momentanément indisponible » (globe 3D flouté) : auto si le globe plante, 503 serveur, Setup, ou `/?wait=1`.
+
 ## 1.1.7 — 2026-09-20
 
 - Mixeur : le chargement audio ne reste plus figé à 0/4 (play muet pour lancer le fetch, puis seek).

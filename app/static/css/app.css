@@ -424,6 +424,51 @@ body.globe-page .wrap {
   isolation: isolate;
   overflow: hidden;
 }
+body.is-unavailable .globe-stage {
+  filter: blur(10px) saturate(0.95) brightness(1.15);
+  opacity: 0.48;
+  pointer-events: none;
+  transform: scale(1.05);
+}
+body.is-unavailable .kiwi-toggle,
+body.is-unavailable .globe-rail,
+body.is-unavailable .map-opt-toggle,
+body.is-unavailable .map-opt,
+body.is-unavailable .map-mode,
+body.is-unavailable .globe-rec,
+body.is-unavailable .globe-osm-copy,
+body.is-unavailable .globe-brand {
+  display: none !important;
+}
+.ggr-wait {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  pointer-events: none;
+  color: var(--foam);
+}
+.ggr-wait[hidden] { display: none !important; }
+.ggr-wait__title {
+  margin: 0 0 0.7rem;
+  font-size: clamp(1.4rem, 3.2vw, 2.05rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 28px #02050a, 0 0 18px #02050a;
+}
+.ggr-wait__text {
+  margin: 0;
+  max-width: 28rem;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 1.02rem;
+  text-shadow: 0 1px 16px #02050a;
+}
 .globe-brand {
   position: absolute;
   top: 0.7rem;
