@@ -77,6 +77,22 @@ def test_scheduler_cron_is_1759_with_one_minute_lead():
     assert _lead({"schedule": {"time_utc": "18:00", "lead_minutes": 1}}) == (17, 59)
 
 
+def test_scheduler_enabled_defaults_on(monkeypatch):
+    monkeypatch.delenv("GGR_SCHEDULER", raising=False)
+    from recorder.config import scheduler_enabled
+
+    assert scheduler_enabled() is True
+
+
+def test_scheduler_enabled_off(monkeypatch):
+    from recorder.config import scheduler_enabled
+
+    monkeypatch.setenv("GGR_SCHEDULER", "0")
+    assert scheduler_enabled() is False
+    monkeypatch.setenv("GGR_SCHEDULER", "off")
+    assert scheduler_enabled() is False
+
+
 def test_sog_and_gps_at_from_fixes():
     moments = [
         {"lat": 46.50, "lon": -1.80, "at": 1_789_286_422 - 3600},

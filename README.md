@@ -39,6 +39,29 @@ L’UI est en **HTTPS** via Traefik + Let’s Encrypt : [https://ggr-trafic.k3s.
 L’ancien hôte `ggr-vacations.k3s.lpb.ovh` redirige (301) vers celui-ci.  
 Le NodePort `http://<IP-du-VPS>:30080` reste disponible en secours.
 
+## Branches et instance de test
+
+`main` est la production. Pas de branche `prod` / `dev` permanente.
+
+1. Branche courte depuis `main` (`feat/…`, `fix/…`).
+2. Pousser, puis sur le VPS (hors 12:00 / 18:00 TU) :
+
+```bash
+cd /opt/ggr-vacations          # ou /opt/ggr-trafic
+sudo ./scripts/update.sh preview origin/feat/…
+```
+
+3. Recette : [https://ggr-trafic-test.k3s.lpb.ovh](https://ggr-trafic-test.k3s.lpb.ovh) (UI seule, **pas d’enregistreur**, PVC dédié 1 Gio).
+4. PR → `main`, merge.
+5. Prod :
+
+```bash
+cd /opt/ggr-vacations
+sudo ./scripts/update.sh           # checkout main, pull, déploiement ggr-trafic
+```
+
+Sans argument, `preview` construit l’arbre Git courant. La prod n’est pas redémarrée.
+
 Test scan 20 m (environ 2,5 min, USB 14,19–14,275 MHz) après déploiement de cette version :
 
 ```bash

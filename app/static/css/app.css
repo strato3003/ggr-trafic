@@ -27,6 +27,16 @@ html, body { margin: 0; background: var(--bg); color: var(--foam); font-family: 
 a { color: var(--brass); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+.preview-banner {
+  margin: 0;
+  padding: 0.4rem 1.5rem;
+  background: #3a2a10;
+  color: #e6c98a;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid #6a5420;
+}
+.preview-banner a { color: #f3d9a4; }
 .mast {
   display: flex;
   justify-content: space-between;
