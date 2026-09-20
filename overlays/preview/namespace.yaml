@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ggr-trafic-preview
+  labels:
+    app.kubernetes.io/name: ggr-trafic-preview
+    app.kubernetes.io/part-of: ggr-trafic

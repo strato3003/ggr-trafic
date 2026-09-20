@@ -4,10 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }} {{ version }}{% block title %}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi36">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi47">
   {% block extra_head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}{% if not scheduler_enabled %} is-preview{% endif %}">
+  {% if not scheduler_enabled %}
+  <p class="preview-banner">Instance de test — pas d’enregistrement HF · prod : <a href="https://ggr-trafic.k3s.lpb.ovh">ggr-trafic.k3s.lpb.ovh</a></p>
+  {% endif %}
   <header class="mast">
     <div class="mast__brand">
       <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>

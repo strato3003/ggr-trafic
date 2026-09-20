@@ -26,6 +26,12 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return out
 
 
+def scheduler_enabled() -> bool:
+    """False sur l'instance de test (GGR_SCHEDULER=0) : pas de bulletin / buddy / record."""
+    raw = (os.environ.get("GGR_SCHEDULER") or "1").strip().lower()
+    return raw not in {"0", "false", "off", "no"}
+
+
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
     """Charge config/default.yaml puis une éventuelle surcharge GGR_CONFIG."""
     with DEFAULT_CONFIG.open(encoding="utf-8") as fh:

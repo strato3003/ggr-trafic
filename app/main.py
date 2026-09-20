@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app import globe_tiles, metarea, store
-from recorder.config import ack_label, fmt_khz, fmt_mhz, load_config, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
+from recorder.config import ack_label, fmt_khz, fmt_mhz, load_config, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, scheduler_enabled, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_qth, fetch_ranked_kiwis, fleet_uses_tahiti_tx
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
@@ -44,9 +44,13 @@ async def lifespan(_app: FastAPI):
     recovered = recover_orphaned(cfg)
     if recovered:
         log.warning("Récupération : %s verrou(s) / vacation(s) orphelin(s)", recovered)
-    scheduler = build_scheduler(cfg)
+    scheduler = None
+    if scheduler_enabled():
+        scheduler = build_scheduler(cfg)
+        scheduler.start()
+    else:
+        log.warning("GGR_SCHEDULER=0 : pas de bulletin, buddy call ni record")
     _app.state.scheduler = scheduler
-    scheduler.start()
 
     async def _mux_pending() -> None:
         try:
@@ -61,7 +65,8 @@ async def lifespan(_app: FastAPI):
         yield
     finally:
         mux_task.cancel()
-        scheduler.shutdown(wait=False)
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="GGR Trafic", version=version(CFG), lifespan=lifespan)
@@ -121,6 +126,7 @@ def _ctx(request: Request, **extra):
         "recording_state": store.recording_state(cfg),
         "next_recording_iso": next_recording_utc(cfg).isoformat(),
         "admin_configured": _admin_configured(cfg),
+        "scheduler_enabled": scheduler_enabled(),
         **qrg,
         **extra,
     }
@@ -528,6 +534,8 @@ async def api_record(
     request: Request,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
+    if not scheduler_enabled():
+        raise HTTPException(403, "Instance de test : enregistrement HF désactivé")
     cfg = load_config()
     _require_admin(x_admin_token, cfg)
     if store.recording_in_progress(cfg):
