@@ -47,11 +47,21 @@ def _conn() -> sqlite3.Connection:
           ip TEXT NOT NULL,
           country TEXT,
           city TEXT,
+          region TEXT,
+          postal TEXT,
+          isp TEXT,
+          latitude TEXT,
+          longitude TEXT,
+          ptr TEXT,
           kind TEXT NOT NULL,
           target TEXT NOT NULL
         )
         """
     )
+    have = {row[1] for row in conn.execute("PRAGMA table_info(events)")}
+    for col in ("region", "postal", "isp", "latitude", "longitude", "ptr"):
+        if col not in have:
+            conn.execute(f"ALTER TABLE events ADD COLUMN {col} TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_events_ip_ts ON events(ip, ts)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts)")
     conn.commit()
@@ -60,7 +70,20 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
-def append(ip: str, kind: str, target: str, country: str = "", city: str = "") -> None:
+def append(
+    ip: str,
+    kind: str,
+    target: str,
+    country: str = "",
+    city: str = "",
+    *,
+    region: str = "",
+    postal: str = "",
+    isp: str = "",
+    latitude: str = "",
+    longitude: str = "",
+    ptr: str = "",
+) -> None:
     ip = (ip or "").strip()
     kind = (kind or "").strip()
     target = (target or "").strip()[:120]
@@ -69,12 +92,22 @@ def append(ip: str, kind: str, target: str, country: str = "", city: str = "") -
     ts = datetime.now(timezone.utc).isoformat()
     country = (country or "")[:80]
     city = (city or "")[:80]
+    region = (region or "")[:80]
+    postal = (postal or "")[:16]
+    isp = (isp or "")[:80]
+    latitude = (latitude or "")[:24]
+    longitude = (longitude or "")[:24]
+    ptr = (ptr or "")[:120]
     try:
         with _lock:
             conn = _conn()
             conn.execute(
-                "INSERT INTO events (ts, ip, country, city, kind, target) VALUES (?,?,?,?,?,?)",
-                (ts, ip, country, city, kind, target),
+                """
+                INSERT INTO events (
+                  ts, ip, country, city, region, postal, isp, latitude, longitude, ptr, kind, target
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (ts, ip, country, city, region, postal, isp, latitude, longitude, ptr, kind, target),
             )
             cutoff = (datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)).isoformat()
             conn.execute("DELETE FROM events WHERE ts < ?", (cutoff,))
@@ -90,12 +123,18 @@ def list_events(ip: str | None = None, limit: int = 200) -> list[dict[str, Any]]
         conn = _conn()
         if ip_f:
             rows = conn.execute(
-                "SELECT ts, ip, country, city, kind, target FROM events WHERE ip = ? ORDER BY ts DESC LIMIT ?",
+                """
+                SELECT ts, ip, country, city, region, postal, isp, latitude, longitude, ptr, kind, target
+                FROM events WHERE ip = ? ORDER BY ts DESC LIMIT ?
+                """,
                 (ip_f, n),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT ts, ip, country, city, kind, target FROM events ORDER BY ts DESC LIMIT ?",
+                """
+                SELECT ts, ip, country, city, region, postal, isp, latitude, longitude, ptr, kind, target
+                FROM events ORDER BY ts DESC LIMIT ?
+                """,
                 (n,),
             ).fetchall()
     return [dict(r) for r in rows]

@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.2 — 2026-09-20
+
+- Setup : journal visites par IP (pages consultées, replays lancés, horodatage TU), 14 jours.
+- Lieu = nœud du préfixe FAI (ville, code postal, région, opérateur, reverse DNS), pas le GPS du foyer.
+
 ## 1.1.1 — 2026-09-19
 
 - Globe : calque **METAREA / Sous-zone** ; l’onglet METAREA suit le bulletin WWMIWS de la zone occupée par toute la flotte (II aujourd’hui, puis VII, VIII-S, X, XIV, XV).

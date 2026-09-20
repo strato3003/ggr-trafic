@@ -1167,15 +1167,54 @@ def test_visitlog_ip_timeline(tmp_path, monkeypatch):
 
     visitlog.reset_for_tests()
     visitlog.append("8.8.8.8", "page", "/", "United States", "Ashburn")
-    visitlog.append("8.8.8.8", "replay", "2026-09-19T1159Z-buddy", "United States", "Ashburn")
+    visitlog.append(
+        "8.8.8.8",
+        "replay",
+        "2026-09-19T1159Z-buddy",
+        "France",
+        "Vigneux-de-Bretagne",
+        region="Pays de la Loire",
+        postal="44360",
+        isp="Orange",
+        latitude="47.3250",
+        longitude="-1.7380",
+        ptr="anantes-651-1-2-3.w90-37.abo.wanadoo.fr",
+    )
     visitlog.append("1.1.1.1", "page", "/", "Australia", "Sydney")
     mine = visitlog.list_events(ip="8.8.8.8")
     assert [e["kind"] for e in mine] == ["replay", "page"]
     assert mine[0]["target"] == "2026-09-19T1159Z-buddy"
     assert mine[0]["ip"] == "8.8.8.8"
+    assert mine[0]["postal"] == "44360"
+    assert mine[0]["isp"] == "Orange"
+    assert mine[0]["ptr"].startswith("anantes-")
     assert "T" in mine[0]["ts"]
     all_rows = visitlog.list_events()
     assert len(all_rows) == 3
+
+
+def test_geo_labels_keeps_isp_out_of_prometheus():
+    from app import visitors
+
+    labels = visitors._geo_labels(
+        {
+            "country": "France",
+            "city": "Vigneux-de-Bretagne",
+            "region": "Pays de la Loire",
+            "postal": "44360",
+            "isp": "Orange",
+            "latitude": 47.325,
+            "longitude": -1.738,
+            "ptr": "anantes-651-1-2-3.w90-37.abo.wanadoo.fr",
+        }
+    )
+    assert labels["postal"] == "44360"
+    assert labels["isp"] == "Orange"
+    assert labels["region"] == "Pays de la Loire"
+    prom = visitors._prom_labels(labels)
+    assert set(prom) == {"country", "city", "latitude", "longitude"}
+    assert "isp" not in prom
+    assert prom["latitude"] == "47.3250"
 
 
 def test_visitors_records_replay_play(tmp_path, monkeypatch):

@@ -264,7 +264,10 @@
       rows.forEach((ev) => {
         const tr = document.createElement("tr");
         const action = ev.kind === "replay" ? "Replay" : "Page";
-        const lieu = [ev.city, ev.country].filter(Boolean).join(", ") || "—";
+        const cityLine = [ev.city, ev.postal, ev.region].filter(Boolean).join(" · ");
+        const line1 = [cityLine, ev.country].filter(Boolean).join(", ") || "—";
+        const line2 = [ev.isp, ev.ptr].filter(Boolean).join(" · ");
+        const lieu = line2 ? line1 + "\n" + line2 : line1;
         const cells = [fmtTu(ev.ts), ev.ip || "—", lieu, action, ev.target || "—"];
         cells.forEach((text, i) => {
           const td = document.createElement("td");
@@ -282,6 +285,11 @@
                 }
               });
             });
+          }
+          if (i === 2) {
+            td.className = "visit-log__lieu";
+            const coords = [ev.latitude, ev.longitude].filter(Boolean).join(", ");
+            if (coords) td.title = coords + " (préfixe FAI)";
           }
           tr.appendChild(td);
         });

@@ -1074,6 +1074,11 @@ body.kiwi-panel-off .kiwi-toggle__arr {
 .visit-log__table th { color: var(--muted); font-weight: 600; }
 .visit-log__ip { cursor: pointer; color: var(--brass); }
 .visit-log__ip:hover { text-decoration: underline; }
+.visit-log__lieu {
+  white-space: pre-line;
+  max-width: 22rem;
+  font-size: 0.8rem;
+}
 .btn:disabled { opacity: 0.55; cursor: wait; }
 .btn--danger { background: var(--err); color: #fff; }
 .card__del {

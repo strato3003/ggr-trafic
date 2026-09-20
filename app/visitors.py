@@ -6,6 +6,7 @@ import asyncio
 import ipaddress
 import logging
 import re
+import socket
 from typing import Any
 
 import httpx
@@ -124,61 +125,115 @@ def client_ip(request: Request) -> str | None:
     return None
 
 
-def _lab(value: str, fallback: str = "inconnu") -> str:
+def _lab(value: str, fallback: str = "inconnu", limit: int = 80) -> str:
     text = re.sub(r"[\n\r\\]+", " ", (value or "").strip())
-    text = text[:80]
+    text = text[:limit]
     return text or fallback
 
 
-def _geo_labels(data: dict[str, Any] | None) -> dict[str, str]:
-    if not data:
-        return {"country": "inconnu", "city": "inconnu", "latitude": NO_COORD, "longitude": NO_COORD}
-    lat, lon = data.get("latitude"), data.get("longitude")
+def _opt(value: Any, limit: int = 80) -> str:
+    return _lab(str(value or ""), fallback="", limit=limit)
+
+
+def _coord(value: Any, digits: int = 4) -> str:
     try:
-        lat_s = f"{float(lat):.2f}"
-        lon_s = f"{float(lon):.2f}"
+        return f"{float(value):.{digits}f}"
     except (TypeError, ValueError):
-        lat_s = lon_s = NO_COORD
+        return NO_COORD
+
+
+def _prom_labels(labels: dict[str, str]) -> dict[str, str]:
+    """Seuls les labels Prometheus (pas de région / FAI / PTR)."""
     return {
-        "country": _lab(str(data.get("country") or "")),
-        "city": _lab(str(data.get("city") or "")),
-        "latitude": lat_s,
-        "longitude": lon_s,
+        "country": labels.get("country") or "inconnu",
+        "city": labels.get("city") or "inconnu",
+        "latitude": labels.get("latitude") or NO_COORD,
+        "longitude": labels.get("longitude") or NO_COORD,
     }
 
 
+def _geo_labels(data: dict[str, Any] | None) -> dict[str, str]:
+    empty = {
+        "country": "inconnu",
+        "city": "inconnu",
+        "latitude": NO_COORD,
+        "longitude": NO_COORD,
+        "region": "",
+        "postal": "",
+        "isp": "",
+        "ptr": "",
+    }
+    if not data:
+        return empty
+    return {
+        "country": _lab(str(data.get("country") or "")),
+        "city": _lab(str(data.get("city") or "")),
+        "latitude": _coord(data.get("latitude")),
+        "longitude": _coord(data.get("longitude")),
+        "region": _opt(data.get("region")),
+        "postal": _opt(data.get("postal")),
+        "isp": _opt(data.get("isp")),
+        "ptr": _opt(data.get("ptr"), limit=120),
+    }
+
+
+def _journal_coords(labels: dict[str, str]) -> tuple[str, str]:
+    lat = labels.get("latitude") or ""
+    lon = labels.get("longitude") or ""
+    if lat == NO_COORD:
+        lat = ""
+    if lon == NO_COORD:
+        lon = ""
+    return lat, lon
+
+
 def _count(ip: str, labels: dict[str, str], path: str) -> None:
-    VISITS.labels(**labels, path=page_label(path)).inc()
+    VISITS.labels(**_prom_labels(labels), path=page_label(path)).inc()
     _unique_ips.add(ip)
     UNIQUE.set(len(_unique_ips))
     from app import visitlog
 
+    lat, lon = _journal_coords(labels)
     visitlog.append(
         ip,
         "page",
         page_label(path),
         labels.get("country") or "",
         labels.get("city") or "",
+        region=labels.get("region") or "",
+        postal=labels.get("postal") or "",
+        isp=labels.get("isp") or "",
+        latitude=lat,
+        longitude=lon,
+        ptr=labels.get("ptr") or "",
     )
 
 
 def _count_replay(ip: str, labels: dict[str, str], replay: str) -> None:
     rid = replay_label(replay)
+    prom = _prom_labels(labels)
     REPLAYS.labels(
-        country=labels.get("country") or "inconnu",
-        city=labels.get("city") or "inconnu",
+        country=prom["country"],
+        city=prom["city"],
         replay=rid,
     ).inc()
     _unique_ips.add(ip)
     UNIQUE.set(len(_unique_ips))
     from app import visitlog
 
+    lat, lon = _journal_coords(labels)
     visitlog.append(
         ip,
         "replay",
         rid,
         labels.get("country") or "",
         labels.get("city") or "",
+        region=labels.get("region") or "",
+        postal=labels.get("postal") or "",
+        isp=labels.get("isp") or "",
+        latitude=lat,
+        longitude=lon,
+        ptr=labels.get("ptr") or "",
     )
 
 
@@ -265,41 +320,74 @@ async def _resolve_and_count(ip: str, path: str) -> None:
         _pending.discard(ip)
 
 
+async def _ptr(ip: str) -> str:
+    """Reverse DNS : souvent le nœud Orange/Wanadoo (ANantes-…), plus parlant que la ville MaxMind."""
+    try:
+        info = await asyncio.wait_for(asyncio.to_thread(socket.gethostbyaddr, ip), timeout=2.0)
+        name = (info[0] or "").strip().strip(".")
+        if name and name != ip:
+            return name[:120]
+    except Exception:
+        return ""
+    return ""
+
+
+def _from_ipwho(data: dict[str, Any]) -> dict[str, Any]:
+    conn = data.get("connection") if isinstance(data.get("connection"), dict) else {}
+    return {
+        "country": data.get("country") or data.get("country_code"),
+        "city": data.get("city"),
+        "region": data.get("region"),
+        "postal": data.get("postal"),
+        "isp": conn.get("isp") or conn.get("org"),
+        "latitude": data.get("latitude"),
+        "longitude": data.get("longitude"),
+    }
+
+
+def _from_ipapi(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "country": data.get("country"),
+        "city": data.get("city"),
+        "region": data.get("regionName"),
+        "postal": data.get("zip"),
+        "isp": data.get("isp") or data.get("org"),
+        "latitude": data.get("lat"),
+        "longitude": data.get("lon"),
+        "ptr": data.get("reverse"),
+    }
+
+
 async def geolocate(ip: str) -> dict[str, Any] | None:
     if lookup_override is not None:
         return lookup_override(ip)
     ua = f"GGR-Trafic/{version(None)} (F6KUF; visites monitoring)"
     timeout = httpx.Timeout(4.0, connect=2.0)
+    found: dict[str, Any] | None = None
     async with httpx.AsyncClient(timeout=timeout, headers={"User-Agent": ua}) as client:
         try:
             r = await client.get(f"https://ipwho.is/{ip}")
             r.raise_for_status()
             data = r.json()
-            if data.get("success") is False:
-                return None
-            return {
-                "country": data.get("country") or data.get("country_code"),
-                "city": data.get("city"),
-                "latitude": data.get("latitude"),
-                "longitude": data.get("longitude"),
-            }
+            if data.get("success") is not False:
+                found = _from_ipwho(data)
         except Exception:
             log.debug("ipwho.is indisponible, essai ip-api.com", exc_info=True)
-        try:
-            r = await client.get(
-                f"http://ip-api.com/json/{ip}",
-                params={"fields": "status,country,city,lat,lon"},
-            )
-            r.raise_for_status()
-            data = r.json()
-            if data.get("status") != "success":
+        if found is None:
+            try:
+                r = await client.get(
+                    f"http://ip-api.com/json/{ip}",
+                    params={"fields": "status,country,regionName,city,zip,lat,lon,isp,org,reverse"},
+                )
+                r.raise_for_status()
+                data = r.json()
+                if data.get("status") == "success":
+                    found = _from_ipapi(data)
+            except Exception:
+                log.warning("Géoloc IP en échec")
                 return None
-            return {
-                "country": data.get("country"),
-                "city": data.get("city"),
-                "latitude": data.get("lat"),
-                "longitude": data.get("lon"),
-            }
-        except Exception:
-            log.warning("Géoloc IP en échec")
-            return None
+    if found is None:
+        return None
+    if not found.get("ptr"):
+        found["ptr"] = await _ptr(ip)
+    return found
