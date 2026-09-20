@@ -53,6 +53,8 @@ def _kiwi_snap(kiwi: dict[str, Any] | None, **extra: Any) -> dict[str, Any]:
         "url": kiwi.get("url"),
         "loc": kiwi.get("loc"),
         "fmt": kiwi.get("fmt"),
+        "lat": kiwi.get("lat"),
+        "lon": kiwi.get("lon"),
         "snr_hf": kiwi.get("snr_hf"),
         "site_km": kiwi.get("site_km") if kiwi.get("site_km") is not None else kiwi.get("distance_km"),
         "distance_km": kiwi.get("distance_km"),

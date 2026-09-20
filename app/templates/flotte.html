@@ -16,17 +16,30 @@
       <button type="button" data-map-mode="2d" aria-pressed="false">2D</button>
       <button type="button" data-map-mode="3d" class="is-on" aria-pressed="true">3D</button>
     </div>
-    <div class="map-layers" role="group" aria-label="Calques METAREA">
-      <button type="button" class="map-layer" id="ggr-metarea" aria-pressed="true" title="Zones METAREA OMM / OHI">METAREA</button>
-      <span class="map-layers__sep" aria-hidden="true">/</span>
-      <button type="button" class="map-layer map-layer--sub" id="ggr-subzones" aria-pressed="true" title="Sous-zones haute mer de la flotte">Sous-zone</button>
-    </div>
+    <button type="button" class="map-opt-toggle" id="map-opt-toggle" aria-expanded="false" aria-controls="map-opt" aria-label="Ouvrir les calques" title="Calques">
+      <span class="map-opt-toggle__arr" aria-hidden="true"></span>
+      <span class="map-opt-toggle__lab" aria-hidden="true">Calques</span>
+    </button>
+    <aside class="map-opt" id="map-opt" hidden>
+      <p class="map-opt__title">Calques</p>
+      <label class="map-opt__row"><input type="checkbox" data-layer="banner" checked> Bandeau GGR trafic HF</label>
+      <label class="map-opt__row" title="Kiwi retenus pour le prochain buddy 12:00 TU et le bulletin 18:00 TU, d’après le centroïde des skippers suivis">
+        <input type="checkbox" data-layer="sdrActive" checked>
+        SDR choisis selon centre flotte
+      </label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="sdrPotential"> SDR potentiels</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="skippers" checked> Skippers</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="boats" checked> Bateaux + traces</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="metarea" id="ggr-metarea" checked> METAREA</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="subzones" id="ggr-subzones" checked> Sous-zones</label>
+    </aside>
     <div class="globe-rec">{% include "_recording.html" %}</div>
     <p class="globe-osm-copy">© <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a>
       · METAREA <a href="https://iho.int" rel="noreferrer">OHI</a> / OMM</p>
   </div>
-  <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="true" aria-controls="globe-dock" aria-label="Replier le panneau" title="Replier">
+  <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="false" aria-controls="globe-dock" aria-label="Ouvrir le menu général" title="Menu général">
     <span class="kiwi-toggle__arr" aria-hidden="true"></span>
+    <span class="kiwi-toggle__lab" aria-hidden="true">Menu général</span>
   </button>
   <aside class="globe-rail" id="globe-dock">
     <header class="kiwi-ident">
@@ -49,15 +62,15 @@
     </header>
 
     <div class="kiwi-tabs" role="tablist">
-      <button type="button" class="is-on" data-tab="trafic" role="tab" aria-selected="true">Trafic</button>
+      <button type="button" data-tab="trafic" role="tab" aria-selected="false">Trafic</button>
       <button type="button" data-tab="metarea" role="tab" aria-selected="false">METAREA</button>
       <button type="button" data-tab="setup" role="tab" aria-selected="false">Setup</button>
-      <button type="button" data-tab="apropos" role="tab" aria-selected="false">À propos</button>
+      <button type="button" class="is-on" data-tab="apropos" role="tab" aria-selected="true">À propos</button>
     </div>
 
     <div class="kiwi-ident-sel" id="globe-sel" hidden></div>
 
-    <div class="kiwi-page" data-page="trafic" id="page-trafic">
+    <div class="kiwi-page" data-page="trafic" id="page-trafic" hidden>
       <ul class="globe-vacs" id="globe-vacs"></ul>
       <div id="mix-park" hidden>
         <section class="mix mix--rows" id="mix" hidden data-ggr-mix="host">
@@ -65,6 +78,10 @@
             <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
             <span class="mix__clock" id="mix-time">— TU</span>
             <span class="mix__audio-load" id="mix-audio-load" hidden></span>
+            <button type="button" class="mix__ico-btn mix__loop-btn" id="mix-loop" hidden aria-pressed="false" aria-label="Lecture en boucle" title="Boucle"></button>
+            <span class="mix__loop-lab" id="mix-loop-lab" hidden></span>
+            <span class="mix__loop-hint" id="mix-loop-hint" hidden></span>
+            <button type="button" class="mix__ico-btn mix__zoom-off" id="mix-unzoom" hidden aria-label="Replier la voie" title="Replier"></button>
             <label class="mix__seek">
               Heure TU
               <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
@@ -143,7 +160,7 @@
       </article>
     </div>
 
-    <div class="kiwi-page" data-page="apropos" id="page-apropos" hidden>
+    <div class="kiwi-page" data-page="apropos" id="page-apropos">
       {% include "_about.html" %}
     </div>
   </aside>
@@ -158,6 +175,7 @@
   "trafics": globe_trafics or [],
   "tx_sites": tx_sites or [],
   "skippers": buddy_skippers,
+  "display": display or {},
   "qrg": {
     "buddy_main_khz": buddy_main_khz,
     "buddy_alt_khz": buddy_alt_khz,
@@ -168,7 +186,7 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi50"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi54"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi38"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi66"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi55"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi64"></script>
 {% endblock %}

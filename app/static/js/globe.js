@@ -40,20 +40,22 @@
   let placingTx = false;
   let mapMode = "3d";
   let metareaFc = null;
-  let metareaOn = true;
-  try {
-    metareaOn = localStorage.getItem("ggr-metarea") !== "off";
-  } catch {
-    metareaOn = true;
+  const display = data.display || {};
+  function prefOn(lsKey, cfgKey, fallback) {
+    try {
+      const v = localStorage.getItem(lsKey);
+      if (v === "on") return true;
+      if (v === "off") return false;
+    } catch {
+      /* ignore */
+    }
+    if (typeof display[cfgKey] === "boolean") return display[cfgKey];
+    return fallback;
   }
+  let metareaOn = prefOn("ggr-metarea", "metarea", true);
   const metareaBtn = document.getElementById("ggr-metarea");
   let subzoneFc = null;
-  let subzonesOn = true;
-  try {
-    subzonesOn = localStorage.getItem("ggr-subzones") !== "off";
-  } catch {
-    subzonesOn = true;
-  }
+  let subzonesOn = prefOn("ggr-subzones", "subzones", true);
   const subzoneBtn = document.getElementById("ggr-subzones");
   let metareaSnap = null;
 
@@ -69,13 +71,27 @@
   const mixPark = document.getElementById("mix-park");
   const kiwiToggle = document.getElementById("kiwi-toggle");
   let openVid = null;
+  let muxOpen = null;
+  let muxFocusId = null;
+  let kiwisAll = [];
+  let kmLabelNodes = [];
+  let kmAlignRaf = 0;
+  let muxPulseFat = false;
+  let muxPulseTimer = 0;
+  const layers = {
+    banner: prefOn("ggr-layer-banner", "banner", true),
+    sdrActive: prefOn("ggr-layer-sdrActive", "sdr_fleet", true),
+    sdrPotential: prefOn("ggr-layer-sdrPotential", "sdr_potential", false),
+    skippers: prefOn("ggr-layer-skippers", "skippers", true),
+    boats: prefOn("ggr-layer-boats", "boats", true),
+  };
 
   function setPanelOpen(on) {
     document.body.classList.toggle("kiwi-panel-off", !on);
     if (kiwiToggle) {
       kiwiToggle.setAttribute("aria-expanded", on ? "true" : "false");
-      kiwiToggle.setAttribute("aria-label", on ? "Replier le panneau" : "Déplier le panneau");
-      kiwiToggle.setAttribute("title", on ? "Replier" : "Déplier");
+      kiwiToggle.setAttribute("aria-label", on ? "Replier le menu général" : "Ouvrir le menu général");
+      kiwiToggle.setAttribute("title", on ? "Replier" : "Menu général");
     }
     try {
       localStorage.setItem("ggr-kiwi-panel", on ? "on" : "off");
@@ -98,11 +114,12 @@
   document.body.classList.remove("is-map-2d");
 
   function parseHash() {
-    const h = (location.hash || "#trafic").replace(/^#/, "");
+    const h = (location.hash || "").replace(/^#/, "");
     if (h === "setup") return "setup";
     if (h === "metarea") return "metarea";
+    if (h === "trafic") return "trafic";
     if (h === "apropos" || h === "a-propos") return "apropos";
-    return "trafic";
+    return "apropos";
   }
 
   function parkMix() {
@@ -117,11 +134,15 @@
       if (btn) btn.setAttribute("aria-expanded", "false");
     });
     openVid = null;
-    document.body.classList.remove("kiwi-mix-on");
+    muxOpen = null;
+    muxFocusId = null;
+    stopMuxPulse();
+    document.body.classList.remove("kiwi-mix-on", "kiwi-mix-focus");
+    refreshGlobe();
   }
 
   function showTab(name) {
-    const tab = name || "trafic";
+    const tab = name || "apropos";
     document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((b) => {
       const on = b.getAttribute("data-tab") === tab;
       b.classList.toggle("is-on", on);
@@ -159,21 +180,14 @@
     }
   }
 
-  let introAboutArmed = true;
   const traficQBoot = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
-  if (traficQBoot) introAboutArmed = false;
   const bootTab = parseHash();
-  if (introAboutArmed && bootTab !== "setup") {
-    if (bootTab === "apropos") history.replaceState(null, "", "#trafic");
-    setPanelOpen(false);
-  } else {
-    introAboutArmed = false;
-    setPanelOpen(true);
-  }
+  const bootPanel =
+    !!traficQBoot || bootTab === "setup" || bootTab === "metarea";
+  setPanelOpen(bootPanel);
 
   document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      introAboutArmed = false;
       showTab(btn.getAttribute("data-tab"));
       setPanelOpen(true);
     });
@@ -305,12 +319,88 @@
     return pts;
   }
 
-  function labelAlongDeg(brg) {
-    // Texte parallèle à la ligne (bearing depuis le nord) ; rester à l'endroit.
+  function geoAlongDeg(brg) {
     let a = brg - 90;
     const n = ((a % 360) + 360) % 360;
     if (n > 90 && n < 270) a += 180;
     return a;
+  }
+
+  function pathMidSamples(lat1, lon1, lat2, lon2) {
+    const d = haversineKm(lat1, lon1, lat2, lon2);
+    const brg = bearingDeg(lat1, lon1, lat2, lon2);
+    const midKm = d / 2;
+    const sample = Math.max(18, Math.min(140, d * 0.04));
+    return {
+      mid: destPoint(lat1, lon1, brg, midKm),
+      brg: brg,
+      d: d,
+      tanA: destPoint(lat1, lon1, brg, Math.max(0, midKm - sample)),
+      tanB: destPoint(lat1, lon1, brg, Math.min(d, midKm + sample)),
+      fallback: geoAlongDeg(brg),
+    };
+  }
+
+  function projectLatLon(lat, lon) {
+    if (mapMode === "2d" && map && typeof map.latLngToContainerPoint === "function") {
+      const p = map.latLngToContainerPoint([lat, lon]);
+      return p && Number.isFinite(p.x) ? { x: p.x, y: p.y } : null;
+    }
+    if (!globe || typeof globe.getScreenCoords !== "function") return null;
+    const p = globe.getScreenCoords(lat, lon);
+    return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null;
+  }
+
+  // Angle écran du trait, pas le bearing géographique : zoom / POV du globe
+  // changent la tangente projetée. CSS rotate() est en pixels, pas en cap.
+  function screenAlongDeg(tanA, tanB, fallback) {
+    if (!tanA || !tanB) return fallback;
+    const pa = projectLatLon(tanA[0], tanA[1]);
+    const pb = projectLatLon(tanB[0], tanB[1]);
+    if (!pa || !pb) return fallback;
+    const dx = pb.x - pa.x;
+    const dy = pb.y - pa.y;
+    if (dx * dx + dy * dy < 9 || Math.abs(dx) > 2400 || Math.abs(dy) > 2400) return fallback;
+    let ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+    const n = ((ang % 360) + 360) % 360;
+    if (n > 90 && n < 270) ang += 180;
+    return ang;
+  }
+
+  function applyKmLabelAngle(row) {
+    if (!row || !row.el) return;
+    const ang = screenAlongDeg(row.tanA, row.tanB, row.fallback);
+    row.el.style.transform = "translate(-50%,-50%) rotate(" + ang + "deg)";
+  }
+
+  function alignKmLabels() {
+    kmLabelNodes.forEach(applyKmLabelAngle);
+  }
+
+  function scheduleKmAlign() {
+    if (kmAlignRaf) return;
+    kmAlignRaf = window.requestAnimationFrame(() => {
+      kmAlignRaf = 0;
+      alignKmLabels();
+    });
+  }
+
+  function bindKmAlign() {
+    try {
+      if (globe && typeof globe.controls === "function") {
+        const c = globe.controls();
+        if (c && !c.__ggrKmAlign && typeof c.addEventListener === "function") {
+          c.__ggrKmAlign = true;
+          c.addEventListener("change", scheduleKmAlign);
+        }
+      }
+    } catch {
+      /* globe.gl */
+    }
+    if (map && !map.__ggrKmAlign) {
+      map.__ggrKmAlign = true;
+      map.on("zoom move viewreset zoomanim", scheduleKmAlign);
+    }
   }
 
   function geodesicCoords(lat1, lon1, lat2, lon2) {
@@ -329,26 +419,37 @@
   function points() {
     const rows = [];
     boats.forEach((b) => {
+      const buddy = boatInBuddy(b.name);
+      if (buddy && !layers.skippers) return;
+      if (!buddy && !layers.boats) return;
       rows.push({
         ...b,
         lng: b.lon,
         kind: "boat",
-        inBuddy: boatInBuddy(b.name),
+        inBuddy: buddy,
       });
     });
     const seenSdr = new Set();
-    const sdrKey = (k) => String(k.id || k.host || k.lat.toFixed(3) + "," + k.lon.toFixed(3));
-    (data.buddy_kiwis || []).forEach((k) => {
-      if (!Number.isFinite(k.lat) || !Number.isFinite(k.lon)) return;
-      seenSdr.add(sdrKey(k));
-      rows.push({ ...k, lng: k.lon, kind: "buddy_kiwi" });
-    });
-    (data.kiwis || []).forEach((k) => {
-      if (!Number.isFinite(k.lat) || !Number.isFinite(k.lon)) return;
-      if (seenSdr.has(sdrKey(k))) return;
-      seenSdr.add(sdrKey(k));
-      rows.push({ ...k, lng: k.lon, kind: "kiwi" });
-    });
+    const sdrKey = (k) => String(k.id || k.host || k.name || (k.lat.toFixed(3) + "," + k.lon.toFixed(3)));
+    if (muxOpen || layers.sdrActive) {
+      activeSdrs().forEach((k) => {
+        if (!Number.isFinite(k.lat) || !Number.isFinite(k.lon)) return;
+        seenSdr.add(sdrKey(k));
+        rows.push({
+          ...k,
+          lng: k.lon,
+          kind: k._mux ? "mux_kiwi" : k._kind === "buddy_kiwi" ? "buddy_kiwi" : "kiwi",
+        });
+      });
+    }
+    if (layers.sdrPotential) {
+      potentialSdrs().forEach((k) => {
+        if (!Number.isFinite(k.lat) || !Number.isFinite(k.lon)) return;
+        if (seenSdr.has(sdrKey(k))) return;
+        seenSdr.add(sdrKey(k));
+        rows.push({ ...k, lng: k.lon, kind: "kiwi_all" });
+      });
+    }
     const c = fleetCenter();
     if (c) {
       rows.push({ lat: c.lat, lon: c.lon, lng: c.lon, kind: "centroid", name: "Centroïde" });
@@ -462,7 +563,7 @@
 
   function markerEl(d) {
     const wrap = document.createElement("div");
-    wrap.className = "globe-mark globe-mark--" + d.kind + (d.kind === "boat" && d.inBuddy ? " is-buddy" : "");
+    wrap.className = "globe-mark globe-mark--" + d.kind + (d.kind === "boat" && d.inBuddy ? " is-buddy" : "") + (d.kind === "mux_kiwi" || d.pulse ? " globe-mark--pulse" : "");
     wrap.style.cssText =
       d.kind === "boat"
         ? "width:22px;height:22px;margin:0;padding:0;overflow:visible;pointer-events:auto;"
@@ -481,10 +582,17 @@
       const km = document.createElement("span");
       km.className = "globe-mark__km";
       km.textContent = d.name || "";
-      const rot = Number.isFinite(d.alongDeg) ? d.alongDeg : 0;
-      km.style.transform = "translate(-50%,-50%) rotate(" + rot + "deg)";
       wrap.appendChild(km);
       wrap.title = d.name || "";
+      if (d.pulse) wrap.classList.add("globe-mark--pulse");
+      const row = {
+        el: km,
+        tanA: d.tanA,
+        tanB: d.tanB,
+        fallback: Number.isFinite(d.alongDeg) ? d.alongDeg : 0,
+      };
+      kmLabelNodes.push(row);
+      applyKmLabelAngle(row);
       return wrap;
     }
     if (d.kind === "ggr_banner") {
@@ -503,13 +611,20 @@
       icon.style.transform = "translate(-50%,-50%)" + rot;
     } else if (d.kind === "trafic" || d.kind === "vacation") {
       icon.style.background = d.is_buddy ? "#d4a84b" : "#d45c3a";
+    } else if (d.kind === "kiwi_all") {
+      wrap.classList.add("globe-mark--pulse");
+      wrap.style.width = "4px";
+      wrap.style.height = "4px";
+    } else if (d.kind === "mux_kiwi") {
+      icon.style.background = "#7dffb0";
+      icon.style.boxShadow = "0 0 8px #3dba7a";
     }
     wrap.appendChild(icon);
-    if ((d.kind === "boat" && d.inBuddy) || d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "tx") {
+    if ((d.kind === "boat" && d.inBuddy) || d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "mux_kiwi" || d.kind === "tx") {
       const name = document.createElement("span");
       name.className = "globe-mark__name";
       name.style.cssText = "position:absolute;left:14px;top:50%;transform:translateY(-50%);white-space:nowrap;";
-      name.textContent = d.kind === "kiwi" || d.kind === "buddy_kiwi" ? sdrLabel(d) : d.name || "";
+      name.textContent = d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "mux_kiwi" ? sdrLabel(d) : d.name || "";
       wrap.appendChild(name);
     }
     if (d.kind !== "boat") {
@@ -532,6 +647,9 @@
   function paths() {
     return boats
       .map((b) => {
+        const buddy = boatInBuddy(b.name);
+        if (buddy && !layers.skippers) return null;
+        if (!buddy && !layers.boats) return null;
         const pts = (b.track || [])
           .filter((p) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]))
           .map((p) => [p[0], p[1]]);
@@ -606,7 +724,7 @@
   const SDR_GAP_KM = 16;
   const SDR_PATH_ALT = 0.0018;
 
-  function geodesicDashed(lat1, lon1, lat2, lon2, color) {
+  function geodesicDashed(lat1, lon1, lat2, lon2, color, extra) {
     const d = haversineKm(lat1, lon1, lat2, lon2);
     const brg = bearingDeg(lat1, lon1, lat2, lon2);
     if (!Number.isFinite(d) || d < 1) return [];
@@ -621,41 +739,159 @@
           [a[0], a[1], SDR_PATH_ALT],
           [b[0], b[1], SDR_PATH_ALT],
         ],
-        color,
-        stroke: 2,
+        color: extra && extra.pulse && muxPulseFat ? "#c8ffdc" : color,
+        stroke: extra && extra.pulse ? (muxPulseFat ? 3.8 : 2.15) : 2,
+        pulse: !!(extra && extra.pulse),
+        dash: false,
       });
       along = dashEnd + SDR_GAP_KM;
     }
     return out;
   }
 
+  function parseFmt(fmt) {
+    const m = String(fmt || "").match(
+      /([0-9]+(?:\.[0-9]+)?)\s*°\s*([NSns])\s+([0-9]+(?:\.[0-9]+)?)\s*°\s*([EWew])/
+    );
+    if (!m) return null;
+    const lat = Number(m[1]) * (m[2].toUpperCase() === "S" ? -1 : 1);
+    const lon = Number(m[3]) * (m[4].toUpperCase() === "W" ? -1 : 1);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return { lat: lat, lon: lon };
+  }
+
+  function liveKiwiByName(name) {
+    const want = String(name || "").trim().toLowerCase();
+    if (!want) return null;
+    const pool = []
+      .concat(data.buddy_kiwis || [])
+      .concat(data.kiwis || [])
+      .concat(kiwisAll);
+    return pool.find((k) => String(k.name || "").trim().toLowerCase() === want) || null;
+  }
+
+  function muxSdrs() {
+    if (!muxOpen) return [];
+    const center = muxCenter();
+    const focus = muxFocusId;
+    const rows = [];
+    const seen = new Set();
+    (muxOpen.channels || []).forEach((ch) => {
+      const kiwi = ch.kiwi && typeof ch.kiwi === "object" ? ch.kiwi : {};
+      const name = kiwi.name || (typeof ch.kiwi === "string" ? ch.kiwi : "") || ch.place || ch.id;
+      let lat = Number(kiwi.lat != null ? kiwi.lat : ch.lat);
+      let lon = Number(kiwi.lon != null ? kiwi.lon : ch.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        const parsed = parseFmt(kiwi.fmt || ch.fmt);
+        if (parsed) {
+          lat = parsed.lat;
+          lon = parsed.lon;
+        }
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        const hit = liveKiwiByName(name);
+        if (hit) {
+          lat = hit.lat;
+          lon = hit.lon;
+        }
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      const key = lat.toFixed(3) + "," + lon.toFixed(3);
+      if (seen.has(key)) return;
+      seen.add(key);
+      let km = Number(kiwi.site_km != null ? kiwi.site_km : ch.site_km);
+      if (!Number.isFinite(km) && center) km = haversineKm(center.lat, center.lon, lat, lon);
+      const id = ch.id || name;
+      if (focus && id !== focus && name !== focus) return;
+      rows.push({
+        ...kiwi,
+        ...ch,
+        name: name,
+        lat: lat,
+        lon: lon,
+        loc: kiwi.loc || ch.loc || ch.place,
+        site_km: km,
+        _mux: true,
+        _kind: "mux_kiwi",
+      });
+    });
+    return rows;
+  }
+
+  function muxCenter() {
+    if (!muxOpen) return null;
+    const lat = Number(muxOpen.lat);
+    const lon = Number(muxOpen.lon);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat: lat, lon: lon };
+    return fleetCenter();
+  }
+
+  function muxView() {
+    const center = muxCenter();
+    const pts = [];
+    if (center) pts.push([center.lat, center.lon]);
+    muxSdrs().forEach((k) => pts.push([k.lat, k.lon]));
+    if (!pts.length) return center ? { lat: center.lat, lng: center.lon, altitude: 1.8 } : null;
+    let latMin = Infinity;
+    let latMax = -Infinity;
+    let lonMin = Infinity;
+    let lonMax = -Infinity;
+    pts.forEach((p) => {
+      latMin = Math.min(latMin, p[0]);
+      latMax = Math.max(latMax, p[0]);
+      lonMin = Math.min(lonMin, p[1]);
+      lonMax = Math.max(lonMax, p[1]);
+    });
+    const lat = (latMin + latMax) / 2;
+    const lng = (lonMin + lonMax) / 2;
+    const latSpan = Math.max(latMax - latMin, 0.8);
+    const lonSpan = Math.max((lonMax - lonMin) * Math.cos((lat * Math.PI) / 180), 0.8);
+    const spanDeg = Math.max(latSpan, lonSpan);
+    const altitude = Math.min(2.85, Math.max(1.45, (spanDeg / 180) * 8));
+    return { lat: lat, lng: lng, altitude: altitude };
+  }
+
+  function activeSdrs() {
+    if (muxOpen) return muxSdrs();
+    return sdrSites();
+  }
+
+  function potentialSdrs() {
+    return kiwisAll;
+  }
+
   function kiwiLinkPaths() {
-    const center = fleetCenter();
+    if (!muxOpen && !layers.sdrActive) return [];
+    const center = muxOpen ? muxCenter() : fleetCenter();
     if (!center) return [];
     const rows = [];
-    sdrSites().forEach((k) => {
-      const nvis = k.prop_zone === "nvis" || k._kind === "kiwi";
-      // Hex : Line2 three-globe parse mal les rgba() (traits invisibles).
-      const color = nvis ? "#3dba7a" : "#6ec9e0";
-      geodesicDashed(center.lat, center.lon, k.lat, k.lon, color).forEach((p) => rows.push(p));
+    const pulse = !!muxOpen;
+    activeSdrs().forEach((k) => {
+      const nvis = k.prop_zone === "nvis" || k._kind === "kiwi" || k._mux;
+      const color = pulse ? "#7dffb0" : nvis ? "#3dba7a" : "#6ec9e0";
+      geodesicDashed(center.lat, center.lon, k.lat, k.lon, color, { pulse: pulse }).forEach((p) => rows.push(p));
     });
     return rows;
   }
 
   function kiwiKmPoints() {
-    const center = fleetCenter();
+    if (!muxOpen && !layers.sdrActive) return [];
+    const center = muxOpen ? muxCenter() : fleetCenter();
     if (!center) return [];
-    return sdrSites().map((k) => {
-      const km = haversineKm(center.lat, center.lon, k.lat, k.lon);
-      const brg = bearingDeg(center.lat, center.lon, k.lat, k.lon);
-      const mid = destPoint(center.lat, center.lon, brg, km / 2);
+    return activeSdrs().map((k) => {
+      const km = Number.isFinite(k.site_km) ? k.site_km : haversineKm(center.lat, center.lon, k.lat, k.lon);
+      const samp = pathMidSamples(center.lat, center.lon, k.lat, k.lon);
+      const city = sdrCity(k) || k.name || "sdr";
       return {
-        lat: mid[0],
-        lon: mid[1],
-        lng: mid[1],
+        lat: samp.mid[0],
+        lon: samp.mid[1],
+        lng: samp.mid[1],
         kind: "link_km",
-        name: Math.round(km) + " km",
-        alongDeg: labelAlongDeg(brg),
+        name: city + " · " + Math.round(km) + " km",
+        alongDeg: samp.fallback,
+        tanA: samp.tanA,
+        tanB: samp.tanB,
+        pulse: !!muxOpen,
       };
     });
   }
@@ -692,14 +928,16 @@
       .map((s) => {
         const aim = txAim(s);
         if (!aim || !Number.isFinite(aim.km) || aim.km < 1) return null;
-        const mid = destPoint(s.lat, s.lon, aim.az, aim.km / 2);
+        const samp = pathMidSamples(s.lat, s.lon, aim.center.lat, aim.center.lon);
         return {
-          lat: mid[0],
-          lon: mid[1],
-          lng: mid[1],
+          lat: samp.mid[0],
+          lon: samp.mid[1],
+          lng: samp.mid[1],
           kind: "tx_km",
           name: Math.round(aim.km) + " km · " + fmtAz(aim.az),
-          alongDeg: labelAlongDeg(aim.az),
+          alongDeg: samp.fallback,
+          tanA: samp.tanA,
+          tanB: samp.tanB,
         };
       })
       .filter(Boolean);
@@ -869,8 +1107,23 @@
     }));
   }
 
+  function mountMuxMixer(v, tracks) {
+    if (openVid !== v.id || !window.GgrMixer) return;
+    window.GgrMixer.mount({
+      root: mixRoot,
+      tracks: tracks,
+      vacId: v.id,
+      started: v.started_at,
+      onFocus: function (trackId) {
+        muxFocusId = trackId || null;
+        document.body.classList.toggle("kiwi-mix-focus", !!trackId);
+        refreshGlobe();
+        window.dispatchEvent(new Event("resize"));
+      },
+    });
+  }
+
   async function playTrafic(v) {
-    introAboutArmed = false;
     setPanelOpen(true);
     showTab("trafic");
     if (openVid === v.id) {
@@ -888,28 +1141,29 @@
     mixRoot.setAttribute("data-started", v.started_at || "");
     openVid = v.id;
     noteNav("/trafic/" + v.id);
-    let tracks = mixerTracks(v);
+    muxOpen = Object.assign({}, v);
+    mixRoot.hidden = false;
+    document.body.classList.add("kiwi-mix-on");
+    startMuxPulse();
+    refreshGlobe();
+    const listed = mixerTracks(v);
+    mountMuxMixer(v, listed);
+    li.scrollIntoView({ block: "nearest" });
+    const view = muxView();
+    if (view) lookAt(view.lat, view.lng, view.altitude, 900);
     try {
       const full = await fetch("/api/trafic/" + encodeURIComponent(v.id)).then((r) => r.json());
       if (openVid !== v.id) return;
-      if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) tracks = full.mixer_tracks;
-      else if ((full.channels || []).length) tracks = mixerTracks(full);
+      muxOpen = Object.assign({}, v, full || {});
+      refreshGlobe();
+      let next = listed;
+      if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) next = full.mixer_tracks;
+      else if ((full.channels || []).length) next = mixerTracks(full);
+      const richer = next.some((t, i) => (t.src || "") && (t.src || "") !== ((listed[i] && listed[i].src) || ""));
+      if (richer && !muxFocusId) mountMuxMixer(v, next);
     } catch {
-      /* carte globe */
+      /* carte globe : lat/lon déjà dans la liste */
     }
-    if (openVid !== v.id) return;
-    mixRoot.hidden = false;
-    document.body.classList.add("kiwi-mix-on");
-    if (window.GgrMixer) {
-      window.GgrMixer.mount({
-        root: mixRoot,
-        tracks: tracks,
-        vacId: v.id,
-        started: v.started_at,
-      });
-    }
-    li.scrollIntoView({ block: "nearest" });
-    if (Number.isFinite(v.lat)) lookAt(v.lat, v.lon, 1.6, 900);
   }
 
   function onPointClick(d) {
@@ -957,11 +1211,11 @@
       lookAt(d.lat, d.lon, 1.4, 800);
       return;
     }
-    if (d.kind === "kiwi" || d.kind === "buddy_kiwi") {
+    if (d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "mux_kiwi" || d.kind === "kiwi_all") {
       const zone = d.prop_zone ? ` · zone ${esc(d.prop_zone)}` : "";
       const km = d.site_km != null ? d.site_km : d.distance_km;
       showSel(
-        `<p class="badge">${d.kind === "buddy_kiwi" ? "Kiwi buddy call" : "Kiwi bulletin météo"}</p>` +
+        `<p class="badge">${d.kind === "buddy_kiwi" ? "Kiwi buddy call" : d._mux ? "Kiwi du mux" : "KiwiSDR"}</p>` +
           `<h3>${esc(d.name)}</h3>` +
           `<p class="meta">${esc(d.loc || "")}${d.site_label ? " · " + esc(d.site_label) : ""}</p>` +
           `<p>${km != null ? km + " km" : ""} · SNR HF ${esc(d.snr_hf)} · ${esc(d.free_slots)}/${esc(d.users_max)} places${zone}</p>` +
@@ -1006,11 +1260,18 @@
 
   function lookAt(lat, lng, altitude, ms) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const dur = ms || 800;
     if (mapMode === "2d" && map) {
-      map.flyTo([lat, lng], altitudeToZoom(altitude), { duration: Math.max(0.2, (ms || 800) / 1000) });
+      map.flyTo([lat, lng], altitudeToZoom(altitude), { duration: Math.max(0.2, dur / 1000) });
       return;
     }
-    if (globe) globe.pointOfView({ lat, lng, altitude: altitude || 1.5 }, ms || 800);
+    if (globe) globe.pointOfView({ lat, lng, altitude: altitude || 1.5 }, dur);
+    const t0 = performance.now();
+    const tick = () => {
+      alignKmLabels();
+      if (performance.now() - t0 < dur + 60) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }
 
   function placeTxAt(lat, lng) {
@@ -1047,11 +1308,12 @@
   let bannerWatchOn = false;
 
   function applyBannerVisibility() {
-    if (bannerBelt && bannerBelt.mesh) bannerBelt.mesh.visible = !metareaOn;
+    const show = !!layers.banner && !metareaOn;
+    if (bannerBelt && bannerBelt.mesh) bannerBelt.mesh.visible = show;
   }
 
   function htmlBannerPoints() {
-    if (!bannerHtml.on || metareaOn) return [];
+    if (!layers.banner || !bannerHtml.on || metareaOn) return [];
     const n = 8;
     const rows = [];
     for (let i = 0; i < n; i++) {
@@ -1371,15 +1633,9 @@
 
   function scheduleIntroCamera(g, dest) {
     window.setTimeout(() => {
+      if (muxOpen) return;
       if (g && dest) g.pointOfView(dest, BANNER_INTRO_MS);
     }, BANNER_HOLD_MS);
-    const wantAbout = parseHash() === "trafic";
-    if (!wantAbout) return;
-    window.setTimeout(() => {
-      if (!introAboutArmed) return;
-      showTab("apropos");
-      setPanelOpen(true);
-    }, BANNER_HOLD_MS + BANNER_INTRO_MS);
   }
 
   function hexToRgba(hex, a) {
@@ -1542,6 +1798,15 @@
     paintMetareaMap();
   }
 
+  function syncLayerBox(el, on) {
+    if (!el) return;
+    if (el.type === "checkbox") el.checked = !!on;
+    else {
+      el.classList.toggle("is-on", !!on);
+      el.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+
   function setMetarea(on) {
     metareaOn = !!on;
     try {
@@ -1549,10 +1814,7 @@
     } catch {
       /* ignore */
     }
-    if (metareaBtn) {
-      metareaBtn.classList.toggle("is-on", metareaOn);
-      metareaBtn.setAttribute("aria-pressed", metareaOn ? "true" : "false");
-    }
+    syncLayerBox(metareaBtn, metareaOn);
     paintPolygons();
   }
 
@@ -1563,14 +1825,12 @@
     } catch {
       /* ignore */
     }
-    if (subzoneBtn) {
-      subzoneBtn.classList.toggle("is-on", subzonesOn);
-      subzoneBtn.setAttribute("aria-pressed", subzonesOn ? "true" : "false");
-    }
+    syncLayerBox(subzoneBtn, subzonesOn);
     paintPolygons();
   }
 
   function refreshMap() {
+    if (mapMode === "2d") kmLabelNodes = [];
     if (!map || !mapLayers || typeof L === "undefined" || typeof L.marker !== "function") return;
     mapLayers.clearLayers();
     paths().forEach((p) => {
@@ -1582,6 +1842,8 @@
         color: p.color || "#c9a227",
         weight: p.stroke != null ? p.stroke : 1,
         opacity: 0.9,
+        dashArray: p.dash ? "11 9" : null,
+        className: p.pulse ? "ggr-sdr-pulse" : "",
         interactive: false,
       }).addTo(mapLayers);
     });
@@ -1597,8 +1859,8 @@
           icon: L.divIcon({
             className: "ggr-leaflet-icon",
             html: "",
-            iconSize: boat ? [22, 22] : [12, 12],
-            iconAnchor: boat ? [11, 11] : [6, 6],
+            iconSize: boat ? [22, 22] : d.kind === "kiwi_all" ? [4, 4] : [12, 12],
+            iconAnchor: boat ? [11, 11] : d.kind === "kiwi_all" ? [2, 2] : [6, 6],
           }),
           interactive: d.kind !== "link_km" && d.kind !== "tx_km",
           keyboard: false,
@@ -1614,9 +1876,11 @@
           m.once("add", mount);
         }
       });
+    scheduleKmAlign();
   }
 
   function refreshGlobe() {
+    if (mapMode !== "2d") kmLabelNodes = [];
     if (globe) {
       globe.htmlElementsData(points());
       if (typeof globe.pathsData === "function") globe.pathsData(paths());
@@ -1624,12 +1888,32 @@
       if (typeof globe.arcsData === "function") globe.arcsData([]);
     }
     refreshMap();
+    scheduleKmAlign();
+    window.setTimeout(alignKmLabels, 40);
+  }
+
+  function startMuxPulse() {
+    if (muxPulseTimer) return;
+    muxPulseFat = false;
+    muxPulseTimer = window.setInterval(() => {
+      muxPulseFat = !muxPulseFat;
+      if (globe && typeof globe.pathsData === "function") globe.pathsData(paths());
+    }, 500);
+  }
+
+  function stopMuxPulse() {
+    if (muxPulseTimer) {
+      window.clearInterval(muxPulseTimer);
+      muxPulseTimer = 0;
+    }
+    muxPulseFat = false;
   }
 
   function sizeGlobe() {
     if (!globe || !el) return;
     globe.width(el.clientWidth);
     globe.height(el.clientHeight);
+    scheduleKmAlign();
   }
 
   function pauseGlobe() {
@@ -1671,6 +1955,7 @@
       map.getPane("metarea").style.zIndex = 350;
     }
     mapLayers = L.layerGroup().addTo(map);
+    bindKmAlign();
     map.on("click", (ev) => {
       if (!placingTx || !ev || !ev.latlng) return;
       placeTxAt(ev.latlng.lat, ev.latlng.lng);
@@ -1838,8 +2123,10 @@
     }
     globe.controls().autoRotate = false;
     globe.controls().enableDamping = true;
+    bindKmAlign();
+    el.addEventListener("wheel", scheduleKmAlign, { passive: true });
     tuneOsmTiles(globe);
-    if (intro) {
+    if (intro && layers.banner) {
       const bootBanner = () => startGgrEquatorBanner(globe);
       if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);
       const afterFont = () => bootBanner();
@@ -1871,10 +2158,6 @@
     }
     } catch (err) {
       showSel("<p class=\"err\">Globe 3D : " + esc(err && err.message ? err.message : err) + "</p>");
-      if (introAboutArmed && parseHash() === "trafic") {
-        showTab("apropos");
-        setPanelOpen(true);
-      }
     }
   }
 
@@ -2109,16 +2392,97 @@
       });
   }
 
-  if (metareaBtn) {
-    metareaBtn.classList.toggle("is-on", metareaOn);
-    metareaBtn.setAttribute("aria-pressed", metareaOn ? "true" : "false");
-    metareaBtn.addEventListener("click", () => setMetarea(!metareaOn));
+  const mapOpt = document.getElementById("map-opt");
+  const mapOptToggle = document.getElementById("map-opt-toggle");
+  function setMapOptOpen(on) {
+    document.body.classList.toggle("map-opt-on", !!on);
+    if (mapOpt) mapOpt.hidden = !on;
+    if (mapOptToggle) {
+      mapOptToggle.setAttribute("aria-expanded", on ? "true" : "false");
+      mapOptToggle.setAttribute("aria-label", on ? "Replier les calques" : "Ouvrir les calques");
+      mapOptToggle.setAttribute("title", on ? "Replier" : "Calques");
+    }
   }
-  if (subzoneBtn) {
-    subzoneBtn.classList.toggle("is-on", subzonesOn);
-    subzoneBtn.setAttribute("aria-pressed", subzonesOn ? "true" : "false");
-    subzoneBtn.addEventListener("click", () => setSubzones(!subzonesOn));
+  if (mapOptToggle) {
+    mapOptToggle.addEventListener("click", () => {
+      setMapOptOpen(!document.body.classList.contains("map-opt-on"));
+    });
   }
+
+  function loadKiwisAll() {
+    fetch("/api/kiwis")
+      .then((r) => r.json())
+      .then((j) => {
+        kiwisAll = (j && j.kiwis) || [];
+        if (layers.sdrPotential) refreshGlobe();
+      })
+      .catch(() => {
+        kiwisAll = [];
+      });
+  }
+
+  function setLayer(key, on) {
+    if (key === "metarea") {
+      setMetarea(on);
+      return;
+    }
+    if (key === "subzones") {
+      setSubzones(on);
+      return;
+    }
+    layers[key] = !!on;
+    try {
+      localStorage.setItem("ggr-layer-" + key, on ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
+    if (key === "sdrPotential" && on && !kiwisAll.length) loadKiwisAll();
+    if (key === "banner") {
+      if (on && globe && mapMode === "3d") startGgrEquatorBanner(globe);
+      applyBannerVisibility();
+    }
+    refreshGlobe();
+  }
+
+  function applyDisplay(d) {
+    if (!d || typeof d !== "object") return;
+    layers.banner = !!d.banner;
+    layers.sdrActive = !!d.sdr_fleet;
+    layers.sdrPotential = !!d.sdr_potential;
+    layers.skippers = !!d.skippers;
+    layers.boats = !!d.boats;
+    try {
+      localStorage.setItem("ggr-layer-banner", layers.banner ? "on" : "off");
+      localStorage.setItem("ggr-layer-sdrActive", layers.sdrActive ? "on" : "off");
+      localStorage.setItem("ggr-layer-sdrPotential", layers.sdrPotential ? "on" : "off");
+      localStorage.setItem("ggr-layer-skippers", layers.skippers ? "on" : "off");
+      localStorage.setItem("ggr-layer-boats", layers.boats ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
+    setMetarea(!!d.metarea);
+    setSubzones(!!d.subzones);
+    if (layers.banner && globe && mapMode === "3d") startGgrEquatorBanner(globe);
+    applyBannerVisibility();
+    document.querySelectorAll("#map-opt [data-layer]").forEach((inp) => {
+      const key = inp.getAttribute("data-layer");
+      if (key === "metarea") inp.checked = metareaOn;
+      else if (key === "subzones") inp.checked = subzonesOn;
+      else if (Object.prototype.hasOwnProperty.call(layers, key)) inp.checked = !!layers[key];
+    });
+    if (layers.sdrPotential && !kiwisAll.length) loadKiwisAll();
+    refreshGlobe();
+  }
+  window.addEventListener("ggr-display", (ev) => applyDisplay(ev.detail));
+
+  document.querySelectorAll("#map-opt [data-layer]").forEach((inp) => {
+    const key = inp.getAttribute("data-layer");
+    if (key === "metarea") inp.checked = metareaOn;
+    else if (key === "subzones") inp.checked = subzonesOn;
+    else if (Object.prototype.hasOwnProperty.call(layers, key)) inp.checked = !!layers[key];
+    inp.addEventListener("change", () => setLayer(key, inp.checked));
+  });
+  loadKiwisAll();
   fetch("/static/geo/metareas.json")
     .then((r) => (r.ok ? r.json() : null))
     .then((fc) => {

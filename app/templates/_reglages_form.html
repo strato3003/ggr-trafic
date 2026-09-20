@@ -182,4 +182,46 @@
     </p>
     <p class="settings-msg" id="globe-buddy-msg" data-for="buddy" role="status" hidden></p>
   </fieldset>
+
+  <fieldset>
+    <legend>Affichage globe (défauts)</legend>
+    {% set disp = display if display is defined else {} %}
+    <p class="hint">
+      État d’arrivée pour tout visiteur. Les calques de la carte restent
+      modifiables localement. Le bandeau GGR trafic HF se masque aussi tant
+      que METAREA est allumé (chevauchement à l’équateur).
+    </p>
+    <label class="settings__check">
+      <input name="display_banner" type="checkbox"{% if disp.banner %} checked{% endif %}>
+      Bandeau GGR trafic HF
+    </label>
+    <label class="settings__check">
+      <input name="display_sdr_fleet" type="checkbox"{% if disp.sdr_fleet %} checked{% endif %}>
+      SDR choisis selon centre flotte (prochain buddy / bulletin)
+    </label>
+    <label class="settings__check">
+      <input name="display_sdr_potential" type="checkbox"{% if disp.sdr_potential %} checked{% endif %}>
+      SDR potentiels
+    </label>
+    <label class="settings__check">
+      <input name="display_skippers" type="checkbox"{% if disp.skippers %} checked{% endif %}>
+      Skippers
+    </label>
+    <label class="settings__check">
+      <input name="display_boats" type="checkbox"{% if disp.boats %} checked{% endif %}>
+      Bateaux + traces
+    </label>
+    <label class="settings__check">
+      <input name="display_metarea" type="checkbox"{% if disp.metarea %} checked{% endif %}>
+      METAREA
+    </label>
+    <label class="settings__check">
+      <input name="display_subzones" type="checkbox"{% if disp.subzones %} checked{% endif %}>
+      Sous-zones
+    </label>
+    <p class="settings__actions">
+      <button type="button" class="btn" id="save-display">Sauver l’affichage</button>
+    </p>
+    <p class="settings-msg" data-for="display" role="status"></p>
+  </fieldset>
 </form>

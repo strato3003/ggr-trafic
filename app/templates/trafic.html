@@ -24,6 +24,9 @@
       <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
       <span class="mix__clock" id="mix-time">— TU</span>
       <span class="mix__audio-load" id="mix-audio-load" hidden></span>
+      <button type="button" class="mix__ico-btn mix__loop-btn" id="mix-loop" hidden aria-pressed="false" aria-label="Lecture en boucle" title="Boucle"></button>
+      <span class="mix__loop-lab" id="mix-loop-lab" hidden></span>
+      <button type="button" class="mix__ico-btn mix__zoom-off" id="mix-unzoom" hidden aria-label="Replier la voie" title="Replier"></button>
       <label class="mix__seek">
         Heure TU
         <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
@@ -42,5 +45,5 @@
 </article>
 {% endblock %}
 {% block extra_js %}
-<script src="/static/js/mixer.js?v={{ version }}-kiwi50"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi66"></script>
 {% endblock %}

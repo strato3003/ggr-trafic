@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -13,6 +15,8 @@ from recorder.geo import fmt_latlon, haversine_km, initial_bearing
 log = logging.getLogger(__name__)
 
 _ARRAY_RE = re.compile(r"=\s*(\[[\s\S]*\])\s*;?\s*$")
+DIRECTORY_TTL_S = 3600
+DIRECTORY_CACHE = "kiwi-directory.json"
 
 
 def parse_kiwi_directory(raw: str) -> list[dict[str, Any]]:
@@ -24,6 +28,116 @@ def parse_kiwi_directory(raw: str) -> list[dict[str, Any]]:
     if not isinstance(data, list):
         return []
     return [row for row in data if isinstance(row, dict)]
+
+
+def directory_cache_path(cfg: dict[str, Any] | None = None) -> Path:
+    from recorder.config import data_dir
+
+    return data_dir(cfg) / DIRECTORY_CACHE
+
+
+def read_directory_cache(cfg: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], datetime | None]:
+    path = directory_cache_path(cfg)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return [], None
+    rows = data.get("receivers") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return [], None
+    at = None
+    raw_at = data.get("fetched_at") if isinstance(data, dict) else None
+    if raw_at:
+        try:
+            at = datetime.fromisoformat(str(raw_at).replace("Z", "+00:00"))
+        except ValueError:
+            at = None
+    return [r for r in rows if isinstance(r, dict)], at
+
+
+def write_directory_cache(cfg: dict[str, Any] | None, rows: list[dict[str, Any]]) -> None:
+    path = directory_cache_path(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "count": len(rows),
+        "receivers": rows,
+    }
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+
+
+async def fetch_directory_raw(cfg: dict[str, Any], client: Any | None = None) -> list[dict[str, Any]]:
+    import httpx
+
+    sdr_cfg = cfg.get("sdr") or {}
+    url = sdr_cfg.get("directory_url") or "http://rx.linkfanel.net/kiwisdr_com.js"
+    owns = client is None
+    client = client or httpx.AsyncClient(timeout=40.0, headers={"User-Agent": "GGR-Trafic/kiwi-directory"})
+    try:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        rows = parse_kiwi_directory(resp.text)
+    finally:
+        if owns:
+            await client.aclose()
+    write_directory_cache(cfg, rows)
+    log.info("Annuaire KiwiSDR : %s récepteurs enregistrés", len(rows))
+    return rows
+
+
+async def kiwi_directory(
+    cfg: dict[str, Any],
+    *,
+    max_age_s: int = DIRECTORY_TTL_S,
+    refresh: bool = False,
+    client: Any | None = None,
+) -> list[dict[str, Any]]:
+    """Annuaire local. Téléchargement si absent, trop vieux, ou refresh=True."""
+    rows, at = read_directory_cache(cfg)
+    now = datetime.now(timezone.utc)
+    age = None
+    if at is not None:
+        age = (now - at.astimezone(timezone.utc)).total_seconds()
+    if rows and not refresh and age is not None and age <= max_age_s:
+        return rows
+    try:
+        return await fetch_directory_raw(cfg, client=client)
+    except Exception:
+        log.exception("Téléchargement annuaire KiwiSDR")
+        return rows
+
+
+def map_kiwis(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Tous les Kiwi avec GPS (calque SDR potentiels), hors hors-ligne."""
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("offline") or "").lower() not in ("no", "0", ""):
+            continue
+        gps = _parse_gps(str(row.get("gps") or ""))
+        if not gps:
+            continue
+        url = str(row.get("url") or "").strip().rstrip("/")
+        try:
+            users = int(row.get("users") or 0)
+            users_max = int(row.get("users_max") or 0)
+        except (TypeError, ValueError):
+            users, users_max = 0, 0
+        out.append(
+            {
+                "id": row.get("id"),
+                "name": row.get("name") or url or "kiwi",
+                "lat": gps[0],
+                "lon": gps[1],
+                "loc": row.get("loc"),
+                "url": url,
+                "snr_hf": _snr_hf(str(row.get("snr") or "")),
+                "free_slots": max(0, users_max - users),
+                "users_max": users_max,
+            }
+        )
+    return out
 
 
 def _parse_gps(raw: str) -> tuple[float, float] | None:
@@ -588,19 +702,7 @@ async def fetch_ranked_kiwis(
     cover_hz: list[int] | None = None,
     score_mode: str = "fleet",
 ) -> list[dict[str, Any]]:
-    import httpx
-
-    sdr_cfg = cfg.get("sdr") or {}
-    url = sdr_cfg.get("directory_url") or "http://rx.linkfanel.net/kiwisdr_com.js"
-    owns = client is None
-    client = client or httpx.AsyncClient(timeout=40.0, headers={"User-Agent": "ggr-trafic/0.1"})
-    try:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        rows = parse_kiwi_directory(resp.text)
-    finally:
-        if owns:
-            await client.aclose()
+    rows = await kiwi_directory(cfg, client=client)
     ranked: list[dict[str, Any]] = []
     for row in rows:
         kiwi = normalize_receiver(

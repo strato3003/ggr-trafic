@@ -36,7 +36,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "sum(count_over_time({job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~\".*${ip:regex}.*\" | target=~\".*${url:regex}.*\" [5m]))",
+          "expr": "sum(count_over_time({job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~`.*${ip:regex}.*` | target=~`.*${url:regex}.*` [5m]))",
           "legendFormat": "accès / 5 min",
           "refId": "A"
         }
@@ -51,7 +51,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "sum(count_over_time({job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~\".*${ip:regex}.*\" | target=~\".*${url:regex}.*\" [$__range]))",
+          "expr": "sum(count_over_time({job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~`.*${ip:regex}.*` | target=~`.*${url:regex}.*` [$__range]))",
           "refId": "A"
         }
       ]
@@ -65,7 +65,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "{job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~\".*${ip:regex}.*\" | target=~\".*${url:regex}.*\"",
+          "expr": "{job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~`.*${ip:regex}.*` | target=~`.*${url:regex}.*`",
           "queryType": "range",
           "refId": "A",
           "maxLines": 500
@@ -83,6 +83,7 @@
               "detected_level": true,
               "ggr_visit": true,
               "ts": true,
+              "tsNs": true,
               "labelTypes": true
             },
             "indexByName": {
@@ -152,7 +153,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "{job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~\".*${ip:regex}.*\" | target=~\".*${url:regex}.*\"",
+          "expr": "{job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~`.*${ip:regex}.*` | target=~`.*${url:regex}.*`",
           "queryType": "range",
           "refId": "A"
         }

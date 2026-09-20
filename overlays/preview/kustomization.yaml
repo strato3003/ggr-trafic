@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ggr-trafic-preview
+resources:
+  - ../../k8s
+  - ingress-http.yaml
+patches:
+  - path: patch-deployment.yaml
+  - path: patch-service.yaml
+    target:
+      kind: Service
+      name: ggr-trafic
+  - path: patch-pvc.yaml
+  - path: patch-ingress.yaml
+    target:
+      kind: Ingress
+      name: ggr-trafic
+  - path: delete-http-ingress.yaml
+  - path: delete-legacy-ingress.yaml
+  - path: delete-legacy-mw.yaml
+images:
+  - name: ggr-trafic
+    newName: ggr-trafic
+    newTag: preview

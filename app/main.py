@@ -17,9 +17,9 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app import globe_tiles, metarea, store
-from recorder.config import ack_label, fmt_khz, fmt_mhz, load_config, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
+from recorder.config import ack_label, display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
-from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_qth, fetch_ranked_kiwis, fleet_uses_tahiti_tx
+from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_qth, fetch_ranked_kiwis, fleet_uses_tahiti_tx, kiwi_directory, map_kiwis, read_directory_cache
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
 from recorder.session import (
     finalize_pending_sessions,
@@ -44,9 +44,13 @@ async def lifespan(_app: FastAPI):
     recovered = recover_orphaned(cfg)
     if recovered:
         log.warning("Récupération : %s verrou(s) / vacation(s) orphelin(s)", recovered)
-    scheduler = build_scheduler(cfg)
+    scheduler = None
+    if (os.environ.get("GGR_SCHEDULER") or "1").strip() not in {"0", "off", "false", "no"}:
+        scheduler = build_scheduler(cfg)
+        scheduler.start()
+    else:
+        log.info("GGR_SCHEDULER=0 : pas d’enregistreur sur cette instance")
     _app.state.scheduler = scheduler
-    scheduler.start()
 
     async def _mux_pending() -> None:
         try:
@@ -57,11 +61,29 @@ async def lifespan(_app: FastAPI):
             log.exception("Finalisation média")
 
     mux_task = asyncio.create_task(_mux_pending())
+
+    async def _kiwi_directory_loop() -> None:
+        try:
+            n = len(await kiwi_directory(load_config(), refresh=True))
+            log.info("Annuaire KiwiSDR prêt : %s récepteurs", n)
+        except Exception:
+            log.exception("Annuaire KiwiSDR initial")
+        while True:
+            await asyncio.sleep(3600)
+            try:
+                n = len(await kiwi_directory(load_config(), refresh=True))
+                log.info("Annuaire KiwiSDR rafraîchi : %s récepteurs", n)
+            except Exception:
+                log.exception("Annuaire KiwiSDR horaire")
+
+    kiwi_task = asyncio.create_task(_kiwi_directory_loop())
     try:
         yield
     finally:
         mux_task.cancel()
-        scheduler.shutdown(wait=False)
+        kiwi_task.cancel()
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="GGR Trafic", version=version(CFG), lifespan=lifespan)
@@ -369,6 +391,23 @@ def _trafic_meta(vid: str):
     return meta
 
 
+@app.get("/api/kiwis")
+async def api_kiwis():
+    """Annuaire KiwiSDR local (calque SDR potentiels). Rafraîchi toutes les heures."""
+    cfg = load_config()
+    rows, at = read_directory_cache(cfg)
+    if not rows:
+        rows = await kiwi_directory(cfg)
+        _, at = read_directory_cache(cfg)
+    kiwis = map_kiwis(rows)
+    return {
+        "ok": True,
+        "kiwis": kiwis,
+        "count": len(kiwis),
+        "fetched_at": at.isoformat() if at else None,
+    }
+
+
 @app.get("/api/trafic")
 @app.get("/api/vacations")
 async def api_trafic():
@@ -554,6 +593,11 @@ async def api_settings_put(
     if "tx_sites" in body:
         try:
             patch["tx_sites"] = parse_tx_sites(body.get("tx_sites"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    if "display" in body:
+        try:
+            patch["web"] = {"display": parse_display(body.get("display"), display_defaults(cfg))}
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
     new_cfg = save_runtime_settings(patch, cfg)

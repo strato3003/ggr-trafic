@@ -49,6 +49,11 @@ window.GgrMixer = (function () {
   const timeEl = document.getElementById("mix-time");
   const audioLoadEl = document.getElementById("mix-audio-load");
   const seekEl = document.getElementById("mix-seek");
+  const loopBtn = document.getElementById("mix-loop");
+  const loopLab = document.getElementById("mix-loop-lab");
+  const loopHint = document.getElementById("mix-loop-hint");
+  const unzoomBtn = document.getElementById("mix-unzoom");
+  const onFocus = typeof opts.onFocus === "function" ? opts.onFocus : null;
   if (!deskEl || !playBtn || !seekEl) return null;
   setPlayUi(false);
 
@@ -71,8 +76,23 @@ window.GgrMixer = (function () {
   let raf = 0;
   let tickTimer = 0;
   let playNoted = false;
+  let focusId = null;
+  let loopA = NaN;
+  let loopB = NaN;
+  let loopOn = false;
+  let handleDrag = null;
+  let seekGate = false;
+  let playGen = 0;
   const ac = new AbortController();
   const sig = { signal: ac.signal };
+  const ICO_EXPAND =
+    '<svg class="mix__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>';
+  const ICO_COLLAPSE =
+    '<svg class="mix__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>';
+  const ICO_LOOP =
+    '<svg class="mix__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>';
+  if (loopBtn && !loopBtn.querySelector("svg")) loopBtn.insertAdjacentHTML("afterbegin", ICO_LOOP);
+  if (unzoomBtn && !unzoomBtn.querySelector("svg")) unzoomBtn.insertAdjacentHTML("afterbegin", ICO_COLLAPSE);
 
   function esc(s) {
     return String(s || "")
@@ -267,25 +287,44 @@ window.GgrMixer = (function () {
     out[2] = b;
   }
 
-  function masterEl() {
-    return (
-      tracks.find((tr) => tr.el && !tr.el.paused && Number.isFinite(tr.el.currentTime)) ||
-      (tracks[0] && tracks[0].el) ||
-      null
-    );
+  function clockTrack() {
+    if (focusId) {
+      const hit = tracks.find((tr) => tr.id === focusId && tr.el && !tr.dead);
+      if (hit) return hit;
+    }
+    return tracks.find((tr) => tr.el && !tr.dead) || null;
   }
 
   function nowT() {
+    if (seekGate) return t0;
     if (playing) {
-      let t = t0;
-      tracks.forEach((tr) => {
-        if (tr.el && Number.isFinite(tr.el.currentTime) && !tr.el.paused) {
-          t = Math.max(t, tr.el.currentTime);
-        }
-      });
-      return duration ? Math.min(duration, t) : t;
+      const tr = clockTrack();
+      const el = tr && tr.el;
+      if (el && Number.isFinite(el.currentTime)) {
+        const t = el.currentTime;
+        return duration ? Math.min(duration, Math.max(0, t)) : Math.max(0, t);
+      }
+      return t0;
     }
     return t0;
+  }
+
+  function loopBounds() {
+    if (!loopOk()) return null;
+    const a = Math.min(loopA, loopB);
+    const b = Math.max(loopA, loopB);
+    return { a: a, b: b };
+  }
+
+  function clampLoopTime(t) {
+    const span = timeSpan();
+    let x = Math.max(0, Number.isFinite(t) ? t : 0);
+    if (span) x = Math.min(span, x);
+    const lp = loopOn ? loopBounds() : null;
+    if (!lp) return x;
+    if (x < lp.a) return lp.a;
+    if (x >= lp.b - 0.04) return lp.a;
+    return x;
   }
 
   function resizeCanvas(tr) {
@@ -345,6 +384,66 @@ window.GgrMixer = (function () {
     ctx2d.fillStyle = "#000";
     ctx2d.fillRect(0, 0, w, h);
     if (tr.specBmp) ctx2d.drawImage(tr.specBmp, 0, 0, w, h);
+    drawWave(tr);
+  }
+
+  function computePeaks(samples, cols) {
+    const n = samples.length;
+    const mins = new Float32Array(cols);
+    const maxs = new Float32Array(cols);
+    if (n < 2) return { mins: mins, maxs: maxs };
+    const step = n / cols;
+    for (let i = 0; i < cols; i++) {
+      const a = Math.floor(i * step);
+      const b = Math.min(n, Math.floor((i + 1) * step) + 1);
+      let lo = 1;
+      let hi = -1;
+      for (let j = a; j < b; j++) {
+        const v = samples[j] / 32768;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      mins[i] = lo;
+      maxs[i] = hi;
+    }
+    return { mins: mins, maxs: maxs };
+  }
+
+  function drawWave(tr) {
+    const canvas = tr.wave;
+    if (!canvas || focusId !== tr.id) return;
+    const wrap = canvas.parentElement;
+    const cssW = Math.max(64, (wrap && wrap.clientWidth) || canvas.clientWidth || 140);
+    const cssH = Math.max(28, canvas.clientHeight || 48);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.floor(cssW * dpr);
+    const h = Math.floor(cssH * dpr);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    if (!w || !h) return;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#121a22";
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "rgba(212, 230, 242, 0.18)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, h / 2);
+    ctx.lineTo(w, h / 2);
+    ctx.stroke();
+    const peaks = tr.peaks;
+    if (!peaks) return;
+    const mid = h / 2;
+    const amp = mid * 0.92;
+    ctx.fillStyle = "#4aa8e0";
+    const cols = peaks.mins.length;
+    for (let x = 0; x < w; x++) {
+      const i = Math.min(cols - 1, Math.floor((x / w) * cols));
+      const y1 = mid - peaks.maxs[i] * amp;
+      const y2 = mid - peaks.mins[i] * amp;
+      ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+    }
   }
 
   function draw() {
@@ -365,7 +464,7 @@ window.GgrMixer = (function () {
 
   function updateAudioLoad() {
     if (!audioLoadEl) return;
-    const live = tracks.filter((t) => t.el && !t.dead);
+    const live = tracks.filter((t) => t.el && !t.dead && liveForPlay(t));
     if (!live.length) {
       audioLoadEl.hidden = true;
       audioLoadEl.textContent = "";
@@ -406,6 +505,49 @@ window.GgrMixer = (function () {
     seekEl.max = String(duration);
   }
 
+  function liveForPlay(tr) {
+    if (!tr || !tr.el || tr.dead) return false;
+    if (focusId && tr.id !== focusId) return false;
+    return true;
+  }
+
+  function waitSeek(tr, off) {
+    return new Promise((resolve) => {
+      if (!tr.el) {
+        resolve();
+        return;
+      }
+      const el = tr.el;
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        el.removeEventListener("seeked", onSeeked);
+        el.removeEventListener("loadedmetadata", onMeta);
+        resolve();
+      };
+      const onSeeked = () => {
+        if (Math.abs((Number.isFinite(el.currentTime) ? el.currentTime : 0) - off) < 0.45) finish();
+      };
+      const doSeek = () => {
+        if (Math.abs((Number.isFinite(el.currentTime) ? el.currentTime : 0) - off) < 0.45) {
+          finish();
+          return;
+        }
+        el.addEventListener("seeked", onSeeked);
+        seekElTo(tr, off);
+        window.setTimeout(finish, 800);
+      };
+      const onMeta = () => doSeek();
+      if (el.readyState >= 1 && Number.isFinite(el.duration)) {
+        doSeek();
+        return;
+      }
+      el.addEventListener("loadedmetadata", onMeta);
+      window.setTimeout(finish, 4000);
+    });
+  }
+
   function seekElTo(tr, off) {
     if (!tr.el) return;
     try {
@@ -416,26 +558,69 @@ window.GgrMixer = (function () {
     }
   }
 
-  function ensureReady(tr, off) {
-    if (!tr.el) return;
-    applyGain(tr);
-    const go = () => {
-      if (!playing) return;
+  function startSources(offset) {
+    const gen = ++playGen;
+    const off = clampLoopTime(Math.max(0, offset || 0));
+    t0 = off;
+    playing = true;
+    seekGate = true;
+    noteReplayPlay();
+    const all = tracks.filter((tr) => tr.el && !tr.dead);
+    all.forEach((tr) => {
+      if (tr.el.preload !== "auto") tr.el.preload = "auto";
+      tr.el.muted = true;
       tr.el.play().catch(() => {
-        tr.el.addEventListener("canplay", go, { once: true });
+        try {
+          tr.el.load();
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+    updateAudioLoad();
+    setPlayUi(true);
+    cancelAnimationFrame(raf);
+    clearInterval(tickTimer);
+    updateHead();
+    const goPlay = () => {
+      if (gen !== playGen || !playing) return;
+      seekGate = false;
+      t0 = off;
+      all.forEach((tr) => {
+        applyGain(tr);
+        if (focusId && tr.id !== focusId) {
+          try {
+            tr.el.pause();
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
+        tr.el.play().catch(() => {
+          tr.el.addEventListener("canplay", () => {
+            if (gen !== playGen || !playing) return;
+            tr.el.play().catch(() => {});
+          }, { once: true });
+        });
+      });
+      tickTimer = setInterval(tick, 50);
+      raf = requestAnimationFrame(function loop() {
+        tick();
+        if (playing) raf = requestAnimationFrame(loop);
       });
     };
-    const cur = tr.el.currentTime;
-    if (Number.isFinite(tr.el.duration) && Math.abs((Number.isFinite(cur) ? cur : 0) - off) > 0.15) {
-      tr.el.addEventListener("seeked", go, { once: true });
-      seekElTo(tr, off);
-      setTimeout(() => {
-        if (playing && tr.el.paused) go();
-      }, 400);
-      return;
-    }
-    seekElTo(tr, off);
-    go();
+    Promise.all(all.map((tr) => waitSeek(tr, off))).then(() => {
+      if (gen !== playGen || !playing) return;
+      const clock = clockTrack();
+      const cur = clock && clock.el && Number.isFinite(clock.el.currentTime) ? clock.el.currentTime : off;
+      const lp = loopOn ? loopBounds() : null;
+      if (lp && clock && clock.el && clock.el.readyState >= 1 && (cur < lp.a - 1 || cur >= lp.b - 0.02)) {
+        all.forEach((tr) => seekElTo(tr, off));
+        window.setTimeout(goPlay, 80);
+        return;
+      }
+      goPlay();
+    });
   }
 
   function setPlayUi(on) {
@@ -458,28 +643,9 @@ window.GgrMixer = (function () {
     }
   }
 
-  function startSources(offset) {
-    const off = Math.max(0, offset || 0);
-    t0 = off;
-    playing = true;
-    noteReplayPlay();
-    tracks.forEach((tr) => {
-      if (tr.el && tr.el.preload !== "auto") tr.el.preload = "auto";
-      ensureReady(tr, off);
-    });
-    updateAudioLoad();
-    setPlayUi(true);
-    cancelAnimationFrame(raf);
-    clearInterval(tickTimer);
-    tick();
-    tickTimer = setInterval(tick, 100);
-    raf = requestAnimationFrame(function loop() {
-      tick();
-      if (playing) raf = requestAnimationFrame(loop);
-    });
-  }
-
   function pauseAt(t) {
+    playGen += 1;
+    seekGate = false;
     t0 = Math.max(0, Math.min(duration || t, t));
     playing = false;
     tracks.forEach((tr) => {
@@ -494,17 +660,47 @@ window.GgrMixer = (function () {
 
   function tick() {
     if (!playing) return;
+    if (seekGate) {
+      updateHead();
+      return;
+    }
+    const clock = clockTrack();
+    if (clock && clock.el && clock.el.readyState < 2) {
+      updateHead();
+      return;
+    }
     const t = nowT();
     updateHead();
+    const lp = loopOn ? loopBounds() : null;
+    if (lp) {
+      if (t >= lp.b - 0.02 || t < lp.a - 1) {
+        restartLoop(lp.a);
+        return;
+      }
+    }
     if (duration && t >= duration - 0.03) pauseAt(duration);
   }
 
+  function restartLoop(a) {
+    tracks.forEach((tr) => {
+      if (!tr.el) return;
+      try {
+        tr.el.pause();
+      } catch {
+        /* ignore */
+      }
+    });
+    startSources(a);
+  }
+
   function previewSeek(t) {
-    t0 = Math.max(0, Math.min(duration || t, t));
+    t0 = clampLoopTime(Math.max(0, Math.min(duration || t, t)));
     seekEl.value = String(t0);
     if (duration) seekEl.max = String(duration);
     if (playing) {
+      playGen += 1;
       playing = false;
+      seekGate = false;
       tracks.forEach((tr) => {
         if (tr.el) tr.el.pause();
       });
@@ -525,11 +721,158 @@ window.GgrMixer = (function () {
   function pointerTime(ev, canvas) {
     const rect = canvas.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / Math.max(1, rect.width)));
-    return x * duration;
+    return x * timeSpan();
   }
 
-  function bindCanvasSeek(tr) {
-    const canvas = tr.canvas;
+  function timeSpan() {
+    return duration > 0 ? duration : 1;
+  }
+
+  function loopOk() {
+    return Number.isFinite(loopA) && Number.isFinite(loopB) && loopB - loopA > 0.12;
+  }
+
+  function ensureLoopRange() {
+    const span = timeSpan();
+    if (!loopOk()) {
+      loopA = 0;
+      loopB = span;
+      return loopOk();
+    }
+    if (duration > 2 && loopB <= 1.05 && loopA >= 0 && loopA < 1.05) {
+      if (loopB - loopA < 0.98) {
+        loopA *= duration;
+        loopB *= duration;
+      } else {
+        loopA = 0;
+        loopB = duration;
+      }
+    }
+    loopA = Math.max(0, Math.min(loopA, span));
+    loopB = Math.max(loopA + 0.12, Math.min(loopB, span));
+    return loopOk();
+  }
+
+  function updateLoopUi() {
+    const span = timeSpan();
+    const ok = loopOk();
+    const show = !!(focusId && loopOn);
+    tracks.forEach((tr) => {
+      if (!tr.loopEl) return;
+      const onThis = show && tr.id === focusId;
+      tr.loopEl.hidden = !onThis;
+      if (!onThis || !span) return;
+      const a = ok ? Math.min(loopA, loopB) : 0;
+      const b = ok ? Math.max(loopA, loopB) : span;
+      const aPct = (a / span) * 100;
+      const bPct = (b / span) * 100;
+      tr.loopEl.style.left = "0";
+      tr.loopEl.style.width = "100%";
+      const dimL = tr.loopEl.querySelector(".mix__loop-dim--l");
+      const dimR = tr.loopEl.querySelector(".mix__loop-dim--r");
+      const sel = tr.loopEl.querySelector(".mix__loop-sel");
+      if (dimL) {
+        dimL.style.left = "0";
+        dimL.style.width = aPct + "%";
+      }
+      if (sel) {
+        sel.style.left = aPct + "%";
+        sel.style.width = Math.max(0, bPct - aPct) + "%";
+      }
+      if (dimR) {
+        dimR.style.left = bPct + "%";
+        dimR.style.width = Math.max(0, 100 - bPct) + "%";
+      }
+    });
+    if (loopLab) {
+      loopLab.hidden = !(show && ok);
+      if (show && ok) loopLab.textContent = fmtTu(Math.min(loopA, loopB)) + " → " + fmtTu(Math.max(loopA, loopB));
+    }
+    if (loopHint) loopHint.hidden = true;
+    if (loopBtn) {
+      loopBtn.hidden = !focusId;
+      loopBtn.setAttribute("aria-pressed", focusId && loopOn ? "true" : "false");
+    }
+    if (unzoomBtn) unzoomBtn.hidden = !focusId;
+    deskEl.querySelectorAll('[data-act="zoom"]').forEach((btn) => {
+      const ch = btn.closest(".mix__ch");
+      const on = !!(focusId && ch && ch.getAttribute("data-id") === focusId);
+      btn.innerHTML = on ? ICO_COLLAPSE : ICO_EXPAND;
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.setAttribute("aria-label", on ? "Replier" : "Plein écran");
+      btn.setAttribute("title", on ? "Replier" : "Plein écran");
+    });
+  }
+
+  function setFocus(id) {
+    focusId = id || null;
+    document.body.classList.toggle("kiwi-mix-focus", !!focusId);
+    deskEl.querySelectorAll(".mix__ch").forEach((el) => {
+      el.classList.toggle("is-focus", focusId && el.getAttribute("data-id") === focusId);
+    });
+    tracks.forEach((tr) => {
+      const on = !!(focusId && tr.id === focusId);
+      if (tr.wave) tr.wave.hidden = !on;
+      if (tr.legend) tr.legend.hidden = !on;
+    });
+    if (!focusId) {
+      loopOn = false;
+    } else {
+      const tr = tracks.find((row) => row.id === focusId);
+      if (tr && !tr.dead) loadWave(tr);
+    }
+    updateLoopUi();
+    if (playing) startSources(clampLoopTime(t0));
+    if (onFocus) onFocus(focusId);
+    window.dispatchEvent(new Event("resize"));
+    requestAnimationFrame(() => tracks.forEach(drawTrack));
+  }
+
+  function bindLoopHandles(tr) {
+    if (!tr.loopEl) return;
+    const ha = tr.loopEl.querySelector(".mix__loop-h--a");
+    const hb = tr.loopEl.querySelector(".mix__loop-h--b");
+    if (!ha || !hb) return;
+    const start = (which, ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!duration && !timeSpan()) return;
+      handleDrag = which;
+      resumeAfterDrag = playing;
+      if (playing) pauseAt(nowT());
+      ev.currentTarget.setPointerCapture(ev.pointerId);
+    };
+    const move = (ev) => {
+      if (!handleDrag) return;
+      const wrap = tr.loopEl.parentElement || tr.canvas;
+      const t = pointerTime(ev, wrap);
+      const gap = 0.2;
+      const span = timeSpan();
+      const a = Number.isFinite(loopA) ? loopA : 0;
+      const b = Number.isFinite(loopB) ? loopB : span;
+      if (handleDrag === "a") loopA = Math.max(0, Math.min(t, b - gap));
+      else loopB = Math.min(span, Math.max(t, a + gap));
+      updateLoopUi();
+    };
+    const stop = () => {
+      if (!handleDrag) return;
+      handleDrag = null;
+      if (resumeAfterDrag) startSources(Math.min(loopA, loopB));
+      else if (playing) startSources(clampLoopTime(nowT()));
+      resumeAfterDrag = false;
+    };
+    ha.addEventListener("pointerdown", (ev) => start("a", ev));
+    hb.addEventListener("pointerdown", (ev) => start("b", ev));
+    ha.addEventListener("pointermove", move);
+    hb.addEventListener("pointermove", move);
+    ha.addEventListener("pointerup", stop);
+    hb.addEventListener("pointerup", stop);
+    ha.addEventListener("pointercancel", stop);
+    hb.addEventListener("pointercancel", stop);
+  }
+
+  function bindCanvasSeek(canvas, tr) {
+    if (!canvas) return;
     canvas.addEventListener("pointerdown", (ev) => {
       if (!duration) return;
       resumeAfterDrag = playing;
@@ -569,9 +912,10 @@ window.GgrMixer = (function () {
   }, sig);
 
   function applyGain(tr) {
-    const vol = tr.muted ? 0 : Number.isFinite(tr.volume) ? tr.volume : 1;
+    const silent = !!(tr.muted || (focusId && tr.id !== focusId));
+    const vol = silent ? 0 : Number.isFinite(tr.volume) ? tr.volume : 1;
     if (tr.el) {
-      tr.el.muted = !!tr.muted;
+      tr.el.muted = silent;
       tr.el.volume = Math.min(1, Math.max(0, vol));
     }
   }
@@ -594,6 +938,9 @@ window.GgrMixer = (function () {
           '<div class="mix__ch-ctrl">' +
           '<label class="mix__fader"><span>Vol</span><input type="range" min="0" max="150" value="100" step="1" data-act="vol"></label>' +
           '<button type="button" class="mix__mute" data-act="mute" aria-pressed="false">Mute</button>' +
+          '<button type="button" class="mix__zoom mix__ico-btn" data-act="zoom" aria-label="Plein écran" title="Plein écran">' +
+          ICO_EXPAND +
+          "</button>" +
           '<div class="mix__meta"><strong>' +
           esc(qrg) +
           "</strong><span>" +
@@ -606,11 +953,23 @@ window.GgrMixer = (function () {
           " " +
           esc(where) +
           '"></canvas>' +
+          '<canvas class="mix__wave" hidden aria-label="Amplitude ' +
+          esc(qrg) +
+          '"></canvas>' +
+          '<p class="mix__wf-legend" hidden>USB 0 Hz (bas) → 2,7 kHz (haut) · noir/bleu = bruit · cyan/vert = signal · jaune/blanc = fort</p>' +
           (tr.dead
             ? ""
             : '<div class="mix__wf-load"' +
               (tr.waterfall ? " hidden" : "") +
               ">Extraction bande son en cours… 0 %</div>") +
+          '<div class="mix__loop" hidden>' +
+          '<div class="mix__loop-dim mix__loop-dim--l"></div>' +
+          '<div class="mix__loop-sel">' +
+          '<button type="button" class="mix__loop-h mix__loop-h--a" aria-label="Borne A de la boucle"></button>' +
+          '<button type="button" class="mix__loop-h mix__loop-h--b" aria-label="Borne B de la boucle"></button>' +
+          "</div>" +
+          '<div class="mix__loop-dim mix__loop-dim--r"></div>' +
+          "</div>" +
           '<div class="mix__head"></div>' +
           "</div></div>"
         );
@@ -618,17 +977,27 @@ window.GgrMixer = (function () {
       .join("");
     deskEl.querySelectorAll(".mix__ch").forEach((el, i) => {
       const tr = tracks[i];
-      tr.canvas = el.querySelector("canvas");
+      tr.canvas = el.querySelector("canvas.mix__wf");
+      tr.wave = el.querySelector("canvas.mix__wave");
+      tr.legend = el.querySelector(".mix__wf-legend");
       tr.head = el.querySelector(".mix__head");
       tr.loadEl = el.querySelector(".mix__wf-load");
+      tr.loopEl = el.querySelector(".mix__loop");
       const muteBtn = el.querySelector('[data-act="mute"]');
       const vol = el.querySelector('[data-act="vol"]');
+      const zoomBtn = el.querySelector('[data-act="zoom"]');
       if (tr.dead) {
         if (muteBtn) muteBtn.disabled = true;
         if (vol) vol.disabled = true;
+        if (zoomBtn) zoomBtn.disabled = true;
         return;
       }
-      bindCanvasSeek(tr);
+      bindCanvasSeek(tr.canvas, tr);
+      bindCanvasSeek(tr.wave, tr);
+      bindLoopHandles(tr);
+      if (zoomBtn) {
+        zoomBtn.addEventListener("click", () => setFocus(focusId === tr.id ? null : tr.id));
+      }
       muteBtn.addEventListener("click", () => {
         tr.muted = !tr.muted;
         muteBtn.setAttribute("aria-pressed", tr.muted ? "true" : "false");
@@ -648,10 +1017,30 @@ window.GgrMixer = (function () {
 
   function playToggle() {
     if (playing) pauseAt(nowT());
-    else startSources(duration && duration - t0 < 0.08 ? 0 : t0);
+    else startSources(clampLoopTime(duration && duration - t0 < 0.08 ? 0 : t0));
   }
 
   playBtn.addEventListener("click", playToggle, sig);
+  if (loopBtn) {
+    loopBtn.addEventListener(
+      "click",
+      () => {
+        if (!focusId) return;
+        if (loopOn) {
+          loopOn = false;
+        } else {
+          loopOn = true;
+          ensureLoopRange();
+          if (playing) startSources(clampLoopTime(nowT()));
+        }
+        updateLoopUi();
+      },
+      sig
+    );
+  }
+  if (unzoomBtn) {
+    unzoomBtn.addEventListener("click", () => setFocus(null), sig);
+  }
 
   function onKey(ev) {
     if (ev.code !== "Space") return;
@@ -674,7 +1063,9 @@ window.GgrMixer = (function () {
     seekEl.max = String(duration);
     seekEl.step = "0.05";
     playBtn.disabled = false;
+    if (loopOn) ensureLoopRange();
     updateHead();
+    updateLoopUi();
   }
 
   function setExtract(tr, pct, done) {
@@ -719,8 +1110,23 @@ window.GgrMixer = (function () {
       noteDuration(tr.el.duration);
       if (!playing) seekElTo(tr, t0);
     });
+    tr.el.addEventListener("timeupdate", () => {
+      if (!playing || seekGate || !loopOn || !liveForPlay(tr)) return;
+      if (tr.el.readyState < 2) return;
+      const lp = loopBounds();
+      if (!lp) return;
+      const cur = tr.el.currentTime;
+      if (!Number.isFinite(cur)) return;
+      if (cur >= lp.b - 0.02 || cur < lp.a - 1) restartLoop(lp.a);
+    });
     tr.el.addEventListener("ended", () => {
-      if (playing && masterEl() === tr.el) pauseAt(duration || tr.el.currentTime || 0);
+      if (!playing) return;
+      if (loopOn && loopOk()) {
+        restartLoop(Math.min(loopA, loopB));
+        return;
+      }
+      const clock = clockTrack();
+      if (clock && clock.el === tr.el) pauseAt(duration || tr.el.currentTime || 0);
     });
   }
 
@@ -728,11 +1134,11 @@ window.GgrMixer = (function () {
     return String(src || "").replace(/\.(mp3|m4a|aac)$/i, ".wav");
   }
 
-  async function fetchWav(tr) {
+  async function fetchWav(tr, quiet) {
     if (tr.dead || !tr.src) return null;
     const pcm = tr.wav || pcmName(tr.src);
     if (!pcm) return null;
-    setExtract(tr, 0);
+    if (!quiet) setExtract(tr, 0);
     try {
       const res = await fetch(media(pcm));
       if (!res.ok) throw new Error("HTTP " + res.status);
@@ -747,16 +1153,19 @@ window.GgrMixer = (function () {
           if (step.done) break;
           chunks.push(step.value);
           received += step.value.byteLength;
-          if (total) setExtract(tr, (received / total) * 45);
-          else setExtract(tr, Math.min(40, 5 + received / 350000));
+          if (!quiet) {
+            if (total) setExtract(tr, (received / total) * 45);
+            else setExtract(tr, Math.min(40, 5 + received / 350000));
+          }
         }
         raw = await new Blob(chunks).arrayBuffer();
       } else {
         raw = await res.arrayBuffer();
       }
-      setExtract(tr, 45);
+      if (!quiet) setExtract(tr, 45);
       return wavMono16(raw);
     } catch (err) {
+      if (quiet) return null;
       tr.place = (tr.place || tr.id) + " (échec waterfall)";
       const meta =
         tr.canvas &&
@@ -766,6 +1175,19 @@ window.GgrMixer = (function () {
       setExtract(tr, 0, true);
       console.warn("Mixage piste", tr.id, err);
       return null;
+    }
+  }
+
+  async function loadWave(tr) {
+    if (!tr || tr.dead || tr.peaks || tr.waveBusy) return;
+    tr.waveBusy = true;
+    try {
+      const wav = await fetchWav(tr, true);
+      if (!wav) return;
+      tr.peaks = computePeaks(wav.samples, 1024);
+      if (focusId === tr.id) drawWave(tr);
+    } finally {
+      tr.waveBusy = false;
     }
   }
 
@@ -910,7 +1332,7 @@ window.GgrMixer = (function () {
           live +
           "/" +
           tracks.length +
-          " voies audio · waterfall USB 0–2,7 kHz (début à gauche) · mute / volume.";
+          " voies audio · spectrogramme USB 0–2,7 kHz (temps →) · mute / volume.";
       updateHead();
       return;
     }
@@ -929,6 +1351,12 @@ window.GgrMixer = (function () {
         tr.el.load();
       }
     });
+    document.body.classList.remove("kiwi-mix-focus");
+    if (onFocus) onFocus(null);
+    if (loopBtn) loopBtn.hidden = true;
+    if (loopLab) loopLab.hidden = true;
+    if (loopHint) loopHint.hidden = true;
+    if (unzoomBtn) unzoomBtn.hidden = true;
     playBtn.removeEventListener("click", playToggle);
     window.removeEventListener("keydown", onKey);
     window.removeEventListener("resize", onResize);

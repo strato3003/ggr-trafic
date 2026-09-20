@@ -42,6 +42,19 @@ def test_fmt_latlon_uses_hemispheres():
     assert fmt_latlon(-33.9, 18.4).endswith("E")
 
 
+def test_parse_fmt_latlon_roundtrip():
+    from recorder.geo import parse_fmt_latlon
+
+    lat, lon = parse_fmt_latlon("28.646°N 13.905°W")
+    assert abs(lat - 28.646) < 1e-9
+    assert abs(lon - (-13.905)) < 1e-9
+    back = parse_fmt_latlon(fmt_latlon(-33.9, 18.4))
+    assert back is not None
+    assert abs(back[0] + 33.9) < 1e-9
+    assert abs(back[1] - 18.4) < 1e-9
+    assert parse_fmt_latlon("") is None
+
+
 def test_vacation_id_utc():
     dt = datetime(2026, 9, 7, 17, 50, tzinfo=timezone.utc)
     assert vacation_id(dt) == "2026-09-07T1750Z"
@@ -152,6 +165,38 @@ var kiwisdr_com =
     rows = parse_kiwi_directory(raw)
     assert len(rows) == 1
     assert rows[0]["id"] == "abc"
+
+
+def test_kiwi_directory_cache_and_map(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from recorder.kiwi_list import map_kiwis, read_directory_cache, write_directory_cache
+
+    cfg = {"storage": {"data_dir": str(tmp_path)}}
+    write_directory_cache(
+        cfg,
+        [
+            {
+                "id": "a",
+                "name": "Les Sables",
+                "gps": "(46.5, -1.8)",
+                "url": "http://example.invalid:8073",
+                "offline": "no",
+                "loc": "Vendée",
+                "users": 1,
+                "users_max": 4,
+            },
+            {"id": "b", "name": "offline", "gps": "(1, 2)", "url": "http://x:8073", "offline": "yes"},
+            {"id": "c", "name": "no gps", "url": "http://y:8073", "offline": "no"},
+        ],
+    )
+    rows, at = read_directory_cache(cfg)
+    assert len(rows) == 3
+    assert at is not None
+    mapped = map_kiwis(rows)
+    assert len(mapped) == 1
+    assert mapped[0]["lat"] == 46.5
+    assert mapped[0]["lon"] == -1.8
+    assert mapped[0]["free_slots"] == 3
 
 
 def test_score_prefers_closer_higher_snr():
@@ -334,7 +379,7 @@ def test_channel_place_and_globe_keeps_mute_channels():
                     "id": "nvis-alt",
                     "freq_khz": 6516.0,
                     "audio": "audio-nvis-alt.wav",
-                    "kiwi": {"name": "0-30 MHz SDR, CT2HMR, Amarante, Portugal"},
+                    "kiwi": {"name": "0-30 MHz SDR, CT2HMR, Amarante, Portugal", "lat": 41.27, "lon": -8.08},
                     "site_label": "proche / NVIS",
                 },
                 {
@@ -351,6 +396,28 @@ def test_channel_place_and_globe_keeps_mute_channels():
     assert [c["has_audio"] for c in card["channels"]] == [True, False]
     assert card["channels"][0]["place"] == "Amarante, Portugal"
     assert card["channels"][1]["place"] == "Montmorillon 86500 FRANCE"
+    assert card["channels"][0]["lat"] == 41.27
+    assert card["channels"][0]["lon"] == -8.08
+    from_fmt = globe_vacation(
+        {
+            "id": "2026-09-20T1159Z-buddy",
+            "reason": "buddy",
+            "channels": [
+                {
+                    "id": "nvis-alt",
+                    "audio": "audio-nvis-alt.wav",
+                    "kiwi": {
+                        "name": "EA8-DF4UE, Fuerteventura, Canary Islands",
+                        "loc": "Fuerteventura, Canary Islands",
+                        "fmt": "28.646°N 13.905°W",
+                        "site_km": 599.0,
+                    },
+                }
+            ],
+        }
+    )
+    assert from_fmt["channels"][0]["lat"] == 28.646
+    assert from_fmt["channels"][0]["lon"] == -13.905
     assert card["channels"][0]["waterfall"] == ""
     assert card["channels"][1]["waterfall"] == ""
 
@@ -793,6 +860,33 @@ def test_runtime_settings_override_qrg(tmp_path, monkeypatch):
     assert qrg["ack1_khz"] == 16551.0
     assert qrg["ack2_khz"] == 12418.0
     assert (tmp_path / "settings.json").is_file()
+
+
+def test_display_defaults_and_runtime_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from recorder.config import display_defaults, load_config, parse_display, qrg_context, save_runtime_settings
+
+    d0 = display_defaults(load_config())
+    assert d0["banner"] is True
+    assert d0["sdr_fleet"] is True
+    assert d0["sdr_potential"] is False
+    assert d0["metarea"] is True
+    save_runtime_settings({"web": {"display": parse_display({"banner": False, "sdr_potential": True}, d0)}})
+    qrg = qrg_context(load_config())
+    assert qrg["display"]["banner"] is False
+    assert qrg["display"]["sdr_potential"] is True
+    assert qrg["display"]["sdr_fleet"] is True
+    assert qrg["tx_khz"] == 14135.0
+
+
+def test_parse_display_rejects_non_object():
+    from recorder.config import parse_display
+
+    try:
+        parse_display([])
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "invalide" in str(exc)
 
 
 def test_parse_tx_sites_max_five_and_empty_rows():

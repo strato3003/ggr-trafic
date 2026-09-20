@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from recorder.config import data_dir, load_config
+from recorder.geo import parse_fmt_latlon
 
 _VACATION_ID = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._-]{0,80}$")
 
@@ -132,6 +133,12 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
     channels = []
     for ch in decorated.get("channels") or []:
         kiwi = ch.get("kiwi") or {}
+        lat_k = kiwi.get("lat")
+        lon_k = kiwi.get("lon")
+        if lat_k is None or lon_k is None:
+            parsed = parse_fmt_latlon(kiwi.get("fmt"))
+            if parsed:
+                lat_k, lon_k = parsed
         channels.append(
             {
                 "id": ch.get("id"),
@@ -144,9 +151,14 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
                 "thumb": ch.get("thumb"),
                 "kiwi": kiwi.get("name"),
                 "loc": kiwi.get("loc"),
+                "fmt": kiwi.get("fmt"),
+                "lat": lat_k,
+                "lon": lon_k,
                 "place": ch.get("place"),
                 "has_audio": bool(ch.get("has_audio")),
                 "site_label": ch.get("site_label"),
+                "site_km": kiwi.get("site_km") if kiwi.get("site_km") is not None else kiwi.get("distance_km"),
+                "prop_zone": kiwi.get("prop_zone") or ch.get("prop_zone"),
                 "waterfall": ch.get("waterfall") or "",
             }
         )

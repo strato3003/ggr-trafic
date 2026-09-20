@@ -197,6 +197,41 @@ def tx_sites_aim(cfg: dict[str, Any] | None, lat: float | None, lon: float | Non
     return rows
 
 
+DISPLAY_KEYS = (
+    ("banner", True),
+    ("sdr_fleet", True),
+    ("sdr_potential", False),
+    ("skippers", True),
+    ("boats", True),
+    ("metarea", True),
+    ("subzones", True),
+)
+
+
+def display_defaults(cfg: dict[str, Any] | None = None) -> dict[str, bool]:
+    """Calques globe : défauts YAML / settings.json."""
+    cfg = cfg or {}
+    raw = ((cfg.get("web") or {}).get("display") or {})
+    out: dict[str, bool] = {}
+    for key, fallback in DISPLAY_KEYS:
+        if isinstance(raw, dict) and key in raw:
+            out[key] = bool(raw[key])
+        else:
+            out[key] = fallback
+    return out
+
+
+def parse_display(raw: Any, base: dict[str, bool] | None = None) -> dict[str, bool]:
+    """Valide le bloc web.display (booléens connus)."""
+    out = dict(base or {k: fb for k, fb in DISPLAY_KEYS})
+    if not isinstance(raw, dict):
+        raise ValueError("Affichage globe invalide")
+    for key, _fallback in DISPLAY_KEYS:
+        if key in raw:
+            out[key] = bool(raw[key])
+    return out
+
+
 def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     """QRG / horaire exposés à l’UI (valeurs courantes, y compris settings.json)."""
     cfg = cfg or load_config()
@@ -228,6 +263,7 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     }
     ctx.update(buddy_context(cfg))
     ctx["tx_sites"] = tx_sites_from_cfg(cfg)
+    ctx["display"] = display_defaults(cfg)
     return ctx
 
 
@@ -298,4 +334,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
             return pkg_version("ggr-vacations")
         except PackageNotFoundError:
             cfg = cfg or {}
-            return str(cfg.get("version") or "1.1.2")
+            return str(cfg.get("version") or "1.1.7")

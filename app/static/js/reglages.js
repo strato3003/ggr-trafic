@@ -74,6 +74,15 @@
       buddy_kiwi_count: Number((form.elements.namedItem("buddy_kiwi_count") || { value: 4 }).value) || 4,
       buddy_skippers: skippers,
       tx_sites,
+      display: {
+        banner: !!(form.elements.namedItem("display_banner") && form.elements.namedItem("display_banner").checked),
+        sdr_fleet: !!(form.elements.namedItem("display_sdr_fleet") && form.elements.namedItem("display_sdr_fleet").checked),
+        sdr_potential: !!(form.elements.namedItem("display_sdr_potential") && form.elements.namedItem("display_sdr_potential").checked),
+        skippers: !!(form.elements.namedItem("display_skippers") && form.elements.namedItem("display_skippers").checked),
+        boats: !!(form.elements.namedItem("display_boats") && form.elements.namedItem("display_boats").checked),
+        metarea: !!(form.elements.namedItem("display_metarea") && form.elements.namedItem("display_metarea").checked),
+        subzones: !!(form.elements.namedItem("display_subzones") && form.elements.namedItem("display_subzones").checked),
+      },
     };
   };
 
@@ -212,6 +221,24 @@
         say("buddy", String(err), false);
       } finally {
         busy(saveBuddyBtn, false);
+      }
+    });
+  }
+
+  const saveDisplayBtn = document.getElementById("save-display");
+  if (saveDisplayBtn) {
+    saveDisplayBtn.addEventListener("click", async () => {
+      busy(saveDisplayBtn, true);
+      say("display", "Sauvegarde de l’affichage…", true);
+      try {
+        const data = await saveSettings();
+        const d = (data && data.display) || payload().display;
+        window.dispatchEvent(new CustomEvent("ggr-display", { detail: d }));
+        say("display", "Affichage globe mémorisé (défauts pour les visiteurs).", true);
+      } catch (err) {
+        say("display", String(err), false);
+      } finally {
+        busy(saveDisplayBtn, false);
       }
     });
   }

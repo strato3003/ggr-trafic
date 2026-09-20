@@ -1,5 +1,34 @@
 # Journal des versions
 
+## 1.1.7 — 2026-09-20
+
+- Mixeur : le chargement audio ne reste plus figé à 0/4 (play muet pour lancer le fetch, puis seek).
+- Calques : bandeau GGR trafic HF on/off ; libellé « SDR choisis selon centre flotte » pour le prochain record schedulé.
+- Setup : défauts d’affichage globe (bandeau, SDR, skippers, bateaux, METAREA, sous-zones).
+
+## 1.1.6 — 2026-09-20
+
+- Boucle A–B : traits or collés aux bornes (plus le centre des poignées) ; le son ne reprend qu’après le seek, sans dépasser A ni B.
+
+## 1.1.5 — 2026-09-20
+
+- Boucle A–B : la lecture reste entre les bornes (plus de départ avant A ni de dépassement après B).
+- Zoom d’une voie : mute retiré ; piste amplitude façon Audacity sous le spectrogramme, avec légende des couleurs USB.
+
+## 1.1.4 — 2026-09-20
+
+- Annuaire KiwiSDR local, rafraîchi toutes les heures : le calque SDR potentiels ne dépend plus d’un fetch à la demande.
+- SDR potentiels plus petits (4 px) avec le même clignotement 0,5 s que les SDR d’un mux.
+- Zoom d’une voie : icônes type YouTube, barre de lecture en bas, boucle avec bornes A–B façon Audacity.
+- Libellés des liaisons collés à la tangente écran du trait (le zoom / POV ne les décale plus).
+- Menus repliés : « Calques » et « Menu général » en vertical derrière la flèche, avec une légère surbrillance.
+
+## 1.1.3 — 2026-09-20
+
+- Mux déplié : SDR du record (pas les Kiwi live), pointillés clignotants 0,5 s, libellés nom + distance.
+- Zoom d’une voie : panneau presque pleine largeur, bornes A–B sur le waterfall, lecture en boucle.
+- Calques carte à gauche (en face du rail) : SDR actifs / potentiels, skippers, bateaux + traces, METAREA, sous-zones.
+
 ## 1.1.2 — 2026-09-20
 
 - Setup : journal visites par IP (pages consultées, replays lancés, horodatage TU), 14 jours.
