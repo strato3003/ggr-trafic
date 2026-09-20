@@ -4,7 +4,7 @@
 <section class="intro">
   <h1>Archives des bulletins météo</h1>
   <p>
-    Chaque jour à <strong>{{ time_utc }} TU</strong>, le radio-club <strong>{{ club_callsign }}</strong>
+    <strong>{{ schedule_days_label | capitalize }}</strong> à <strong>{{ time_utc }} TU</strong>, le radio-club <strong>{{ club_callsign }}</strong>
     émet le bulletin météo à destination des skippers du Golden Globe Race.
     À <strong>{{ buddy_time_utc }} TU</strong>, l’écoute <strong>buddy call</strong> capte
     <strong>{{ '%.0f'|format(buddy_main_khz) }} kHz</strong> et
@@ -44,6 +44,6 @@
   {% endfor %}
 </ul>
 {% else %}
-<p class="empty">Aucun bulletin météo enregistré pour le moment. Le premier passage est planifié à {{ time_utc }} TU (démarrage {{ schedule_lead }} min avant).</p>
+<p class="empty">Aucun bulletin météo enregistré pour le moment. Le prochain passage est le {{ schedule_days_label }} à {{ time_utc }} TU (démarrage {{ schedule_lead }} min avant).</p>
 {% endif %}
 {% endblock %}

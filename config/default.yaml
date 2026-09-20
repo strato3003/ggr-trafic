@@ -6,15 +6,23 @@ club:
   name: "Radio-club F6KUF"
 
 # QTH d’émission du bulletin météo (max 5). Pointillé globe → centroïde des skippers suivis.
+# Recouvrement : F6KUF, Cap Town et Tahiti coexistent quand la flotte s’étale autour du cap.
 tx_sites:
   - label: F6KUF
     lat: 46.5025
     lon: -1.7888
+  - label: Cap Town
+    lat: -33.9249
+    lon: 18.4241
+  - label: Tahiti
+    lat: -17.5350
+    lon: -149.5697
 
-# Trafic quotidien (bulletin 18:00 TU)
+# Trafic bulletin F6KUF : lundi et jeudi 18:00 TU (pas tous les jours).
 schedule:
   # Heure TU du bulletin météo
   time_utc: "18:00"
+  days: [mon, thu]
   # Démarrer 1 min avant 18:00 TU (fenêtre 17:59–18:09 TU si durée 10 min).
   lead_minutes: 1
   # Durée d’enregistrement bulletin + ACK en parallèle (ajustable dans Réglages)
@@ -98,8 +106,9 @@ sdr:
     width: 1280
     height: 800
   # Écoute ACK en parallèle : un Kiwi distinct par site (rayon max autour du point).
-  # Bulletin 14.135 MHz : un Kiwi près de l’émetteur (F6KUF, puis Tahiti après
-  # Bonne-Espérance 34°21′26″S 18°28′24″E) ET un Kiwi près de la flotte.
+  # Bulletin 14.135 MHz : recouvrement France / Cap Town / Tahiti (la flotte n’est
+  # plus un seul centroïde). Un Kiwi près de chaque QTH encore audible ET un Kiwi
+  # près des skippers (centroïde + extrêmes ouest/est si la flotte s’étale).
   # QRG d’enregistrement = 14135.0 kHz (pas de chasse USB sur le trafic programmé).
   sites:
     france:
@@ -108,8 +117,14 @@ sdr:
       lon: -1.7888
       label: France
       radius_km: 1500
+    cape:
+      # Le Cap 33°55′30″S 18°25′27″E — recouvrement SA / début Indien
+      lat: -33.9249
+      lon: 18.4241
+      label: Cap Town
+      radius_km: 2000
     tahiti:
-      # Papeete 17°32′6″S 149°34′11″W (relais quand la flotte est dans l’océan Indien)
+      # Papeete 17°32′6″S 149°34′11″W (relais océan Indien / Pacifique)
       lat: -17.5350
       lon: -149.5697
       label: Tahiti

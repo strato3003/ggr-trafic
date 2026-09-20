@@ -232,6 +232,72 @@ def parse_display(raw: Any, base: dict[str, bool] | None = None) -> dict[str, bo
     return out
 
 
+WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+WEEKDAY_FR = {
+    "mon": "lundi",
+    "tue": "mardi",
+    "wed": "mercredi",
+    "thu": "jeudi",
+    "fri": "vendredi",
+    "sat": "samedi",
+    "sun": "dimanche",
+}
+WEEKDAY_FR_SHORT = {
+    "mon": "lun.",
+    "tue": "mar.",
+    "wed": "mer.",
+    "thu": "jeu.",
+    "fri": "ven.",
+    "sat": "sam.",
+    "sun": "dim.",
+}
+_WEEKDAY_ALIAS = {
+    "lun": "mon",
+    "mar": "tue",
+    "mer": "wed",
+    "jeu": "thu",
+    "ven": "fri",
+    "sam": "sat",
+    "dim": "sun",
+}
+DEFAULT_BULLETIN_DAYS = ("mon", "thu")
+
+
+def parse_weekdays(raw: Any, default: tuple[str, ...] = DEFAULT_BULLETIN_DAYS) -> list[str]:
+    """Jours du bulletin (mon…sun), pour le cron et le prochain passage."""
+    allowed = set(WEEKDAY_KEYS)
+    if isinstance(raw, str):
+        raw = [p.strip() for p in raw.replace(";", ",").split(",")]
+    if not isinstance(raw, (list, tuple)):
+        raw = default
+    out: list[str] = []
+    for item in raw:
+        key = str(item or "").strip().lower()[:3]
+        key = _WEEKDAY_ALIAS.get(key, key)
+        if key in allowed and key not in out:
+            out.append(key)
+    return out or list(default)
+
+
+def schedule_days(cfg: dict[str, Any] | None = None) -> list[str]:
+    cfg = cfg or {}
+    return parse_weekdays((cfg.get("schedule") or {}).get("days"))
+
+
+def schedule_days_label(days: list[str] | None = None, *, short: bool = False) -> str:
+    """lundi et jeudi  /  lun. et jeu."""
+    names = list(days or DEFAULT_BULLETIN_DAYS)
+    table = WEEKDAY_FR_SHORT if short else WEEKDAY_FR
+    fr = [table.get(d, d) for d in names]
+    if not fr:
+        return ""
+    if len(fr) == 1:
+        return fr[0]
+    if len(fr) == 2:
+        return f"{fr[0]} et {fr[1]}"
+    return ", ".join(fr[:-1]) + " et " + fr[-1]
+
+
 def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     """QRG / horaire exposés à l’UI (valeurs courantes, y compris settings.json)."""
     cfg = cfg or load_config()
@@ -246,6 +312,7 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     lead = int(sched.get("lead_minutes") or 1)
     duration = int(sched.get("duration_minutes") or 10)
     time_utc = str(sched.get("time_utc") or "18:00")
+    days = schedule_days(cfg)
     ctx = {
         "tx_khz": tx_khz,
         "ack1_khz": ack1,
@@ -257,6 +324,9 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "schedule_lead": lead,
         "duration_minutes": duration,
         "time_utc": time_utc,
+        "schedule_days": days,
+        "schedule_days_label": schedule_days_label(days),
+        "schedule_days_short": schedule_days_label(days, short=True),
         "tx_label": tx.get("label") or "Bulletin météo F6KUF",
         "ack1_label": (acks[0].get("label") if acks else None) or ack_label(ack1),
         "ack2_label": (acks[1].get("label") if len(acks) > 1 else None) or ack_label(ack2),

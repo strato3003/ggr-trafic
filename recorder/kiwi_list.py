@@ -360,6 +360,21 @@ CAPE_GOOD_HOPE_LON = 18.473333
 CAPE_HORN_LON = -67.266667
 # Trop nord = encore Atlantique (Canaries, etc.), pas le cap.
 _TAHITI_TX_LAT_MAX = -30.0
+# Recouvrement France / Cap Town / Tahiti autour du méridien du cap (± 15°).
+TX_OVERLAP_LON_DEG = 15.0
+# Boîte Cap Town (METAREA VII + marge GGR) : 8°S–52°S, 35°W–58°E.
+_CAPE_LAT_MIN, _CAPE_LAT_MAX = -52.0, -8.0
+_CAPE_LON_MIN, _CAPE_LON_MAX = -35.0, 58.0
+# Skippers assez écartés pour un Kiwi flotte ouest / est en plus du centroïde.
+_FLEET_EXTREME_SPAN_DEG = 8.0
+_FLEET_EXTREME_MIN_KM = 400.0
+_FLEET_ACK_RADIUS_KM = 2500.0
+
+_SDR_SITE_DEFAULTS: dict[str, dict[str, Any]] = {
+    "france": {"label": "F6KUF", "lat": 46.5025, "lon": -1.7888, "radius_km": 1500.0},
+    "cape": {"label": "Cap Town", "lat": -33.9249, "lon": 18.4241, "radius_km": 2000.0},
+    "tahiti": {"label": "Tahiti", "lat": -17.5350, "lon": -149.5697, "radius_km": 2500.0},
+}
 
 
 def fleet_uses_tahiti_tx(lat: float, lon: float) -> bool:
@@ -374,34 +389,102 @@ def fleet_uses_tahiti_tx(lat: float, lon: float) -> bool:
     return False
 
 
-def bulletin_tx_qth(cfg: dict[str, Any], fleet_lat: float, fleet_lon: float) -> dict[str, Any]:
-    """QTH d’émission du bulletin 14.135 MHz : F6KUF, ou Tahiti après le cap."""
-    sites = (cfg.get("sdr") or {}).get("sites") or {}
-    if fleet_uses_tahiti_tx(fleet_lat, fleet_lon):
-        tahiti = sites.get("tahiti") or {}
-        return {
-            "id": "tahiti",
-            "label": tahiti.get("label") or "Tahiti",
-            "lat": float(tahiti.get("lat") if tahiti.get("lat") is not None else -17.5350),
-            "lon": float(tahiti.get("lon") if tahiti.get("lon") is not None else -149.5697),
-            "radius_km": float(tahiti.get("radius_km") or 2500),
-        }
-    france = sites.get("france") or {}
+def _in_cape_lon_overlap(lon: float) -> bool:
+    return abs(float(lon) - CAPE_GOOD_HOPE_LON) <= TX_OVERLAP_LON_DEG
+
+
+def boat_hears_france(lat: float, lon: float) -> bool:
+    """Atlantique, ou encore dans le recouvrement juste à l’est du cap."""
+    if not fleet_uses_tahiti_tx(lat, lon):
+        return True
+    return float(lat) <= _TAHITI_TX_LAT_MAX and _in_cape_lon_overlap(lon)
+
+
+def boat_hears_tahiti(lat: float, lon: float) -> bool:
+    """Indien / Pacifique, ou déjà dans le recouvrement à l’ouest du cap."""
+    if fleet_uses_tahiti_tx(lat, lon):
+        return True
+    return float(lat) <= _TAHITI_TX_LAT_MAX and _in_cape_lon_overlap(lon)
+
+
+def boat_hears_cape(lat: float, lon: float) -> bool:
+    """Bateau dans la zone d’écoute Cap Town (SA / cap / début Indien)."""
+    return _CAPE_LAT_MIN <= float(lat) <= _CAPE_LAT_MAX and _CAPE_LON_MIN <= float(lon) <= _CAPE_LON_MAX
+
+
+def _sdr_site(cfg: dict[str, Any], key: str) -> dict[str, Any]:
+    defaults = _SDR_SITE_DEFAULTS[key]
+    raw = ((cfg.get("sdr") or {}).get("sites") or {}).get(key) or {}
     return {
-        "id": "france",
-        "label": france.get("label") or "F6KUF",
-        "lat": float(france.get("lat") if france.get("lat") is not None else 46.5025),
-        "lon": float(france.get("lon") if france.get("lon") is not None else -1.7888),
-        "radius_km": float(france.get("radius_km") or 1500),
+        "id": key,
+        "label": raw.get("label") or defaults["label"],
+        "lat": float(raw["lat"] if raw.get("lat") is not None else defaults["lat"]),
+        "lon": float(raw["lon"] if raw.get("lon") is not None else defaults["lon"]),
+        "radius_km": float(raw["radius_km"] if raw.get("radius_km") is not None else defaults["radius_km"]),
     }
 
 
-def listen_sites(cfg: dict[str, Any], fleet_lat: float, fleet_lon: float) -> list[dict[str, Any]]:
-    """Sites d’écoute ACK : près de la flotte, France (F6KUF), Tahiti (relais océan Indien)."""
-    raw = ((cfg.get("sdr") or {}).get("sites") or {})
-    france = raw.get("france") or {}
-    tahiti = raw.get("tahiti") or {}
-    return [
+def _boat_points(
+    boats: list[dict[str, Any]] | None,
+    fleet_lat: float,
+    fleet_lon: float,
+) -> list[tuple[float, float]]:
+    pts: list[tuple[float, float]] = []
+    for boat in boats or []:
+        if not isinstance(boat, dict):
+            continue
+        if boat.get("lat") is None or boat.get("lon") is None:
+            continue
+        try:
+            pts.append((float(boat["lat"]), float(boat["lon"])))
+        except (TypeError, ValueError):
+            continue
+    if not pts:
+        pts.append((float(fleet_lat), float(fleet_lon)))
+    return pts
+
+
+def bulletin_tx_qths(
+    cfg: dict[str, Any],
+    fleet_lat: float,
+    fleet_lon: float,
+    boats: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """QTH 14.135 encore utiles : France, Cap Town et Tahiti peuvent coexister."""
+    points = _boat_points(boats, fleet_lat, fleet_lon)
+    want = {
+        "france": any(boat_hears_france(lat, lon) for lat, lon in points),
+        "cape": any(boat_hears_cape(lat, lon) for lat, lon in points),
+        "tahiti": any(boat_hears_tahiti(lat, lon) for lat, lon in points),
+    }
+    if not any(want.values()):
+        want["tahiti"] = fleet_uses_tahiti_tx(fleet_lat, fleet_lon)
+        want["france"] = not want["tahiti"]
+    return [_sdr_site(cfg, key) for key in ("france", "cape", "tahiti") if want[key]]
+
+
+def bulletin_tx_qth(cfg: dict[str, Any], fleet_lat: float, fleet_lon: float) -> dict[str, Any]:
+    """QTH principal (screencast) : F6KUF, ou Tahiti après le cap — d’après le centroïde."""
+    if fleet_uses_tahiti_tx(fleet_lat, fleet_lon):
+        return _sdr_site(cfg, "tahiti")
+    return _sdr_site(cfg, "france")
+
+
+def bulletin_tx_label(qths: list[dict[str, Any]] | None, fallback: str = "F6KUF") -> str:
+    labels = [str(row.get("label") or "").strip() for row in qths or []]
+    labels = [row for row in labels if row]
+    return " · ".join(labels) or fallback
+
+
+def listen_sites(
+    cfg: dict[str, Any],
+    fleet_lat: float,
+    fleet_lon: float,
+    boats: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """ACK : flotte + France + Tahiti, et Cap Town dès qu’un bateau est dans la boîte SA."""
+    points = _boat_points(boats, fleet_lat, fleet_lon)
+    sites = [
         {
             "id": "fleet",
             "label": "flotte",
@@ -409,21 +492,26 @@ def listen_sites(cfg: dict[str, Any], fleet_lat: float, fleet_lon: float) -> lis
             "lon": float(fleet_lon),
             "radius_km": None,
         },
-        {
-            "id": "france",
-            "label": france.get("label") or "France",
-            "lat": float(france.get("lat") if france.get("lat") is not None else 46.5025),
-            "lon": float(france.get("lon") if france.get("lon") is not None else -1.7888),
-            "radius_km": float(france.get("radius_km") or 1500),
-        },
-        {
-            "id": "tahiti",
-            "label": tahiti.get("label") or "Tahiti",
-            "lat": float(tahiti.get("lat") if tahiti.get("lat") is not None else -17.5350),
-            "lon": float(tahiti.get("lon") if tahiti.get("lon") is not None else -149.5697),
-            "radius_km": float(tahiti.get("radius_km") or 2500),
-        },
+        _sdr_site(cfg, "france"),
     ]
+    if any(boat_hears_cape(lat, lon) for lat, lon in points):
+        sites.append(_sdr_site(cfg, "cape"))
+    sites.append(_sdr_site(cfg, "tahiti"))
+    return sites
+
+
+def _fleet_extremes(points: list[tuple[float, float]]) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
+    if len(points) < 2:
+        return None, None
+    west = min(points, key=lambda p: p[1])
+    east = max(points, key=lambda p: p[1])
+    south = min(points, key=lambda p: p[0])
+    north = max(points, key=lambda p: p[0])
+    lon_span = abs(east[1] - west[1])
+    lat_span = abs(north[0] - south[0])
+    if lon_span < _FLEET_EXTREME_SPAN_DEG and lat_span < _FLEET_EXTREME_SPAN_DEG:
+        return None, None
+    return west, east
 
 
 def assign_vacation_kiwis(
@@ -432,85 +520,145 @@ def assign_vacation_kiwis(
     fleet_lat: float,
     fleet_lon: float,
     cfg: dict[str, Any],
+    boats: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Bulletin 14.135 : Kiwi près de l’émetteur (F6KUF ou Tahiti) + Kiwi près de la flotte.
+    """Bulletin 14.135 : Kiwi de chaque QTH encore audible + Kiwi flotte (centroïde / extrêmes).
 
-    ACK : flotte + France + Tahiti, Kiwi distincts.
+    ACK : flotte + France + Tahiti (+ Cap Town en zone SA). Si plus de Kiwi distinct,
+    on réutilise le Kiwi TX du même site.
     """
     sdr = cfg.get("sdr") or {}
     tx_slots = int(sdr.get("min_free_slots") or 2)
     out: dict[str, dict[str, Any]] = {}
     used: set[str] = set()
-
+    points = _boat_points(boats, fleet_lat, fleet_lon)
+    qths = bulletin_tx_qths(cfg, fleet_lat, fleet_lon, boats=boats)
     club = bulletin_tx_qth(cfg, fleet_lat, fleet_lon)
-    tx = pick_nearest(
-        pool,
+
+    def bind(
+        role: str,
+        lat: float,
+        lon: float,
+        label: str,
+        *,
+        radius_km: float | None = None,
+        min_free: int = 1,
+        extra: dict[str, Any] | None = None,
+        reuse: str | None = None,
+        relax_radius: bool = True,
+    ) -> dict[str, Any] | None:
+        kiwi = pick_nearest(pool, lat, lon, exclude=used, min_free=min_free, min_snr=5.0, radius_km=radius_km)
+        if kiwi is None:
+            kiwi = pick_nearest(pool, lat, lon, exclude=used, min_free=1, min_snr=0.0, radius_km=radius_km)
+        if kiwi is None and radius_km is not None and relax_radius:
+            kiwi = pick_nearest(pool, lat, lon, exclude=used, min_free=1, min_snr=0.0)
+        if kiwi is None:
+            if reuse and reuse in out:
+                chosen = dict(out[reuse])
+                chosen["site"] = role
+                chosen["site_label"] = label
+                if extra:
+                    chosen.update(extra)
+                out[role] = chosen
+                return chosen
+            return None
+        chosen = dict(kiwi)
+        chosen["site"] = role
+        chosen["site_label"] = label
+        chosen["site_km"] = round(haversine_km(lat, lon, float(kiwi["lat"]), float(kiwi["lon"])), 1)
+        if extra:
+            chosen.update(extra)
+        out[role] = chosen
+        used.add(kiwi_key(kiwi))
+        return chosen
+
+    tx = bind(
+        "tx",
         float(club["lat"]),
         float(club["lon"]),
-        min_free=tx_slots,
-        min_snr=5.0,
+        f"{club['label']} (bulletin)",
         radius_km=club.get("radius_km"),
+        min_free=tx_slots,
+        extra={"club_id": club["id"]},
     )
-    if tx is None:
-        tx = pick_nearest(pool, float(club["lat"]), float(club["lon"]), min_free=1, min_snr=0.0)
     if tx is None:
         return out
-    chosen_tx = dict(tx)
-    chosen_tx["site"] = "tx"
-    chosen_tx["site_label"] = f"{club['label']} (bulletin)"
-    chosen_tx["club_id"] = club["id"]
-    chosen_tx["site_km"] = round(haversine_km(float(club["lat"]), float(club["lon"]), float(tx["lat"]), float(tx["lon"])), 1)
-    out["tx"] = chosen_tx
-    used.add(kiwi_key(tx))
     log.info(
         "Kiwi TX bulletin émetteur → %s (%s, %.0f km)",
-        chosen_tx.get("name"),
+        tx.get("name"),
         club["label"],
-        chosen_tx["site_km"],
+        tx.get("site_km") or 0,
     )
 
-    fleet_tx = pick_nearest(pool, fleet_lat, fleet_lon, exclude=used, min_free=1, min_snr=5.0)
-    if fleet_tx is None:
-        fleet_tx = pick_nearest(pool, fleet_lat, fleet_lon, exclude=used, min_free=1, min_snr=0.0)
-    if fleet_tx is not None:
-        chosen_fleet = dict(fleet_tx)
-        chosen_fleet["site"] = "tx_fleet"
-        chosen_fleet["site_label"] = "flotte (bulletin)"
-        chosen_fleet["site_km"] = round(
-            haversine_km(fleet_lat, fleet_lon, float(fleet_tx["lat"]), float(fleet_tx["lon"])),
-            1,
+    for qth in qths:
+        if qth["id"] == club["id"]:
+            continue
+        extra_tx = bind(
+            f"tx_{qth['id']}",
+            float(qth["lat"]),
+            float(qth["lon"]),
+            f"{qth['label']} (bulletin)",
+            radius_km=qth.get("radius_km"),
+            extra={"club_id": qth["id"]},
+            relax_radius=False,
         )
-        out["tx_fleet"] = chosen_fleet
-        used.add(kiwi_key(fleet_tx))
+        if extra_tx is not None:
+            log.info(
+                "Kiwi TX bulletin recouvrement → %s (%s, %.0f km)",
+                extra_tx.get("name"),
+                qth["label"],
+                extra_tx.get("site_km") or 0,
+            )
+
+    fleet_tx = bind("tx_fleet", fleet_lat, fleet_lon, "flotte (bulletin)")
+    if fleet_tx is not None:
         log.info(
             "Kiwi TX bulletin flotte → %s (%.0f km de la flotte)",
-            chosen_fleet.get("name"),
-            chosen_fleet["site_km"],
+            fleet_tx.get("name"),
+            fleet_tx.get("site_km") or 0,
         )
 
-    for site in listen_sites(cfg, fleet_lat, fleet_lon):
-        kiwi = pick_nearest(
-            pool,
+    west, east = _fleet_extremes(points)
+    for role, point, label in (
+        ("tx_fleet_west", west, "flotte ouest (bulletin)"),
+        ("tx_fleet_east", east, "flotte est (bulletin)"),
+    ):
+        if point is None:
+            continue
+        if haversine_km(fleet_lat, fleet_lon, point[0], point[1]) < _FLEET_EXTREME_MIN_KM:
+            continue
+        extreme = bind(role, point[0], point[1], label)
+        if extreme is not None:
+            log.info(
+                "Kiwi TX bulletin %s → %s (%.0f km)",
+                label,
+                extreme.get("name"),
+                extreme.get("site_km") or 0,
+            )
+
+    for site in listen_sites(cfg, fleet_lat, fleet_lon, boats=boats):
+        sid = str(site["id"])
+        reuse = None
+        if sid == club["id"]:
+            reuse = "tx"
+        elif sid == "fleet":
+            reuse = "tx_fleet"
+        else:
+            reuse = f"tx_{sid}"
+        radius = _FLEET_ACK_RADIUS_KM if sid == "fleet" else site.get("radius_km")
+        kiwi = bind(
+            sid,
             float(site["lat"]),
             float(site["lon"]),
-            exclude=used,
-            min_free=1,
-            min_snr=5.0,
-            radius_km=site.get("radius_km"),
+            str(site.get("label") or sid),
+            radius_km=radius,
+            reuse=reuse,
+            relax_radius=False,
         )
         if kiwi is None:
             log.info("Aucun Kiwi distinct pour l’ACK %s", site["label"])
             continue
-        chosen = dict(kiwi)
-        chosen["site"] = site["id"]
-        chosen["site_label"] = site["label"]
-        chosen["site_km"] = round(
-            haversine_km(float(site["lat"]), float(site["lon"]), float(kiwi["lat"]), float(kiwi["lon"])),
-            1,
-        )
-        out[str(site["id"])] = chosen
-        used.add(kiwi_key(kiwi))
-        log.info("Kiwi ACK %s → %s (%.0f km du site)", site["label"], chosen.get("name"), chosen["site_km"])
+        log.info("Kiwi ACK %s → %s (%.0f km du site)", site["label"], kiwi.get("name"), kiwi.get("site_km") or 0)
     _pad_spread_kiwis(out, pool, used, want=4, lat=fleet_lat, lon=fleet_lon)
     return out
 

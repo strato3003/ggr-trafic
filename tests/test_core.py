@@ -61,11 +61,40 @@ def test_vacation_id_utc():
 
 
 def test_next_vacation_before_slot():
-    cfg = {"schedule": {"time_utc": "18:00", "lead_minutes": 10}}
+    cfg = {"schedule": {"time_utc": "18:00", "lead_minutes": 10, "days": ["mon", "thu"]}}
     now = datetime(2026, 9, 7, 10, 0, tzinfo=timezone.utc)
     nxt = next_vacation_utc(cfg, now)
     assert nxt.hour == 17 and nxt.minute == 50
     assert nxt.date() == now.date()
+
+
+def test_next_vacation_skips_to_thursday_then_monday():
+    cfg = {"schedule": {"time_utc": "18:00", "lead_minutes": 1, "days": ["mon", "thu"]}}
+    tuesday = datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc)
+    nxt = next_vacation_utc(cfg, tuesday)
+    assert nxt.date() == datetime(2026, 9, 10).date()
+    assert nxt.hour == 17 and nxt.minute == 59
+    after_thu = datetime(2026, 9, 10, 18, 5, tzinfo=timezone.utc)
+    nxt = next_vacation_utc(cfg, after_thu)
+    assert nxt.date() == datetime(2026, 9, 14).date()
+    assert nxt.hour == 17 and nxt.minute == 59
+
+
+def test_schedule_days_default_mon_thu():
+    from recorder.config import parse_weekdays, qrg_context, schedule_days
+
+    assert schedule_days({}) == ["mon", "thu"]
+    assert parse_weekdays("lundi, jeudi") == ["mon", "thu"]
+    qrg = qrg_context({"schedule": {"time_utc": "18:00", "days": ["mon", "thu"]}})
+    assert qrg["schedule_days_label"] == "lundi et jeudi"
+    assert qrg["schedule_days_short"] == "lun. et jeu."
+
+
+def test_scheduler_cron_is_1759_with_one_minute_lead():
+    from recorder.scheduler import _lead, _vacation_dow
+
+    assert _lead({"schedule": {"time_utc": "18:00", "lead_minutes": 1}}) == (17, 59)
+    assert _vacation_dow({"schedule": {"days": ["mon", "thu"]}}) == "mon,thu"
 
 
 def test_next_recording_picks_buddy_in_the_morning():
@@ -83,12 +112,6 @@ def test_next_recording_picks_buddy_in_the_morning():
     off["buddy"] = {**cfg["buddy"], "enabled": False}
     nxt = next_recording_utc(off, morning)
     assert nxt.hour == 17 and nxt.minute == 59
-
-
-def test_scheduler_cron_is_1759_with_one_minute_lead():
-    from recorder.scheduler import _lead
-
-    assert _lead({"schedule": {"time_utc": "18:00", "lead_minutes": 1}}) == (17, 59)
 
 
 def test_sog_and_gps_at_from_fixes():
@@ -781,11 +804,15 @@ def test_assign_vacation_kiwis_geo_sites():
         }
     }
     roles = assign_vacation_kiwis(pool, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg)
-    # Atlantique (ouest du cap) : émetteur F6KUF + flotte, pas Tahiti.
+    # Atlantique sud, recouvrement autour du cap : F6KUF + Cap Town + Tahiti.
     assert roles["tx"]["id"] == "fr"
+    assert roles["tx"].get("club_id") == "france"
+    assert roles["tx_cape"]["id"] == "near-b"
+    assert roles["tx_tahiti"]["id"] == "th"
     assert roles["tx_fleet"]["id"] == "near-a"
-    assert roles["fleet"]["id"] == "near-b"
+    assert roles["fleet"]["id"] == "near-a"
     assert roles["tahiti"]["id"] == "th"
+    assert roles["cape"]["id"] == "near-b"
     assert "loud-far" not in {r["id"] for r in roles.values()}
     assert "nz" not in {r["id"] for r in roles.values()}
 
@@ -797,6 +824,8 @@ def test_assign_vacation_kiwis_geo_sites():
     indian = assign_vacation_kiwis(pool, fleet_lat=-35.0, fleet_lon=25.0, cfg=cfg)
     assert indian["tx"]["id"] == "th"
     assert indian["tx"].get("club_id") == "tahiti"
+    assert indian["tx_france"]["id"] == "fr"
+    assert indian["tx_cape"]["id"] == "near-b"
 
 
 def test_ack_channels_per_site():
@@ -840,6 +869,11 @@ def test_ack_channels_per_site():
     assert got["tx-fleet"]["name"] == "k-fleet-tx"
     assert got["ack1-france"]["name"] == "k-fr"
     assert got["ack2-tahiti"]["name"] == "k-th"
+
+    overlap = _channels(cfg, sites, extra_tx=[{"id": "cape", "label": "Cap Town"}])
+    assert [c["id"] for c in overlap[:3]] == ["tx", "tx-fleet", "tx-cape"]
+    assert overlap[2]["site"] == "tx_cape"
+    assert overlap[2]["screencast"] is False
 
 
 def test_runtime_settings_override_qrg(tmp_path, monkeypatch):
@@ -1189,7 +1223,7 @@ def test_osm_water_is_carto_cyan_not_ice_or_forest():
 
 
 def test_fleet_uses_tahiti_tx_after_cape_of_good_hope():
-    from recorder.kiwi_list import bulletin_tx_qth, fleet_uses_tahiti_tx
+    from recorder.kiwi_list import bulletin_tx_qth, bulletin_tx_qths, fleet_uses_tahiti_tx
 
     assert not fleet_uses_tahiti_tx(28.0, -15.0)  # Canaries
     assert not fleet_uses_tahiti_tx(-35.0, 10.0)  # Atlantique sud, ouest du cap
@@ -1200,6 +1234,62 @@ def test_fleet_uses_tahiti_tx_after_cape_of_good_hope():
     assert bulletin_tx_qth(cfg, 28.0, -15.0)["id"] == "france"
     assert bulletin_tx_qth(cfg, -35.0, 25.0)["id"] == "tahiti"
     assert bulletin_tx_qth(cfg, -35.0, 25.0)["label"] == "Tahiti"
+
+
+def test_bulletin_tx_qths_overlap_france_cape_tahiti():
+    from recorder.kiwi_list import assign_vacation_kiwis, bulletin_tx_label, bulletin_tx_qth, bulletin_tx_qths
+
+    cfg = {"sdr": {"sites": {}}}
+
+    def ids(lat, lon, boats=None):
+        return [q["id"] for q in bulletin_tx_qths(cfg, lat, lon, boats=boats)]
+
+    assert ids(28.0, -15.0) == ["france"]
+    assert ids(-35.0, 10.0) == ["france", "cape", "tahiti"]
+    assert ids(-35.0, 25.0) == ["france", "cape", "tahiti"]
+    assert ids(-40.0, 70.0) == ["tahiti"]
+    assert ids(-45.0, -120.0) == ["tahiti"]
+    assert ids(-50.0, -40.0) == ["france"]
+
+    split = [
+        {"lat": 28.0, "lon": -15.0, "name": "Atlantique"},
+        {"lat": -35.0, "lon": 25.0, "name": "Indien"},
+    ]
+    assert ids(-5.0, 5.0, boats=split) == ["france", "cape", "tahiti"]
+    assert bulletin_tx_qth(cfg, -5.0, 5.0)["id"] == "france"
+    assert "Cap Town" in bulletin_tx_label(bulletin_tx_qths(cfg, -35.0, 25.0, boats=split))
+
+    def kiwi(kid, name, lat, lon, snr=20.0, free=3):
+        return {
+            "id": kid,
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "snr_hf": snr,
+            "free_slots": free,
+            "url": f"http://{kid}.invalid",
+        }
+
+    pool = [
+        kiwi("fr", "les-sables", 46.5025, -1.7888),
+        kiwi("cape", "cape-town", -33.92, 18.42),
+        kiwi("th", "papeete", -17.5350, -149.5697),
+        kiwi("west", "walvis", -29.5, 14.5),
+        kiwi("east", "reunion", -21.1, 55.5),
+        kiwi("canaries", "tenerife", 28.3, -16.6),
+    ]
+    roles = assign_vacation_kiwis(
+        pool,
+        fleet_lat=-32.0,
+        fleet_lon=20.0,
+        cfg=cfg,
+        boats=split + [{"lat": -40.0, "lon": 35.0, "name": "Est"}],
+    )
+    assert roles["tx"]["id"] == "th"
+    assert roles["tx_france"]["id"] == "fr"
+    assert roles["tx_cape"]["id"] == "cape"
+    assert "tx_fleet_west" in roles
+    assert "tx_fleet_east" in roles
 
 
 def test_metrics_payload_exposes_ggr_gauges(tmp_path, monkeypatch):

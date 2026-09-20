@@ -3,11 +3,12 @@
   <p>
     <strong>{{ app_name }}</strong> archive les bulletins météo HF entre le radio-club
     <strong>{{ club_callsign }}</strong> et les bateaux de la flotte Golden Globe Race.
-    Le club émet un bulletin météo tous les jours à <strong>{{ time_utc }} TU</strong> sur
+    Le club émet un bulletin météo <strong>{{ schedule_days_label }}</strong> à <strong>{{ time_utc }} TU</strong> sur
     <strong>{{ tx_mhz }} MHz USB</strong> (QRG nominale <strong>14.135 MHz</strong>) depuis
-    <strong>{{ bulletin_tx_label | default('F6KUF') }}</strong>
-    {% if bulletin_tx_from_tahiti %}(Michel, relais Tahiti après Bonne-Espérance){% endif %}.
-    Deux KiwiSDR enregistrent cette QRG : l’un près de l’émetteur, l’autre près de la flotte.
+    <strong>{{ bulletin_tx_label | default('F6KUF') }}</strong>{% if bulletin_tx_overlap %}
+    — recouvrement France / Cap Town / Tahiti (Michel) tant que la flotte s’étale autour du cap{% elif bulletin_tx_from_tahiti %}
+    (Michel, relais Tahiti après Bonne-Espérance){% endif %}.
+    Des KiwiSDR enregistrent cette QRG près de chaque émetteur encore audible, et près des skippers (centroïde, plus les extrêmes si la flotte s’élargit).
     Les accusés de réception sont écoutés sur
     <strong>{{ ack1_mhz }} MHz USB</strong> et
     <strong>{{ ack2_mhz }} MHz USB</strong> (QRG ± {{ qrg_tolerance_khz }} kHz).
@@ -23,7 +24,7 @@
   <ul>
     <li>Centroïde des skippers suivis via le tracker Yellowbrick GGR 2026.</li>
     <li>Carte 2D ou globe 3D (commutateur) : flotte, Kiwi, QTH d’émission. Calque <strong>METAREA</strong> (limites OMM / OHI) et calque <strong>sous-zones</strong> (découpages haute mer des METAREA occupées par la flotte). L’onglet METAREA suit tout seul le bulletin WWMIWS de la zone où sont les bateaux — avis haute mer, et bulletin côtier (Las Palmas, Tarifa, Corsen…) seulement si la flotte est dans la zone de service. Le texte proposé à l’antenne est un <strong>condensé automatique</strong> : l’OM doit le vérifier sur le bulletin officiel. Le panneau droit se replie comme un KiwiSDR.</li>
-    <li>Bulletin 14.135 MHz : Kiwi près de F6KUF (ou Tahiti après le cap de Bonne-Espérance) et Kiwi près des skippers cochés, VFO calé sur 14.135000 MHz.</li>
+    <li>Bulletin 14.135 MHz (lundi et jeudi 18:00 TU) : Kiwi près de chaque QTH d’émission encore audible (F6KUF, Cap Town, Tahiti) et Kiwi près des skippers cochés (centroïde + extrêmes ouest/est si la flotte s’étale), VFO calé sur 14.135000 MHz.</li>
     <li>Screencast de l’interface SDR (waterfall / VFO) muxé avec l’audio USB 12 kHz.</li>
     <li>Replay multipistes : volume, mute et timeline TU.</li>
   </ul>
