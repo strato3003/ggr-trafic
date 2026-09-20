@@ -114,11 +114,12 @@
   document.body.classList.remove("is-map-2d");
 
   function parseHash() {
-    const h = (location.hash || "#trafic").replace(/^#/, "");
+    const h = (location.hash || "").replace(/^#/, "");
     if (h === "setup") return "setup";
     if (h === "metarea") return "metarea";
+    if (h === "trafic") return "trafic";
     if (h === "apropos" || h === "a-propos") return "apropos";
-    return "trafic";
+    return "apropos";
   }
 
   function parkMix() {
@@ -141,7 +142,7 @@
   }
 
   function showTab(name) {
-    const tab = name || "trafic";
+    const tab = name || "apropos";
     document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((b) => {
       const on = b.getAttribute("data-tab") === tab;
       b.classList.toggle("is-on", on);
@@ -179,21 +180,14 @@
     }
   }
 
-  let introAboutArmed = true;
   const traficQBoot = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
-  if (traficQBoot) introAboutArmed = false;
   const bootTab = parseHash();
-  if (introAboutArmed && bootTab !== "setup") {
-    if (bootTab === "apropos") history.replaceState(null, "", "#trafic");
-    setPanelOpen(false);
-  } else {
-    introAboutArmed = false;
-    setPanelOpen(true);
-  }
+  const bootPanel =
+    !!traficQBoot || bootTab === "setup" || bootTab === "metarea";
+  setPanelOpen(bootPanel);
 
   document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      introAboutArmed = false;
       showTab(btn.getAttribute("data-tab"));
       setPanelOpen(true);
     });
@@ -1130,7 +1124,6 @@
   }
 
   async function playTrafic(v) {
-    introAboutArmed = false;
     setPanelOpen(true);
     showTab("trafic");
     if (openVid === v.id) {
@@ -1643,13 +1636,6 @@
       if (muxOpen) return;
       if (g && dest) g.pointOfView(dest, BANNER_INTRO_MS);
     }, BANNER_HOLD_MS);
-    const wantAbout = parseHash() === "trafic";
-    if (!wantAbout) return;
-    window.setTimeout(() => {
-      if (!introAboutArmed) return;
-      showTab("apropos");
-      setPanelOpen(true);
-    }, BANNER_HOLD_MS + BANNER_INTRO_MS);
   }
 
   function hexToRgba(hex, a) {
@@ -2172,10 +2158,6 @@
     }
     } catch (err) {
       showSel("<p class=\"err\">Globe 3D : " + esc(err && err.message ? err.message : err) + "</p>");
-      if (introAboutArmed && parseHash() === "trafic") {
-        showTab("apropos");
-        setPanelOpen(true);
-      }
     }
   }
 

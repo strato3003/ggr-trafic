@@ -25,14 +25,12 @@ data:
         jsonData:
           maxLines: 1000
           derivedFields:
-            - datasourceUid: loki
-              matcherRegex: '"ip":"([^"]+)"'
+            - matcherRegex: '"ip":"([^"]+)"'
               name: IP
-              url: "/d/ggr-visites?var-ip=${__value.raw}"
-            - datasourceUid: loki
-              matcherRegex: '"target":"([^"]+)"'
+              url: "/d/ggr-visites?orgId=1&${__url_time_range}&var-ip=${__value.raw}&var-url="
+            - matcherRegex: '"target":"([^"]+)"'
               name: URL
-              url: "/d/ggr-visites?var-url=${__value.raw}"
+              url: "/d/ggr-visites?orgId=1&${__url_time_range}&var-url=${__value.raw}&var-ip="
 ---
 apiVersion: v1
 kind: ConfigMap

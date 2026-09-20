@@ -37,7 +37,7 @@
     <p class="globe-osm-copy">© <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a>
       · METAREA <a href="https://iho.int" rel="noreferrer">OHI</a> / OMM</p>
   </div>
-  <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="true" aria-controls="globe-dock" aria-label="Replier le panneau" title="Replier">
+  <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="false" aria-controls="globe-dock" aria-label="Ouvrir le menu général" title="Menu général">
     <span class="kiwi-toggle__arr" aria-hidden="true"></span>
     <span class="kiwi-toggle__lab" aria-hidden="true">Menu général</span>
   </button>
@@ -62,15 +62,15 @@
     </header>
 
     <div class="kiwi-tabs" role="tablist">
-      <button type="button" class="is-on" data-tab="trafic" role="tab" aria-selected="true">Trafic</button>
+      <button type="button" data-tab="trafic" role="tab" aria-selected="false">Trafic</button>
       <button type="button" data-tab="metarea" role="tab" aria-selected="false">METAREA</button>
       <button type="button" data-tab="setup" role="tab" aria-selected="false">Setup</button>
-      <button type="button" data-tab="apropos" role="tab" aria-selected="false">À propos</button>
+      <button type="button" class="is-on" data-tab="apropos" role="tab" aria-selected="true">À propos</button>
     </div>
 
     <div class="kiwi-ident-sel" id="globe-sel" hidden></div>
 
-    <div class="kiwi-page" data-page="trafic" id="page-trafic">
+    <div class="kiwi-page" data-page="trafic" id="page-trafic" hidden>
       <ul class="globe-vacs" id="globe-vacs"></ul>
       <div id="mix-park" hidden>
         <section class="mix mix--rows" id="mix" hidden data-ggr-mix="host">
@@ -160,7 +160,7 @@
       </article>
     </div>
 
-    <div class="kiwi-page" data-page="apropos" id="page-apropos" hidden>
+    <div class="kiwi-page" data-page="apropos" id="page-apropos">
       {% include "_about.html" %}
     </div>
   </aside>
@@ -188,5 +188,5 @@
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
 <script src="/static/js/mixer.js?v={{ version }}-kiwi66"></script>
 <script src="/static/js/reglages.js?v={{ version }}-kiwi55"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi63"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi64"></script>
 {% endblock %}
