@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 OSM_MAX_Z = 8
 OSM_TILE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-OSM_UA = "GGR-Trafic/1.1.6 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
+OSM_UA = "GGR-Trafic/1.1.7 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
 # Océan uni (#0a3558), identique à la sphère sous les tuiles.
 OCEAN_RGBA = (10, 53, 88, 255)
 # OSM Carto @water-color #aad3df — https://github.com/gravitystorm/openstreetmap-carto

@@ -22,7 +22,11 @@
     </button>
     <aside class="map-opt" id="map-opt" hidden>
       <p class="map-opt__title">Calques</p>
-      <label class="map-opt__row"><input type="checkbox" data-layer="sdrActive" checked> SDR actifs</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="banner" checked> Bandeau GGR trafic HF</label>
+      <label class="map-opt__row" title="Kiwi retenus pour le prochain buddy 12:00 TU et le bulletin 18:00 TU, d’après le centroïde des skippers suivis">
+        <input type="checkbox" data-layer="sdrActive" checked>
+        SDR choisis selon centre flotte
+      </label>
       <label class="map-opt__row"><input type="checkbox" data-layer="sdrPotential"> SDR potentiels</label>
       <label class="map-opt__row"><input type="checkbox" data-layer="skippers" checked> Skippers</label>
       <label class="map-opt__row"><input type="checkbox" data-layer="boats" checked> Bateaux + traces</label>
@@ -171,6 +175,7 @@
   "trafics": globe_trafics or [],
   "tx_sites": tx_sites or [],
   "skippers": buddy_skippers,
+  "display": display or {},
   "qrg": {
     "buddy_main_khz": buddy_main_khz,
     "buddy_alt_khz": buddy_alt_khz,
@@ -181,7 +186,7 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi65"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi54"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi62"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi66"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi55"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi63"></script>
 {% endblock %}

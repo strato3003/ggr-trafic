@@ -40,20 +40,22 @@
   let placingTx = false;
   let mapMode = "3d";
   let metareaFc = null;
-  let metareaOn = true;
-  try {
-    metareaOn = localStorage.getItem("ggr-metarea") !== "off";
-  } catch {
-    metareaOn = true;
+  const display = data.display || {};
+  function prefOn(lsKey, cfgKey, fallback) {
+    try {
+      const v = localStorage.getItem(lsKey);
+      if (v === "on") return true;
+      if (v === "off") return false;
+    } catch {
+      /* ignore */
+    }
+    if (typeof display[cfgKey] === "boolean") return display[cfgKey];
+    return fallback;
   }
+  let metareaOn = prefOn("ggr-metarea", "metarea", true);
   const metareaBtn = document.getElementById("ggr-metarea");
   let subzoneFc = null;
-  let subzonesOn = true;
-  try {
-    subzonesOn = localStorage.getItem("ggr-subzones") !== "off";
-  } catch {
-    subzonesOn = true;
-  }
+  let subzonesOn = prefOn("ggr-subzones", "subzones", true);
   const subzoneBtn = document.getElementById("ggr-subzones");
   let metareaSnap = null;
 
@@ -77,20 +79,12 @@
   let muxPulseFat = false;
   let muxPulseTimer = 0;
   const layers = {
-    sdrActive: true,
-    sdrPotential: false,
-    skippers: true,
-    boats: true,
+    banner: prefOn("ggr-layer-banner", "banner", true),
+    sdrActive: prefOn("ggr-layer-sdrActive", "sdr_fleet", true),
+    sdrPotential: prefOn("ggr-layer-sdrPotential", "sdr_potential", false),
+    skippers: prefOn("ggr-layer-skippers", "skippers", true),
+    boats: prefOn("ggr-layer-boats", "boats", true),
   };
-  try {
-    ["sdrActive", "sdrPotential", "skippers", "boats"].forEach((k) => {
-      const v = localStorage.getItem("ggr-layer-" + k);
-      if (v === "on") layers[k] = true;
-      if (v === "off") layers[k] = false;
-    });
-  } catch {
-    /* ignore */
-  }
 
   function setPanelOpen(on) {
     document.body.classList.toggle("kiwi-panel-off", !on);
@@ -1321,11 +1315,12 @@
   let bannerWatchOn = false;
 
   function applyBannerVisibility() {
-    if (bannerBelt && bannerBelt.mesh) bannerBelt.mesh.visible = !metareaOn;
+    const show = !!layers.banner && !metareaOn;
+    if (bannerBelt && bannerBelt.mesh) bannerBelt.mesh.visible = show;
   }
 
   function htmlBannerPoints() {
-    if (!bannerHtml.on || metareaOn) return [];
+    if (!layers.banner || !bannerHtml.on || metareaOn) return [];
     const n = 8;
     const rows = [];
     for (let i = 0; i < n; i++) {
@@ -2145,7 +2140,7 @@
     bindKmAlign();
     el.addEventListener("wheel", scheduleKmAlign, { passive: true });
     tuneOsmTiles(globe);
-    if (intro) {
+    if (intro && layers.banner) {
       const bootBanner = () => startGgrEquatorBanner(globe);
       if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);
       const afterFont = () => bootBanner();
@@ -2460,8 +2455,43 @@
       /* ignore */
     }
     if (key === "sdrPotential" && on && !kiwisAll.length) loadKiwisAll();
+    if (key === "banner") {
+      if (on && globe && mapMode === "3d") startGgrEquatorBanner(globe);
+      applyBannerVisibility();
+    }
     refreshGlobe();
   }
+
+  function applyDisplay(d) {
+    if (!d || typeof d !== "object") return;
+    layers.banner = !!d.banner;
+    layers.sdrActive = !!d.sdr_fleet;
+    layers.sdrPotential = !!d.sdr_potential;
+    layers.skippers = !!d.skippers;
+    layers.boats = !!d.boats;
+    try {
+      localStorage.setItem("ggr-layer-banner", layers.banner ? "on" : "off");
+      localStorage.setItem("ggr-layer-sdrActive", layers.sdrActive ? "on" : "off");
+      localStorage.setItem("ggr-layer-sdrPotential", layers.sdrPotential ? "on" : "off");
+      localStorage.setItem("ggr-layer-skippers", layers.skippers ? "on" : "off");
+      localStorage.setItem("ggr-layer-boats", layers.boats ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
+    setMetarea(!!d.metarea);
+    setSubzones(!!d.subzones);
+    if (layers.banner && globe && mapMode === "3d") startGgrEquatorBanner(globe);
+    applyBannerVisibility();
+    document.querySelectorAll("#map-opt [data-layer]").forEach((inp) => {
+      const key = inp.getAttribute("data-layer");
+      if (key === "metarea") inp.checked = metareaOn;
+      else if (key === "subzones") inp.checked = subzonesOn;
+      else if (Object.prototype.hasOwnProperty.call(layers, key)) inp.checked = !!layers[key];
+    });
+    if (layers.sdrPotential && !kiwisAll.length) loadKiwisAll();
+    refreshGlobe();
+  }
+  window.addEventListener("ggr-display", (ev) => applyDisplay(ev.detail));
 
   document.querySelectorAll("#map-opt [data-layer]").forEach((inp) => {
     const key = inp.getAttribute("data-layer");

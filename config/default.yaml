@@ -1,5 +1,5 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "1.1.6"
+version: "1.1.7"
 
 club:
   callsign: F6KUF
@@ -126,6 +126,15 @@ web:
   port: 8080
   # Jeton pour déclencher un enregistrement manuel (POST /api/trafic/record)
   admin_token: ""
+  # Calques globe à l’arrivée (un visiteur peut encore les changer localement).
+  display:
+    banner: true
+    sdr_fleet: true
+    sdr_potential: false
+    skippers: true
+    boats: true
+    metarea: true
+    subzones: true
 
 # Hôte Ingress Traefik + Let's Encrypt
 ingress:

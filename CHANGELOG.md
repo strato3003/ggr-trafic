@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.1.7 — 2026-09-20
+
+- Mixeur : le chargement audio ne reste plus figé à 0/4 (play muet pour lancer le fetch, puis seek).
+- Calques : bandeau GGR trafic HF on/off ; libellé « SDR choisis selon centre flotte » pour le prochain record schedulé.
+- Setup : défauts d’affichage globe (bandeau, SDR, skippers, bateaux, METAREA, sous-zones).
+
 ## 1.1.6 — 2026-09-20
 
 - Boucle A–B : traits or collés aux bornes (plus le centre des poignées) ; le son ne reprend qu’après le seek, sans dépasser A ni B.

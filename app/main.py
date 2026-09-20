@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app import globe_tiles, metarea, store
-from recorder.config import ack_label, fmt_khz, fmt_mhz, load_config, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
+from recorder.config import ack_label, display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_qth, fetch_ranked_kiwis, fleet_uses_tahiti_tx, kiwi_directory, map_kiwis, read_directory_cache
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
@@ -593,6 +593,11 @@ async def api_settings_put(
     if "tx_sites" in body:
         try:
             patch["tx_sites"] = parse_tx_sites(body.get("tx_sites"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    if "display" in body:
+        try:
+            patch["web"] = {"display": parse_display(body.get("display"), display_defaults(cfg))}
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
     new_cfg = save_runtime_settings(patch, cfg)

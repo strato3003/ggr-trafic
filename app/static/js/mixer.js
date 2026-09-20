@@ -464,7 +464,7 @@ window.GgrMixer = (function () {
 
   function updateAudioLoad() {
     if (!audioLoadEl) return;
-    const live = tracks.filter((t) => t.el && !t.dead);
+    const live = tracks.filter((t) => t.el && !t.dead && liveForPlay(t));
     if (!live.length) {
       audioLoadEl.hidden = true;
       audioLoadEl.textContent = "";
@@ -523,18 +523,28 @@ window.GgrMixer = (function () {
         if (done) return;
         done = true;
         el.removeEventListener("seeked", onSeeked);
+        el.removeEventListener("loadedmetadata", onMeta);
         resolve();
       };
       const onSeeked = () => {
         if (Math.abs((Number.isFinite(el.currentTime) ? el.currentTime : 0) - off) < 0.45) finish();
       };
-      if (Math.abs((Number.isFinite(el.currentTime) ? el.currentTime : 0) - off) < 0.45) {
-        finish();
+      const doSeek = () => {
+        if (Math.abs((Number.isFinite(el.currentTime) ? el.currentTime : 0) - off) < 0.45) {
+          finish();
+          return;
+        }
+        el.addEventListener("seeked", onSeeked);
+        seekElTo(tr, off);
+        window.setTimeout(finish, 800);
+      };
+      const onMeta = () => doSeek();
+      if (el.readyState >= 1 && Number.isFinite(el.duration)) {
+        doSeek();
         return;
       }
-      el.addEventListener("seeked", onSeeked);
-      seekElTo(tr, off);
-      window.setTimeout(finish, 700);
+      el.addEventListener("loadedmetadata", onMeta);
+      window.setTimeout(finish, 4000);
     });
   }
 
@@ -555,30 +565,37 @@ window.GgrMixer = (function () {
     playing = true;
     seekGate = true;
     noteReplayPlay();
-    tracks.forEach((tr) => {
-      if (!tr.el) return;
+    const all = tracks.filter((tr) => tr.el && !tr.dead);
+    all.forEach((tr) => {
       if (tr.el.preload !== "auto") tr.el.preload = "auto";
-      try {
-        tr.el.pause();
-      } catch {
-        /* ignore */
-      }
-      applyGain(tr);
-      if (!liveForPlay(tr)) return;
-      seekElTo(tr, off);
+      tr.el.muted = true;
+      tr.el.play().catch(() => {
+        try {
+          tr.el.load();
+        } catch {
+          /* ignore */
+        }
+      });
     });
     updateAudioLoad();
     setPlayUi(true);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
     updateHead();
-    const ready = tracks.filter(liveForPlay);
     const goPlay = () => {
       if (gen !== playGen || !playing) return;
       seekGate = false;
       t0 = off;
-      ready.forEach((tr) => {
+      all.forEach((tr) => {
         applyGain(tr);
+        if (focusId && tr.id !== focusId) {
+          try {
+            tr.el.pause();
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
         tr.el.play().catch(() => {
           tr.el.addEventListener("canplay", () => {
             if (gen !== playGen || !playing) return;
@@ -592,13 +609,13 @@ window.GgrMixer = (function () {
         if (playing) raf = requestAnimationFrame(loop);
       });
     };
-    Promise.all(ready.map((tr) => waitSeek(tr, off))).then(() => {
+    Promise.all(all.map((tr) => waitSeek(tr, off))).then(() => {
       if (gen !== playGen || !playing) return;
       const clock = clockTrack();
       const cur = clock && clock.el && Number.isFinite(clock.el.currentTime) ? clock.el.currentTime : off;
       const lp = loopOn ? loopBounds() : null;
-      if (lp && (cur < lp.a - 1 || cur >= lp.b - 0.02)) {
-        ready.forEach((tr) => seekElTo(tr, off));
+      if (lp && clock && clock.el && clock.el.readyState >= 1 && (cur < lp.a - 1 || cur >= lp.b - 0.02)) {
+        all.forEach((tr) => seekElTo(tr, off));
         window.setTimeout(goPlay, 80);
         return;
       }
@@ -644,6 +661,11 @@ window.GgrMixer = (function () {
   function tick() {
     if (!playing) return;
     if (seekGate) {
+      updateHead();
+      return;
+    }
+    const clock = clockTrack();
+    if (clock && clock.el && clock.el.readyState < 2) {
       updateHead();
       return;
     }
@@ -1090,6 +1112,7 @@ window.GgrMixer = (function () {
     });
     tr.el.addEventListener("timeupdate", () => {
       if (!playing || seekGate || !loopOn || !liveForPlay(tr)) return;
+      if (tr.el.readyState < 2) return;
       const lp = loopBounds();
       if (!lp) return;
       const cur = tr.el.currentTime;

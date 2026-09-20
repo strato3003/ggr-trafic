@@ -862,6 +862,33 @@ def test_runtime_settings_override_qrg(tmp_path, monkeypatch):
     assert (tmp_path / "settings.json").is_file()
 
 
+def test_display_defaults_and_runtime_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from recorder.config import display_defaults, load_config, parse_display, qrg_context, save_runtime_settings
+
+    d0 = display_defaults(load_config())
+    assert d0["banner"] is True
+    assert d0["sdr_fleet"] is True
+    assert d0["sdr_potential"] is False
+    assert d0["metarea"] is True
+    save_runtime_settings({"web": {"display": parse_display({"banner": False, "sdr_potential": True}, d0)}})
+    qrg = qrg_context(load_config())
+    assert qrg["display"]["banner"] is False
+    assert qrg["display"]["sdr_potential"] is True
+    assert qrg["display"]["sdr_fleet"] is True
+    assert qrg["tx_khz"] == 14135.0
+
+
+def test_parse_display_rejects_non_object():
+    from recorder.config import parse_display
+
+    try:
+        parse_display([])
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "invalide" in str(exc)
+
+
 def test_parse_tx_sites_max_five_and_empty_rows():
     from recorder.config import parse_tx_sites, tx_sites_aim, tx_sites_from_cfg
 
