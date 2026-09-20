@@ -23,7 +23,7 @@
     <aside class="map-opt" id="map-opt" hidden>
       <p class="map-opt__title">Calques</p>
       <label class="map-opt__row"><input type="checkbox" data-layer="banner" checked> Bandeau GGR trafic HF</label>
-      <label class="map-opt__row" title="Kiwi retenus pour le prochain buddy 12:00 TU et le bulletin 18:00 TU, d’après le centroïde des skippers suivis">
+      <label class="map-opt__row" title="Kiwi retenus pour le prochain buddy 12:00 TU et le bulletin {{ schedule_ident_short }} {{ time_utc }} TU, d’après le centroïde des skippers suivis">
         <input type="checkbox" data-layer="sdrActive" checked>
         SDR choisis selon centre flotte
       </label>
@@ -48,13 +48,13 @@
         <span class="ver">{{ version }}</span>
       </div>
       <p class="kiwi-ident__qrg">
-        TX {{ tx_mhz }} MHz · ACK {{ ack1_mhz }} / {{ ack2_mhz }} · {{ time_utc }} TU
+        TX {{ tx_mhz }} MHz · ACK {{ ack1_mhz }} / {{ ack2_mhz }} · {{ schedule_ident_short }} {{ time_utc }} TU
       </p>
       <p class="kiwi-ident__qrg">
         Buddy {{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz · {{ buddy_time_utc }} TU
       </p>
       <p class="kiwi-ident__qrg">
-        Émission bulletin : {{ bulletin_tx_label | default('F6KUF') }}{% if bulletin_tx_from_tahiti %} (Tahiti){% endif %}
+        Émission bulletin : {{ bulletin_tx_label | default('F6KUF') }}
       </p>
       <p class="kiwi-ident__clock">
         {% include "_recording.html" %}
@@ -190,5 +190,5 @@
 <script src="/static/js/mixer.js?v={{ version }}-kiwi66"></script>
 <script src="/static/js/reglages.js?v={{ version }}-kiwi56"></script>
 <script src="/static/js/wait.js?v={{ version }}-kiwi1"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi66"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi71"></script>
 {% endblock %}

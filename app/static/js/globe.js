@@ -1238,7 +1238,7 @@
         : "";
       showSel(
         `<p class="badge">Émission bulletin</p><h3>${esc(d.name || d.label || "QTH")}</h3>` +
-          `<p class="meta">${esc(pos)}</p>` +
+          `<p class="meta">${esc(d.loc || pos)}</p>` +
           (aim
             ? `<p>Distance centroïde : <strong>${Math.round(aim.km)} km</strong></p>` +
               `<p>Azimut antenne (vrai nord) : <strong>${esc(fmtAz(aim.az))}</strong></p>`
@@ -1295,8 +1295,13 @@
 
   // Bandeau GGR : or #DEB200 + Montserrat 800 (h1 goldengloberace.com).
   const GGR_BANNER = "GGR 2026 - trafic HF";
-  const BANNER_HOLD_MS = 2000;
-  const BANNER_INTRO_MS = 7500;
+  const BANNER_INTRO_MS = 2500;
+  const BANNER_ZOOM_MS = 2000;
+  const BANNER_COAST_MS = 2000;
+  const BANNER_PAN_ALT = 2.7;
+  const BANNER_PAN_SPAN = 90;
+  const BANNER_SPIN_RAD_MS = 0.00055;
+  const BANNER_SPIN_DEG_MS = 0.032;
   const BANNER_OPACITY = 0.55;
   const BANNER_OPACITY_UNDER = 0.08;
   const BANNER_FLEET_LAT = 18;
@@ -1305,14 +1310,28 @@
   let bannerBelt = null;
   let bannerIntroDone = false;
   let bannerWatchOn = false;
+  let bannerReadable = false;
+  let introPlaying = false;
+  let introCamId = 0;
+  let introOnBannerReady = null;
+  let introBannerWait = 0;
+  let introT0 = 0;
+
+  function bannerSpinMs() {
+    return BANNER_INTRO_MS + BANNER_ZOOM_MS + BANNER_COAST_MS;
+  }
+
+  function introShowsBanner() {
+    return !!layers.banner && (introPlaying || bannerReadable);
+  }
 
   function applyBannerVisibility() {
-    const show = !!layers.banner && !metareaOn;
+    const show = !!layers.banner && (!metareaOn || introShowsBanner());
     if (bannerBelt && bannerBelt.mesh) bannerBelt.mesh.visible = show;
   }
 
   function htmlBannerPoints() {
-    if (!layers.banner || !bannerHtml.on || metareaOn) return [];
+    if (!layers.banner || !bannerHtml.on || (metareaOn && !introShowsBanner())) return [];
     const n = 8;
     const rows = [];
     for (let i = 0; i < n; i++) {
@@ -1509,29 +1528,34 @@
     const mesh = new gfx.Mesh(geo, mat);
     mesh.name = "ggr-eq-banner";
     mesh.renderOrder = 4;
-    mesh.visible = !metareaOn;
+    mesh.visible = !!layers.banner && (!metareaOn || introShowsBanner());
     scene.add(mesh);
     return { mesh, mat };
   }
 
   function runBannerAnim(g, belt) {
     bannerBelt = belt;
-    const start = performance.now();
+    applyBannerVisibility();
+    if (introOnBannerReady) {
+      const fn = introOnBannerReady;
+      introOnBannerReady = null;
+      fn();
+    }
+    const start = introT0 || performance.now();
+    if (!introT0) introT0 = start;
     const frame = (now) => {
       const elapsed = now - start;
-      const t = (elapsed - BANNER_HOLD_MS) / BANNER_INTRO_MS;
-      if (belt) {
-        if (t < 1) belt.mesh.rotation.y = elapsed * 0.00055;
-      } else if (t < 1) {
-        bannerHtml.lng0 = (elapsed * 0.032) % 360;
-        if (g) g.htmlElementsData(points());
-      }
-      applyBannerOpacity(g, belt, true);
-      if (t < 1) {
+      const limit = bannerSpinMs();
+      if (elapsed < limit) {
+        if (belt) belt.mesh.rotation.y = elapsed * BANNER_SPIN_RAD_MS;
+        else {
+          bannerHtml.lng0 = (elapsed * BANNER_SPIN_DEG_MS) % 360;
+          if (g) g.htmlElementsData(points());
+        }
+        applyBannerOpacity(g, belt, true);
         window.requestAnimationFrame(frame);
       } else {
-        bannerIntroDone = true;
-        watchBannerOpacity(g, belt);
+        freezeIntroBanner(g);
       }
     };
     window.requestAnimationFrame(frame);
@@ -1630,11 +1654,50 @@
     }
   }
 
+  function freezeIntroBanner(g) {
+    if (bannerReadable || bannerIntroDone) return;
+    bannerReadable = true;
+    introPlaying = false;
+    applyBannerVisibility();
+    applyBannerOpacity(g, bannerBelt, true);
+  }
+
+  function cancelIntro(g) {
+    introPlaying = false;
+    bannerReadable = false;
+    bannerIntroDone = true;
+    introCamId += 1;
+    applyBannerVisibility();
+    if (g && typeof g.polygonsData === "function") g.polygonsData(metareaPolygons());
+    if (g) g.htmlElementsData(points());
+    watchBannerOpacity(g, bannerBelt);
+  }
+
   function scheduleIntroCamera(g, dest) {
-    window.setTimeout(() => {
-      if (muxOpen) return;
-      if (g && dest) g.pointOfView(dest, BANNER_INTRO_MS);
-    }, BANNER_HOLD_MS);
+    const id = ++introCamId;
+    let launched = false;
+    const start = () => {
+      if (launched || id !== introCamId || muxOpen) return;
+      launched = true;
+      introOnBannerReady = null;
+      if (introBannerWait) {
+        window.clearTimeout(introBannerWait);
+        introBannerWait = 0;
+      }
+      introT0 = performance.now();
+      const pan = { lat: 8, lng: dest.lng, altitude: BANNER_PAN_ALT };
+      if (g) g.pointOfView(pan, BANNER_INTRO_MS);
+      window.setTimeout(() => {
+        if (id !== introCamId || muxOpen) return;
+        if (g && dest) g.pointOfView(dest, BANNER_ZOOM_MS);
+      }, BANNER_INTRO_MS);
+      window.setTimeout(() => {
+        if (id !== introCamId) return;
+        freezeIntroBanner(g);
+      }, bannerSpinMs());
+    };
+    introOnBannerReady = start;
+    introBannerWait = window.setTimeout(start, 1200);
   }
 
   function hexToRgba(hex, a) {
@@ -1648,12 +1711,14 @@
 
   function metareaPolygons() {
     const rows = [];
+    if (introShowsBanner()) return rows;
     if (metareaOn && metareaFc) rows.push(...(metareaFc.features || []));
     if (subzonesOn && subzoneFc) rows.push(...(subzoneFc.features || []));
     return rows;
   }
 
   function metareaLabelPoints() {
+    if (introShowsBanner()) return [];
     if (!metareaOn || !metareaFc) return [];
     return (metareaFc.features || [])
       .map((f) => {
@@ -1673,6 +1738,7 @@
   }
 
   function subzoneLabelPoints() {
+    if (introShowsBanner()) return [];
     if (!subzonesOn || !subzoneFc) return [];
     return (subzoneFc.features || [])
       .map((f) => {
@@ -2008,6 +2074,8 @@
 
   function initGlobe(opts) {
     const intro = !opts || opts.intro !== false;
+    const waiting = document.body.classList.contains("is-unavailable");
+    if (intro && !waiting && layers.banner) introPlaying = true;
     if (typeof Globe !== "function") {
       if (window.GgrWait) window.GgrWait.show();
       showSel("<p class=\"err\">Globe 3D indisponible (WebGL / script). Les tableaux restent utilisables plus bas.</p>");
@@ -2114,13 +2182,15 @@
       }
     }
 
-    const waiting = document.body.classList.contains("is-unavailable");
     const dest = fleetView();
     if (waiting) {
       globe.pointOfView({ lat: 8, lng: -20, altitude: 2.35 }, 0);
     } else if (intro) {
-      globe.pointOfView({ lat: 8, lng: dest.lng + 40, altitude: 2.7 }, 0);
+      introPlaying = true;
+      globe.pointOfView({ lat: 8, lng: dest.lng + BANNER_PAN_SPAN, altitude: BANNER_PAN_ALT }, 0);
       scheduleIntroCamera(globe, dest);
+      if (typeof globe.polygonsData === "function") globe.polygonsData(metareaPolygons());
+      applyBannerVisibility();
     } else {
       globe.pointOfView(dest, 0);
     }
@@ -2149,6 +2219,8 @@
     window.addEventListener("resize", sizeGlobe);
     el.addEventListener("pointerdown", () => {
       globe.controls().autoRotate = false;
+      if (introPlaying || bannerReadable) cancelIntro(globe);
+      else introCamId += 1;
     });
 
     const clickLatLng = (a, b) => {
@@ -2301,7 +2373,11 @@
             qrg_tolerance_khz: cur.qrg_tolerance_khz,
             lead_minutes: cur.schedule_lead,
             duration_minutes: cur.duration_minutes,
-            tx_sites: listedTxSites().map((s) => ({ label: s.label, lat: s.lat, lon: s.lon })),
+            tx_sites: listedTxSites().map((s) => {
+              const row = { label: s.label, lat: s.lat, lon: s.lon };
+              if (s.loc) row.loc = s.loc;
+              return row;
+            }),
           }),
         });
         const body = await res.json().catch(() => ({}));

@@ -50,10 +50,12 @@
     const tx_sites = [];
     for (let i = 0; i < 5; i++) {
       const labelEl = form.elements.namedItem("tx_label_" + i);
+      const locEl = form.elements.namedItem("tx_loc_" + i);
       const latEl = form.elements.namedItem("tx_lat_" + i);
       const lonEl = form.elements.namedItem("tx_lon_" + i);
       tx_sites.push({
         label: labelEl ? String(labelEl.value || "").trim() : "",
+        loc: locEl ? String(locEl.value || "").trim() : "",
         lat: latEl && String(latEl.value).trim() !== "" ? Number(latEl.value) : "",
         lon: lonEl && String(lonEl.value).trim() !== "" ? Number(lonEl.value) : "",
       });

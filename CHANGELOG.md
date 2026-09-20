@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.1.9 — 2026-09-20
+
+- Cette semaine : bulletin France **Philippe F4HWM / F6KUF** depuis Talmont-Saint-Hilaire (lun. et jeu. 18:00 TU).
+- **Michel FO5QB** : 14.135 MHz USB **tous les jours** 18:00 TU ; Kiwi France seulement lun. et jeu.
+- Intro globe : pan 2,5 s avec bandeau lent, zoom 2 s vers la flotte, puis 2 s encore et arrêt pour lire le bandeau.
+
 ## 1.1.8 — 2026-09-20
 
 - Globe : plus d’écran noir à l’arrivée (variables `globe` / `map` initialisées avant l’onglet À propos).

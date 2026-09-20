@@ -7,7 +7,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -19,7 +19,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from app import globe_tiles, metarea, store
 from recorder.config import ack_label, display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
-from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_qth, fetch_ranked_kiwis, fleet_uses_tahiti_tx, kiwi_directory, map_kiwis, read_directory_cache
+from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_label, bulletin_tx_qths, fetch_ranked_kiwis, kiwi_directory, map_kiwis, read_directory_cache
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
 from recorder.session import (
     finalize_pending_sessions,
@@ -213,8 +213,10 @@ def _clock_utc(time_utc: str) -> datetime:
 
 
 def _bulletin_utc(cfg) -> datetime:
+    """Prochaine heure d’antenne 18:00 TU (lundi / jeudi), pas le début d’enregistrement."""
     sched = cfg.get("schedule") or {}
-    return _clock_utc(str(sched.get("time_utc") or "18:00"))
+    lead = int(sched.get("lead_minutes") or 1)
+    return next_vacation_utc(cfg) + timedelta(minutes=lead)
 
 
 def _buddy_clock_utc(cfg) -> datetime:
@@ -340,8 +342,15 @@ async def _globe_page(request: Request):
             buddy_kiwis = list(roles.values())
         except Exception:
             log.exception("KiwiSDR buddy indisponibles")
-        qth = bulletin_tx_qth(cfg, float(fleet.get("lat") or 0), float(fleet.get("lon") or 0))
-        tahiti_tx = fleet_uses_tahiti_tx(float(fleet.get("lat") or 0), float(fleet.get("lon") or 0))
+        now = datetime.now(timezone.utc)
+        qths = bulletin_tx_qths(
+            cfg,
+            float(fleet.get("lat") or 0),
+            float(fleet.get("lon") or 0),
+            boats=aim.get("skippers") or [],
+            when=now,
+        )
+        tahiti_tx = any(qth.get("id") == "tahiti" for qth in qths)
     except Exception:
         log.exception("Page flotte")
         return render_unavailable(request, status_code=503)
@@ -356,8 +365,9 @@ async def _globe_page(request: Request):
         globe_trafics=[store.globe_vacation(v) for v in store.list_vacations(cfg)],
         tx_sites=tx_sites_aim(cfg, fleet.get("lat"), fleet.get("lon")),
         boats=fleet.get("boats") or [],
-        bulletin_tx_label=qth["label"],
+        bulletin_tx_label=bulletin_tx_label(qths),
         bulletin_tx_from_tahiti=tahiti_tx,
+        bulletin_tx_overlap=len(qths) > 1,
         unavailable=bool((cfg.get("web") or {}).get("unavailable")) or wait_q in ("1", "true", "oui"),
     )
 

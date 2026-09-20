@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from recorder.config import data_dir, fmt_khz, fmt_mhz, load_config, version
+from recorder.config import data_dir, fmt_khz, fmt_mhz, load_config, schedule_days, version, WEEKDAY_KEYS
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.geo import fmt_latlon
 from recorder.kiwi_audio import record_kiwi_wav
@@ -20,6 +20,7 @@ from recorder.kiwi_list import (
     assign_buddy_kiwis,
     assign_vacation_kiwis,
     bulletin_tx_qth,
+    bulletin_tx_qths,
     fetch_ranked_kiwis,
     pick_nearest,
 )
@@ -74,15 +75,21 @@ def vacation_id(when: datetime | None = None) -> str:
     return when.strftime("%Y-%m-%dT%H%MZ")
 
 
+def _is_tx_role(site: str) -> bool:
+    return site == "tx" or site.startswith("tx_")
+
+
 def _channels(
     cfg: dict[str, Any],
     ack_sites: list[dict[str, Any]] | None = None,
     *,
     club_label: str | None = None,
+    extra_tx: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     radio = cfg.get("radio") or {}
     tx = radio.get("tx") or {}
     club = (club_label or "F6KUF").strip() or "F6KUF"
+    tx_label = tx.get("label") or "Bulletin F6KUF"
     rows = [
         {
             "id": "tx",
@@ -90,7 +97,7 @@ def _channels(
             "site": "tx",
             "site_label": f"{club} (bulletin)",
             "freq_khz": float(tx["freq_khz"]),
-            "label": tx.get("label") or "Bulletin F6KUF",
+            "label": tx_label,
             "zoom": int(tx.get("zoom") or 10),
             "screencast": bool((cfg.get("sdr") or {}).get("screencast_tx", True)),
         },
@@ -100,11 +107,29 @@ def _channels(
             "site": "tx_fleet",
             "site_label": "flotte (bulletin)",
             "freq_khz": float(tx["freq_khz"]),
-            "label": (tx.get("label") or "Bulletin F6KUF") + " · flotte",
+            "label": tx_label + " · flotte",
             "zoom": int(tx.get("zoom") or 10),
             "screencast": False,
         },
     ]
+    for extra in extra_tx or []:
+        eid = str(extra.get("id") or "").strip()
+        if not eid:
+            continue
+        elabel = str(extra.get("label") or eid).strip() or eid
+        role = str(extra.get("role") or f"tx_{eid}")
+        rows.append(
+            {
+                "id": extra.get("channel_id") or f"tx-{eid}",
+                "kind": "tx",
+                "site": role,
+                "site_label": f"{elabel} (bulletin)",
+                "freq_khz": float(tx["freq_khz"]),
+                "label": f"{tx_label} · {elabel}",
+                "zoom": int(tx.get("zoom") or 10),
+                "screencast": False,
+            }
+        )
     sites = ack_sites or []
     for idx, ack in enumerate(radio.get("ack") or []):
         base_label = ack.get("label") or f"Accusé {ack['freq_khz']} kHz"
@@ -144,7 +169,7 @@ def _pick_kiwis(
     roles: dict[str, dict[str, Any]],
     channels: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Associe chaque canal au Kiwi du rôle (tx / tx_fleet / fleet / france / tahiti)."""
+    """Associe chaque canal au Kiwi du rôle (tx / tx_* / fleet / france / cape / tahiti)."""
     assignment: dict[str, dict[str, Any]] = {}
     for ch in channels:
         kiwi = roles.get(str(ch.get("site") or ""))
@@ -154,12 +179,21 @@ def _pick_kiwis(
 
 
 def next_vacation_utc(cfg: dict[str, Any], now: datetime | None = None) -> datetime:
+    """Prochain début d’enregistrement bulletin (avance comprise).
+
+    F6KUF : lundi et jeudi. Michel FO5QB : tous les jours si schedule.tahiti_daily.
+    """
+    from recorder.config import tahiti_daily
+
     sched = cfg.get("schedule") or {}
     hh, mm = (sched.get("time_utc") or "18:00").split(":")
     lead = int(sched.get("lead_minutes") or 1)
     now = now or datetime.now(timezone.utc)
+    allowed = set(WEEKDAY_KEYS) if tahiti_daily(cfg) else set(schedule_days(cfg))
     start = now.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0) - timedelta(minutes=lead)
-    if start <= now:
+    for _ in range(14):
+        if start > now and WEEKDAY_KEYS[start.weekday()] in allowed:
+            return start
         start = start + timedelta(days=1)
     return start
 
@@ -404,21 +438,45 @@ async def run_vacation(
         meta["fleet"] = fleet
         ranked = await fetch_ranked_kiwis(cfg, fleet["lat"], fleet["lon"], limit=0, min_free=1)
         meta["kiwis_ranked"] = ranked[:8]
+        aim = buddy_aim(fleet, cfg)
+        core = [b for b in (aim.get("skippers") or []) if isinstance(b, dict)]
         roles = assign_vacation_kiwis(
             ranked,
             fleet_lat=float(fleet["lat"]),
             fleet_lon=float(fleet["lon"]),
             cfg=cfg,
+            boats=core,
+            when=started,
         )
-        club = bulletin_tx_qth(cfg, float(fleet["lat"]), float(fleet["lon"]))
+        club = bulletin_tx_qth(cfg, float(fleet["lat"]), float(fleet["lon"]), when=started)
+        qths = bulletin_tx_qths(
+            cfg,
+            float(fleet["lat"]),
+            float(fleet["lon"]),
+            boats=core,
+            when=started,
+        )
         meta["kiwi_roles"] = {role: _kiwi_snap(kiwi) for role, kiwi in roles.items()}
         meta["bulletin_tx"] = {"id": club["id"], "label": club["label"], "lat": club["lat"], "lon": club["lon"]}
+        meta["bulletin_tx_qths"] = [
+            {"id": qth["id"], "label": qth["label"], "lat": qth["lat"], "lon": qth["lon"]} for qth in qths
+        ]
+        extra_tx: list[dict[str, Any]] = []
+        for qth in qths:
+            if qth["id"] == club["id"]:
+                continue
+            role = f"tx_{qth['id']}"
+            if role in roles:
+                extra_tx.append({"id": qth["id"], "label": qth["label"], "role": role})
+        for role, label in (("tx_fleet_west", "flotte ouest"), ("tx_fleet_east", "flotte est")):
+            if role in roles:
+                extra_tx.append({"id": role.removeprefix("tx_").replace("_", "-"), "label": label, "role": role})
         ack_sites = [
             {"id": sid, "label": kiwi.get("site_label") or sid}
             for sid, kiwi in roles.items()
-            if sid not in ("tx", "tx_fleet")
+            if not _is_tx_role(str(sid))
         ]
-        channels = _channels(cfg, ack_sites, club_label=str(club["label"]))
+        channels = _channels(cfg, ack_sites, club_label=str(club["label"]), extra_tx=extra_tx)
         assignment = _pick_kiwis(roles, channels)
         if "tx" not in assignment:
             raise RuntimeError("Aucun KiwiSDR disponible près de l’émetteur du bulletin")

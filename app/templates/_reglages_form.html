@@ -17,7 +17,7 @@
     <legend>1 · Tester une fréquence maintenant</legend>
     <p class="hint">Lance un screencast + audio USB sur <strong>une seule QRG</strong>
       (kHz 14135 ou MHz 14.135), Kiwi le plus proche de la flotte.
-      Ne change pas les fréquences du bulletin de 18:00 TU.</p>
+      Ne change pas les fréquences du bulletin {{ schedule_ident_short }} {{ time_utc }} TU.</p>
     <label>
       QRG
       <input name="test_freq" type="number" step="0.0001" min="1.5" max="30000" required
@@ -38,8 +38,8 @@
   </fieldset>
 
   <fieldset>
-    <legend>2 · Fréquences du bulletin 18:00 TU (kHz USB)</legend>
-    <p class="hint">Ces valeurs servent au passage quotidien et au bouton « trafic complet ».
+    <legend>2 · Fréquences du bulletin {{ schedule_days_short }} {{ time_utc }} TU (kHz USB)</legend>
+    <p class="hint">Ces valeurs servent au passage du {{ schedule_days_label }} et au bouton « trafic complet ».
       <strong>Sauver</strong> écrit seulement le fichier de config, sans allumer de Kiwi.</p>
     <label>
       Bulletin {{ club_callsign }}
@@ -80,9 +80,11 @@
   <fieldset>
     <legend>Points d’émission du bulletin (max 5)</legend>
     <p class="hint">
-      QTH d’où part le bulletin météo. Le globe trace un pointillé vers le centroïde
-      des skippers cochés : distance et azimut d’antenne (vrai nord). Enregistré avec
-      « Sauver les fréquences ».
+      QTH d’où part le bulletin météo. Cette semaine : Philippe F4HWM / F6KUF
+      (Talmont-Saint-Hilaire). Michel FO5QB tous les jours. Recouvrement Cap Town
+      quand la flotte s’étale autour du cap. Le globe trace un
+      pointillé vers le centroïde des skippers cochés : distance et azimut d’antenne
+      (vrai nord). Enregistré avec « Sauver les fréquences ».
     </p>
     <div class="tx-sites">
       {% for i in range(5) %}
@@ -93,6 +95,9 @@
           <input name="tx_label_{{ i }}" type="text" maxlength="64" placeholder="indicatif"
                  value="{{ s.label or '' }}">
         </label>
+        {% if s.loc %}
+        <input type="hidden" name="tx_loc_{{ i }}" value="{{ s.loc }}">
+        {% endif %}
         <label>
           Latitude
           <input name="tx_lat_{{ i }}" type="number" step="any" min="-90" max="90"
@@ -109,7 +114,7 @@
   </fieldset>
 
   <fieldset>
-    <legend>3 · Trafic complet (comme à 18:00 TU)</legend>
+    <legend>3 · Trafic complet (comme un bulletin {{ schedule_days_short }} {{ time_utc }} TU)</legend>
     <p class="hint">Enregistre <strong>maintenant</strong> le bulletin (14.135 MHz, émetteur + flotte)
       + les deux ACK depuis des KiwiSDR répartis, pendant la durée indiquée ci-dessus.
       À utiliser pour un vrai passage, pas pour un essai QRG.</p>
