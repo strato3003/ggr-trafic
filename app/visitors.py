@@ -27,7 +27,7 @@ NO_COORD = "none"
 VISITS = Counter(
     "ggr_http_visits_total",
     "Chargements de pages GGR Trafic (hors sondes, API, tuiles, static)",
-    ["country", "city", "latitude", "longitude"],
+    ["country", "city", "latitude", "longitude", "path"],
 )
 UNIQUE = Gauge(
     "ggr_http_visitors",
@@ -59,6 +59,21 @@ def is_page_visit(method: str, path: str) -> bool:
     if path in _PAGE_EXACT:
         return True
     return any(path.startswith(p) for p in _PAGE_PREFIXES)
+
+
+def page_label(path: str) -> str:
+    """Chemin agrégé pour Prometheus (pas d’IP, pas de query-string)."""
+    raw = (path or "/").split("?", 1)[0]
+    if not raw.startswith("/"):
+        raw = "/" + raw
+    if raw != "/" and raw.endswith("/"):
+        raw = raw.rstrip("/") or "/"
+    if raw in _PAGE_EXACT:
+        return "/"
+    if raw.startswith("/trafic/"):
+        vid = _lab(raw[8:].split("/", 1)[0], fallback="")
+        return "/trafic/" + vid if vid else "/trafic"
+    return _lab(raw)[:80]
 
 
 def is_public_ip(raw: str) -> bool:
@@ -127,8 +142,8 @@ def _geo_labels(data: dict[str, Any] | None) -> dict[str, str]:
     }
 
 
-def _count(ip: str, labels: dict[str, str]) -> None:
-    VISITS.labels(**labels).inc()
+def _count(ip: str, labels: dict[str, str], path: str) -> None:
+    VISITS.labels(**labels, path=page_label(path)).inc()
     _unique_ips.add(ip)
     UNIQUE.set(len(_unique_ips))
 
@@ -140,33 +155,34 @@ def schedule(request: Request) -> None:
     ip = client_ip(request)
     if not ip:
         return
+    path = request.url.path
     cached = _geo_cache.get(ip)
     if cached is not None:
-        _count(ip, cached)
+        _count(ip, cached, path)
         return
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        _count(ip, _geo_labels(None))
+        _count(ip, _geo_labels(None), path)
         return
     if ip in _pending:
         return
     _pending.add(ip)
-    loop.create_task(_resolve_and_count(ip))
+    loop.create_task(_resolve_and_count(ip, path))
 
 
-async def _resolve_and_count(ip: str) -> None:
+async def _resolve_and_count(ip: str, path: str) -> None:
     try:
         labels = _geo_cache.get(ip)
         if labels is None:
             labels = _geo_labels(await geolocate(ip))
             _geo_cache[ip] = labels
-        _count(ip, labels)
+        _count(ip, labels, path)
     except Exception:
         log.exception("Géoloc visite %s", ip.split(".")[0] + ".x")
         labels = _geo_labels(None)
         _geo_cache.setdefault(ip, labels)
-        _count(ip, labels)
+        _count(ip, labels, path)
     finally:
         _pending.discard(ip)
 

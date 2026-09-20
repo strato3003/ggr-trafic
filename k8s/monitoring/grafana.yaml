@@ -205,7 +205,7 @@ data:
         },
         {
           "title": "Visites URL (période)",
-          "description": "Chargements de https://ggr-trafic.k3s.lpb.ovh (pages / et /trafic). Hors sondes, API, tuiles OSM, static.",
+          "description": "Chargements de https://ggr-trafic.k3s.lpb.ovh : accueil / et replay /trafic/<id>. Hors sondes, API, tuiles OSM, static.",
           "type": "stat",
           "gridPos": { "h": 8, "w": 6, "x": 0, "y": 28 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -340,6 +340,58 @@ data:
             "defaults": { "decimals": 0 },
             "overrides": [
               { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Visites" }] },
+              { "matcher": { "id": "byName", "options": "country" }, "properties": [{ "id": "displayName", "value": "Pays" }] },
+              { "matcher": { "id": "byName", "options": "city" }, "properties": [{ "id": "displayName", "value": "Ville" }] }
+            ]
+          }
+        },
+        {
+          "title": "Pages consultées",
+          "description": "GET / (accueil-globe) et GET /trafic/<id> (replay d’un enregistrement). Pas d’IP, pas de /media ni d’API.",
+          "type": "table",
+          "gridPos": { "h": 10, "w": 8, "x": 0, "y": 50 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (path) (increase(ggr_http_visits_total[$__range]))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+          ],
+          "fieldConfig": {
+            "defaults": { "decimals": 0 },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Visites" }] },
+              { "matcher": { "id": "byName", "options": "path" }, "properties": [{ "id": "displayName", "value": "Page" }] }
+            ]
+          }
+        },
+        {
+          "title": "Pages × origine (hors France)",
+          "description": "Même pages, ventilées par ville, sans les visites labellisées France.",
+          "type": "table",
+          "gridPos": { "h": 10, "w": 16, "x": 8, "y": 50 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (path, country, city) (increase(ggr_http_visits_total{country!=\"France\"}[$__range]))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+          ],
+          "fieldConfig": {
+            "defaults": { "decimals": 0 },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Visites" }] },
+              { "matcher": { "id": "byName", "options": "path" }, "properties": [{ "id": "displayName", "value": "Page" }] },
               { "matcher": { "id": "byName", "options": "country" }, "properties": [{ "id": "displayName", "value": "Pays" }] },
               { "matcher": { "id": "byName", "options": "city" }, "properties": [{ "id": "displayName", "value": "Ville" }] }
             ]

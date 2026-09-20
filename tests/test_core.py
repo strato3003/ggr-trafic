@@ -1131,6 +1131,29 @@ def test_visitors_client_ip_leftmost_public():
     assert not visitors.is_page_visit("POST", "/")
 
 
+def test_visitors_records_trafic_path():
+    from app import visitors
+
+    visitors.reset_for_tests()
+    visitors._geo_cache["8.8.8.8"] = {
+        "country": "United States",
+        "city": "Ashburn",
+        "latitude": "39.04",
+        "longitude": "-77.49",
+    }
+    visitors.schedule(_starlette_request("/trafic/2026-09-19T1159Z-buddy", forwarded="8.8.8.8"))
+    hits = [
+        s
+        for s in visitors.VISITS.collect()[0].samples
+        if s.name == "ggr_http_visits_total"
+        and s.labels.get("path") == "/trafic/2026-09-19T1159Z-buddy"
+        and s.labels.get("city") == "Ashburn"
+    ]
+    assert hits
+    assert visitors.page_label("/trafic/2026-09-19T1159Z-buddy/") == "/trafic/2026-09-19T1159Z-buddy"
+    assert visitors.page_label("/") == "/"
+
+
 def _pip(lon: float, lat: float, ring: list) -> bool:
     inside = False
     n = len(ring)
