@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.1.6 — 2026-09-20
+
+- Boucle A–B : traits or collés aux bornes (plus le centre des poignées) ; le son ne reprend qu’après le seek, sans dépasser A ni B.
+
 ## 1.1.5 — 2026-09-20
 
 - Boucle A–B : la lecture reste entre les bornes (plus de départ avant A ni de dépassement après B).

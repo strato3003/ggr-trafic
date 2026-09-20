@@ -81,7 +81,8 @@ window.GgrMixer = (function () {
   let loopB = NaN;
   let loopOn = false;
   let handleDrag = null;
-  let loopBusy = false;
+  let seekGate = false;
+  let playGen = 0;
   const ac = new AbortController();
   const sig = { signal: ac.signal };
   const ICO_EXPAND =
@@ -295,6 +296,7 @@ window.GgrMixer = (function () {
   }
 
   function nowT() {
+    if (seekGate) return t0;
     if (playing) {
       const tr = clockTrack();
       const el = tr && tr.el;
@@ -503,6 +505,39 @@ window.GgrMixer = (function () {
     seekEl.max = String(duration);
   }
 
+  function liveForPlay(tr) {
+    if (!tr || !tr.el || tr.dead) return false;
+    if (focusId && tr.id !== focusId) return false;
+    return true;
+  }
+
+  function waitSeek(tr, off) {
+    return new Promise((resolve) => {
+      if (!tr.el) {
+        resolve();
+        return;
+      }
+      const el = tr.el;
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        el.removeEventListener("seeked", onSeeked);
+        resolve();
+      };
+      const onSeeked = () => {
+        if (Math.abs((Number.isFinite(el.currentTime) ? el.currentTime : 0) - off) < 0.45) finish();
+      };
+      if (Math.abs((Number.isFinite(el.currentTime) ? el.currentTime : 0) - off) < 0.45) {
+        finish();
+        return;
+      }
+      el.addEventListener("seeked", onSeeked);
+      seekElTo(tr, off);
+      window.setTimeout(finish, 700);
+    });
+  }
+
   function seekElTo(tr, off) {
     if (!tr.el) return;
     try {
@@ -513,26 +548,62 @@ window.GgrMixer = (function () {
     }
   }
 
-  function ensureReady(tr, off) {
-    if (!tr.el) return;
-    applyGain(tr);
-    const go = () => {
-      if (!playing) return;
-      tr.el.play().catch(() => {
-        tr.el.addEventListener("canplay", go, { once: true });
+  function startSources(offset) {
+    const gen = ++playGen;
+    const off = clampLoopTime(Math.max(0, offset || 0));
+    t0 = off;
+    playing = true;
+    seekGate = true;
+    noteReplayPlay();
+    tracks.forEach((tr) => {
+      if (!tr.el) return;
+      if (tr.el.preload !== "auto") tr.el.preload = "auto";
+      try {
+        tr.el.pause();
+      } catch {
+        /* ignore */
+      }
+      applyGain(tr);
+      if (!liveForPlay(tr)) return;
+      seekElTo(tr, off);
+    });
+    updateAudioLoad();
+    setPlayUi(true);
+    cancelAnimationFrame(raf);
+    clearInterval(tickTimer);
+    updateHead();
+    const ready = tracks.filter(liveForPlay);
+    const goPlay = () => {
+      if (gen !== playGen || !playing) return;
+      seekGate = false;
+      t0 = off;
+      ready.forEach((tr) => {
+        applyGain(tr);
+        tr.el.play().catch(() => {
+          tr.el.addEventListener("canplay", () => {
+            if (gen !== playGen || !playing) return;
+            tr.el.play().catch(() => {});
+          }, { once: true });
+        });
+      });
+      tickTimer = setInterval(tick, 50);
+      raf = requestAnimationFrame(function loop() {
+        tick();
+        if (playing) raf = requestAnimationFrame(loop);
       });
     };
-    const cur = tr.el.currentTime;
-    if (Number.isFinite(tr.el.duration) && Math.abs((Number.isFinite(cur) ? cur : 0) - off) > 0.15) {
-      tr.el.addEventListener("seeked", go, { once: true });
-      seekElTo(tr, off);
-      setTimeout(() => {
-        if (playing && tr.el.paused) go();
-      }, 400);
-      return;
-    }
-    seekElTo(tr, off);
-    go();
+    Promise.all(ready.map((tr) => waitSeek(tr, off))).then(() => {
+      if (gen !== playGen || !playing) return;
+      const clock = clockTrack();
+      const cur = clock && clock.el && Number.isFinite(clock.el.currentTime) ? clock.el.currentTime : off;
+      const lp = loopOn ? loopBounds() : null;
+      if (lp && (cur < lp.a - 1 || cur >= lp.b - 0.02)) {
+        ready.forEach((tr) => seekElTo(tr, off));
+        window.setTimeout(goPlay, 80);
+        return;
+      }
+      goPlay();
+    });
   }
 
   function setPlayUi(on) {
@@ -555,28 +626,9 @@ window.GgrMixer = (function () {
     }
   }
 
-  function startSources(offset) {
-    const off = clampLoopTime(Math.max(0, offset || 0));
-    t0 = off;
-    playing = true;
-    noteReplayPlay();
-    tracks.forEach((tr) => {
-      if (tr.el && tr.el.preload !== "auto") tr.el.preload = "auto";
-      ensureReady(tr, off);
-    });
-    updateAudioLoad();
-    setPlayUi(true);
-    cancelAnimationFrame(raf);
-    clearInterval(tickTimer);
-    tick();
-    tickTimer = setInterval(tick, 100);
-    raf = requestAnimationFrame(function loop() {
-      tick();
-      if (playing) raf = requestAnimationFrame(loop);
-    });
-  }
-
   function pauseAt(t) {
+    playGen += 1;
+    seekGate = false;
     t0 = Math.max(0, Math.min(duration || t, t));
     playing = false;
     tracks.forEach((tr) => {
@@ -590,12 +642,16 @@ window.GgrMixer = (function () {
   }
 
   function tick() {
-    if (!playing || loopBusy) return;
+    if (!playing) return;
+    if (seekGate) {
+      updateHead();
+      return;
+    }
     const t = nowT();
     updateHead();
     const lp = loopOn ? loopBounds() : null;
     if (lp) {
-      if (t < lp.a - 0.05 || t >= lp.b - 0.04) {
+      if (t >= lp.b - 0.02 || t < lp.a - 1) {
         restartLoop(lp.a);
         return;
       }
@@ -604,8 +660,6 @@ window.GgrMixer = (function () {
   }
 
   function restartLoop(a) {
-    if (loopBusy) return;
-    loopBusy = true;
     tracks.forEach((tr) => {
       if (!tr.el) return;
       try {
@@ -615,7 +669,6 @@ window.GgrMixer = (function () {
       }
     });
     startSources(a);
-    loopBusy = false;
   }
 
   function previewSeek(t) {
@@ -623,7 +676,9 @@ window.GgrMixer = (function () {
     seekEl.value = String(t0);
     if (duration) seekEl.max = String(duration);
     if (playing) {
+      playGen += 1;
       playing = false;
+      seekGate = false;
       tracks.forEach((tr) => {
         if (tr.el) tr.el.pause();
       });
@@ -687,8 +742,25 @@ window.GgrMixer = (function () {
       if (!onThis || !span) return;
       const a = ok ? Math.min(loopA, loopB) : 0;
       const b = ok ? Math.max(loopA, loopB) : span;
-      tr.loopEl.style.left = (a / span) * 100 + "%";
-      tr.loopEl.style.width = ((b - a) / span) * 100 + "%";
+      const aPct = (a / span) * 100;
+      const bPct = (b / span) * 100;
+      tr.loopEl.style.left = "0";
+      tr.loopEl.style.width = "100%";
+      const dimL = tr.loopEl.querySelector(".mix__loop-dim--l");
+      const dimR = tr.loopEl.querySelector(".mix__loop-dim--r");
+      const sel = tr.loopEl.querySelector(".mix__loop-sel");
+      if (dimL) {
+        dimL.style.left = "0";
+        dimL.style.width = aPct + "%";
+      }
+      if (sel) {
+        sel.style.left = aPct + "%";
+        sel.style.width = Math.max(0, bPct - aPct) + "%";
+      }
+      if (dimR) {
+        dimR.style.left = bPct + "%";
+        dimR.style.width = Math.max(0, 100 - bPct) + "%";
+      }
     });
     if (loopLab) {
       loopLab.hidden = !(show && ok);
@@ -728,6 +800,7 @@ window.GgrMixer = (function () {
       if (tr && !tr.dead) loadWave(tr);
     }
     updateLoopUi();
+    if (playing) startSources(clampLoopTime(t0));
     if (onFocus) onFocus(focusId);
     window.dispatchEvent(new Event("resize"));
     requestAnimationFrame(() => tracks.forEach(drawTrack));
@@ -749,7 +822,8 @@ window.GgrMixer = (function () {
     };
     const move = (ev) => {
       if (!handleDrag) return;
-      const t = pointerTime(ev, tr.canvas);
+      const wrap = tr.loopEl.parentElement || tr.canvas;
+      const t = pointerTime(ev, wrap);
       const gap = 0.2;
       const span = timeSpan();
       const a = Number.isFinite(loopA) ? loopA : 0;
@@ -816,9 +890,10 @@ window.GgrMixer = (function () {
   }, sig);
 
   function applyGain(tr) {
-    const vol = tr.muted ? 0 : Number.isFinite(tr.volume) ? tr.volume : 1;
+    const silent = !!(tr.muted || (focusId && tr.id !== focusId));
+    const vol = silent ? 0 : Number.isFinite(tr.volume) ? tr.volume : 1;
     if (tr.el) {
-      tr.el.muted = !!tr.muted;
+      tr.el.muted = silent;
       tr.el.volume = Math.min(1, Math.max(0, vol));
     }
   }
@@ -866,8 +941,12 @@ window.GgrMixer = (function () {
               (tr.waterfall ? " hidden" : "") +
               ">Extraction bande son en cours… 0 %</div>") +
           '<div class="mix__loop" hidden>' +
+          '<div class="mix__loop-dim mix__loop-dim--l"></div>' +
+          '<div class="mix__loop-sel">' +
           '<button type="button" class="mix__loop-h mix__loop-h--a" aria-label="Borne A de la boucle"></button>' +
           '<button type="button" class="mix__loop-h mix__loop-h--b" aria-label="Borne B de la boucle"></button>' +
+          "</div>" +
+          '<div class="mix__loop-dim mix__loop-dim--r"></div>' +
           "</div>" +
           '<div class="mix__head"></div>' +
           "</div></div>"
@@ -1008,6 +1087,14 @@ window.GgrMixer = (function () {
     tr.el.addEventListener("loadedmetadata", () => {
       noteDuration(tr.el.duration);
       if (!playing) seekElTo(tr, t0);
+    });
+    tr.el.addEventListener("timeupdate", () => {
+      if (!playing || seekGate || !loopOn || !liveForPlay(tr)) return;
+      const lp = loopBounds();
+      if (!lp) return;
+      const cur = tr.el.currentTime;
+      if (!Number.isFinite(cur)) return;
+      if (cur >= lp.b - 0.02 || cur < lp.a - 1) restartLoop(lp.a);
     });
     tr.el.addEventListener("ended", () => {
       if (!playing) return;
