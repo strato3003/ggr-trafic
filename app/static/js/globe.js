@@ -78,6 +78,9 @@
   let kmAlignRaf = 0;
   let muxPulseFat = false;
   let muxPulseTimer = 0;
+  let globe = null;
+  let map = null;
+  let mapLayers = null;
   const layers = {
     banner: prefOn("ggr-layer-banner", "banner", true),
     sdrActive: prefOn("ggr-layer-sdrActive", "sdr_fleet", true),
@@ -1248,10 +1251,6 @@
     lookAt(d.lat, d.lng || d.lon, 1.8, 800);
   }
 
-  let globe = null;
-  let map = null;
-  let mapLayers = null;
-
   function altitudeToZoom(alt) {
     const a = Number(alt);
     if (!Number.isFinite(a)) return 5;
@@ -2010,6 +2009,7 @@
   function initGlobe(opts) {
     const intro = !opts || opts.intro !== false;
     if (typeof Globe !== "function") {
+      if (window.GgrWait) window.GgrWait.show();
       showSel("<p class=\"err\">Globe 3D indisponible (WebGL / script). Les tableaux restent utilisables plus bas.</p>");
       return;
     }
@@ -2114,19 +2114,27 @@
       }
     }
 
+    const waiting = document.body.classList.contains("is-unavailable");
     const dest = fleetView();
-    if (intro) {
+    if (waiting) {
+      globe.pointOfView({ lat: 8, lng: -20, altitude: 2.35 }, 0);
+    } else if (intro) {
       globe.pointOfView({ lat: 8, lng: dest.lng + 40, altitude: 2.7 }, 0);
       scheduleIntroCamera(globe, dest);
     } else {
       globe.pointOfView(dest, 0);
     }
-    globe.controls().autoRotate = false;
+    globe.controls().autoRotate = waiting;
+    if (waiting) {
+      globe.controls().autoRotateSpeed = 0.35;
+      globe.controls().enableZoom = false;
+      globe.controls().enabled = false;
+    }
     globe.controls().enableDamping = true;
     bindKmAlign();
     el.addEventListener("wheel", scheduleKmAlign, { passive: true });
     tuneOsmTiles(globe);
-    if (intro && layers.banner) {
+    if (intro && layers.banner && !waiting) {
       const bootBanner = () => startGgrEquatorBanner(globe);
       if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);
       const afterFont = () => bootBanner();
@@ -2157,9 +2165,37 @@
       });
     }
     } catch (err) {
+      if (window.GgrWait) window.GgrWait.show();
       showSel("<p class=\"err\">Globe 3D : " + esc(err && err.message ? err.message : err) + "</p>");
+      return;
+    }
+    if (document.body.classList.contains("is-unavailable")) {
+      window.dispatchEvent(new CustomEvent("ggr-wait", { detail: { on: true } }));
+    } else if (window.GgrWait) {
+      window.GgrWait.ok();
     }
   }
+
+  window.addEventListener("ggr-wait", (ev) => {
+    if (!globe) return;
+    const on = !!(ev.detail && ev.detail.on);
+    try {
+      const ctrl = globe.controls();
+      ctrl.autoRotate = on;
+      ctrl.autoRotateSpeed = 0.35;
+      ctrl.enableZoom = !on;
+      ctrl.enabled = !on;
+      if (typeof globe.pointOfView === "function") {
+        if (on) globe.pointOfView({ lat: 8, lng: -20, altitude: 2.35 }, 700);
+        else {
+          const dest = fleetView();
+          if (dest) globe.pointOfView(dest, 700);
+        }
+      }
+    } catch {
+      /* globe.gl */
+    }
+  });
 
   const saveBtn = document.getElementById("globe-save-buddy");
   if (saveBtn) {

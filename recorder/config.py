@@ -264,6 +264,7 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     ctx.update(buddy_context(cfg))
     ctx["tx_sites"] = tx_sites_from_cfg(cfg)
     ctx["display"] = display_defaults(cfg)
+    ctx["unavailable"] = bool((cfg.get("web") or {}).get("unavailable"))
     return ctx
 
 
@@ -334,4 +335,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
             return pkg_version("ggr-vacations")
         except PackageNotFoundError:
             cfg = cfg or {}
-            return str(cfg.get("version") or "1.1.7")
+            return str(cfg.get("version") or "1.1.8")
