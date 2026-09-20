@@ -47,6 +47,7 @@ window.GgrMixer = (function () {
   const deskEl = document.getElementById("mix-strips");
   const playBtn = document.getElementById("mix-play");
   const timeEl = document.getElementById("mix-time");
+  const audioLoadEl = document.getElementById("mix-audio-load");
   const seekEl = document.getElementById("mix-seek");
   if (!deskEl || !playBtn || !seekEl) return null;
   setPlayUi(false);
@@ -351,6 +352,48 @@ window.GgrMixer = (function () {
     updateHead();
   }
 
+  function bufferedPct(el) {
+    if (!el || !el.buffered || !el.buffered.length) return 0;
+    const dur = el.duration;
+    if (!Number.isFinite(dur) || dur <= 0) return 0;
+    try {
+      return Math.min(100, (el.buffered.end(el.buffered.length - 1) / dur) * 100);
+    } catch {
+      return 0;
+    }
+  }
+
+  function updateAudioLoad() {
+    if (!audioLoadEl) return;
+    const live = tracks.filter((t) => t.el && !t.dead);
+    if (!live.length) {
+      audioLoadEl.hidden = true;
+      audioLoadEl.textContent = "";
+      return;
+    }
+    const HAVE_FUTURE = 3;
+    const ready = live.filter((t) => t.el.readyState >= HAVE_FUTURE).length;
+    const loading = live.some((t) => t.el.networkState === 2);
+    const starving = playing && live.some((t) => t.el.readyState < HAVE_FUTURE);
+    if (!loading && !starving && ready === live.length) {
+      audioLoadEl.hidden = true;
+      audioLoadEl.textContent = "";
+      return;
+    }
+    if (!playing && !loading) {
+      audioLoadEl.hidden = true;
+      audioLoadEl.textContent = "";
+      return;
+    }
+    const pcts = live.map((t) => bufferedPct(t.el)).filter((p) => p > 0);
+    const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
+    audioLoadEl.hidden = false;
+    if (starving && avg && avg < 100) audioLoadEl.textContent = "Buffer " + avg + " %";
+    else if (avg) audioLoadEl.textContent = "Audio " + avg + " % · " + ready + "/" + live.length;
+    else audioLoadEl.textContent = "Chargement audio " + ready + "/" + live.length;
+    audioLoadEl.title = "Fichiers WAV USB en cours de chargement dans le navigateur";
+  }
+
   function updateHead() {
     if (!duration) return;
     const t = nowT();
@@ -424,6 +467,7 @@ window.GgrMixer = (function () {
       if (tr.el && tr.el.preload !== "auto") tr.el.preload = "auto";
       ensureReady(tr, off);
     });
+    updateAudioLoad();
     setPlayUi(true);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
@@ -445,6 +489,7 @@ window.GgrMixer = (function () {
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
     updateHead();
+    updateAudioLoad();
   }
 
   function tick() {
@@ -665,6 +710,11 @@ window.GgrMixer = (function () {
       root.appendChild(bin);
     }
     bin.appendChild(tr.el);
+    ["progress", "canplay", "canplaythrough", "waiting", "playing", "stalled", "loadeddata", "loadstart"].forEach(
+      (ev) => {
+        tr.el.addEventListener(ev, updateAudioLoad);
+      }
+    );
     tr.el.addEventListener("loadedmetadata", () => {
       noteDuration(tr.el.duration);
       if (!playing) seekElTo(tr, t0);
@@ -674,11 +724,17 @@ window.GgrMixer = (function () {
     });
   }
 
+  function pcmName(src) {
+    return String(src || "").replace(/\.(mp3|m4a|aac)$/i, ".wav");
+  }
+
   async function fetchWav(tr) {
     if (tr.dead || !tr.src) return null;
+    const pcm = tr.wav || pcmName(tr.src);
+    if (!pcm) return null;
     setExtract(tr, 0);
     try {
-      const res = await fetch(media(tr.src));
+      const res = await fetch(media(pcm));
       if (!res.ok) throw new Error("HTTP " + res.status);
       const total = Number(res.headers.get("content-length")) || 0;
       let raw;
@@ -806,6 +862,7 @@ window.GgrMixer = (function () {
       tracks.push({
         id: row.id || String(i),
         src: src,
+        wav: row.wav || "",
         freq_khz: row.freq_khz,
         place: row.place,
         site_label: row.site_label,
@@ -877,6 +934,10 @@ window.GgrMixer = (function () {
     window.removeEventListener("resize", onResize);
     if (ro) ro.disconnect();
     ac.abort();
+    if (audioLoadEl) {
+      audioLoadEl.hidden = true;
+      audioLoadEl.textContent = "";
+    }
     const bin = document.getElementById("mix-audio-bin");
     if (bin) bin.remove();
     if (deskEl) deskEl.innerHTML = "";

@@ -133,6 +133,30 @@
     const hash = "#" + tab;
     if (location.hash !== hash) history.replaceState(null, "", hash);
     if (tab !== "trafic") parkMix();
+    if (!navReady) {
+      navReady = true;
+      if (tab !== "trafic") noteNav("/#" + tab);
+      return;
+    }
+    if (tab === "trafic") noteNav("/");
+    else noteNav("/#" + tab);
+  }
+
+  let navReady = false;
+  let lastNav = "";
+  function noteNav(path) {
+    if (!path || path === lastNav) return;
+    lastNav = path;
+    try {
+      fetch("/api/nav", {
+        method: "POST",
+        keepalive: true,
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ path: path }),
+      }).catch(function () {});
+    } catch {
+      /* ignore */
+    }
   }
 
   let introAboutArmed = true;
@@ -834,7 +858,8 @@
   function mixerTracks(v) {
     return (v.channels || []).map((c, i) => ({
       id: c.id || String(i),
-      src: c.audio || "",
+      src: c.play || c.audio || "",
+      wav: c.wav || "",
       freq_khz: c.freq_khz,
       place: c.place || c.loc,
       site_label: c.site_label,
@@ -862,16 +887,15 @@
     mixRoot.setAttribute("data-vid", v.id || "");
     mixRoot.setAttribute("data-started", v.started_at || "");
     openVid = v.id;
+    noteNav("/trafic/" + v.id);
     let tracks = mixerTracks(v);
-    if (!tracks.length) {
-      try {
-        const full = await fetch("/api/trafic/" + encodeURIComponent(v.id)).then((r) => r.json());
-        if (openVid !== v.id) return;
-        if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) tracks = full.mixer_tracks;
-        else if ((full.channels || []).length) tracks = mixerTracks(full);
-      } catch {
-        /* carte globe */
-      }
+    try {
+      const full = await fetch("/api/trafic/" + encodeURIComponent(v.id)).then((r) => r.json());
+      if (openVid !== v.id) return;
+      if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) tracks = full.mixer_tracks;
+      else if ((full.channels || []).length) tracks = mixerTracks(full);
+    } catch {
+      /* carte globe */
     }
     if (openVid !== v.id) return;
     mixRoot.hidden = false;

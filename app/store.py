@@ -40,6 +40,39 @@ def vacations_root(cfg: dict[str, Any] | None = None) -> Path:
     return data_dir(cfg) / "vacations"
 
 
+_PLAY_EXT = (".mp3", ".m4a")
+
+
+def _play_name(folder: Path | None, audio: str, existing: str = "") -> str:
+    """Fichier Lecture (MP3/M4A s’il existe), sinon le WAV d’archive."""
+    audio = (audio or "").strip()
+    if not audio:
+        return ""
+    lower = audio.lower()
+    if lower.endswith(_PLAY_EXT):
+        return audio
+    if folder is not None:
+        stem = Path(audio).stem
+        for ext in _PLAY_EXT:
+            path = folder / (stem + ext)
+            if path.is_file() and path.stat().st_size > 64:
+                return path.name
+    kept = (existing or "").strip()
+    if kept.lower().endswith(_PLAY_EXT):
+        return kept
+    return audio
+
+
+def _wav_name(audio: str) -> str:
+    raw = (audio or "").strip()
+    if not raw:
+        return ""
+    lower = raw.lower()
+    if lower.endswith(_PLAY_EXT):
+        return Path(raw).stem + ".wav"
+    return raw
+
+
 def _sdr_key(ch: dict[str, Any], index: int = 0) -> str:
     kiwi = ch.get("kiwi")
     if isinstance(kiwi, dict):
@@ -49,12 +82,13 @@ def _sdr_key(ch: dict[str, Any], index: int = 0) -> str:
     return str(name or ch.get("id") or index)
 
 
-def _decorate(meta: dict[str, Any]) -> dict[str, Any]:
+def _decorate(meta: dict[str, Any], folder: Path | None = None) -> dict[str, Any]:
     thumb = None
     tx = None
     for ch in meta.get("channels") or []:
         ch["place"] = channel_place(ch)
         ch["has_audio"] = bool(ch.get("audio"))
+        ch["play"] = _play_name(folder, str(ch.get("audio") or ""), str(ch.get("play") or ""))
         if ch.get("id") == "tx":
             tx = ch
         if ch.get("thumb") and not thumb:
@@ -68,7 +102,8 @@ def _decorate(meta: dict[str, Any]) -> dict[str, Any]:
     meta["mixer_tracks"] = [
         {
             "id": ch.get("id"),
-            "src": ch.get("audio") or "",
+            "src": ch.get("play") or ch.get("audio") or "",
+            "wav": _wav_name(str(ch.get("audio") or "")),
             "freq_khz": ch.get("freq_khz"),
             "place": ch.get("place"),
             "site_label": ch.get("site_label"),
@@ -103,6 +138,8 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
                 "label": ch.get("label"),
                 "freq_khz": ch.get("freq_khz"),
                 "audio": ch.get("audio"),
+                "play": ch.get("play") or ch.get("audio"),
+                "wav": _wav_name(str(ch.get("audio") or "")),
                 "video": ch.get("video"),
                 "thumb": ch.get("thumb"),
                 "kiwi": kiwi.get("name"),
@@ -146,7 +183,7 @@ def list_vacations(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
         meta["id"] = meta.get("id") or folder.name
-        items.append(_decorate(meta))
+        items.append(_decorate(meta, folder))
     return items
 
 
@@ -161,7 +198,7 @@ def get_vacation(vacation_id: str, cfg: dict[str, Any] | None = None) -> dict[st
         return None
     meta["id"] = meta.get("id") or vacation_id
     meta["_dir"] = str(folder)
-    return _decorate(meta)
+    return _decorate(meta, folder)
 
 
 def media_path(vacation_id: str, filename: str, cfg: dict[str, Any] | None = None) -> Path | None:

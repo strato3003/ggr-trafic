@@ -183,33 +183,3 @@
     <p class="settings-msg" id="globe-buddy-msg" data-for="buddy" role="status" hidden></p>
   </fieldset>
 </form>
-
-<section class="visit-log" id="visit-log" aria-label="Journal des visites">
-  <h2>Journal visites</h2>
-  <p class="hint">Par IP, horodaté : pages (<code>/</code> accueil, <code>/trafic/…</code>) et replays réellement lancés. Jeton admin requis. Conservé 14 jours, hors Prometheus.
-    Le lieu est celui du <strong>préfixe IP chez le FAI</strong> (nœud / BAS), pas le GPS du foyer : un Orange Vendée apparaît souvent à Nantes / Vigneux-de-Bretagne. Région, code postal, FAI et reverse DNS décrivent ce nœud.</p>
-  <p class="visit-log__bar">
-    <label>
-      IP
-      <input id="visit-ip" type="text" inputmode="decimal" placeholder="toutes, ou coller une IP" autocomplete="off">
-    </label>
-    <button type="button" class="btn" id="visit-load">Afficher</button>
-  </p>
-  <p class="settings-msg" id="visit-msg" role="status" hidden></p>
-  <div class="visit-log__table-wrap">
-    <table class="visit-log__table">
-      <thead>
-        <tr>
-          <th>TU</th>
-          <th>IP</th>
-          <th>Lieu</th>
-          <th>Action</th>
-          <th>Cible</th>
-        </tr>
-      </thead>
-      <tbody id="visit-body">
-        <tr><td colspan="5">Coller le jeton, puis Afficher.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>

@@ -6,4 +6,13 @@ resources:
   - node-exporter.yaml
   - kube-state-metrics.yaml
   - prometheus.yaml
+  - loki.yaml
+  - promtail.yaml
   - grafana.yaml
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+  - name: k3s-grafana-dashboard-visites
+    namespace: monitoring
+    files:
+      - ggr-visites.json=dashboards/ggr-visites.json

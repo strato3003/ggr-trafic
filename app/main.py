@@ -213,16 +213,31 @@ async def api_replay_play(request: Request, trafic_id: str):
     return {"ok": True}
 
 
+@app.post("/api/nav")
+async def api_nav(request: Request):
+    """Ping UI : onglet hash ou ouverture mixer (pas d’admin)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    path = str((body or {}).get("path") or "")
+    from app import visitors
+
+    visitors.schedule_nav(request, path)
+    return {"ok": True}
+
+
 @app.get("/api/visits")
 async def api_visits(
     ip: str | None = None,
+    target: str | None = None,
     limit: int = 200,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
     _require_admin(x_admin_token)
     from app import visitlog
 
-    rows = visitlog.list_events(ip=ip, limit=limit)
+    rows = visitlog.list_events(ip=ip, target=target, limit=limit)
     return {"ok": True, "events": rows, "count": len(rows)}
 
 
@@ -337,6 +352,10 @@ async def media(trafic_id: str, filename: str):
     headers = {"Cache-Control": "public, max-age=86400"}
     if path.suffix.lower() == ".wav":
         return FileResponse(path, media_type="audio/wav", headers=headers)
+    if path.suffix.lower() == ".mp3":
+        return FileResponse(path, media_type="audio/mpeg", headers=headers)
+    if path.suffix.lower() in {".m4a", ".aac"}:
+        return FileResponse(path, media_type="audio/mp4", headers=headers)
     if path.suffix.lower() == ".png":
         return FileResponse(path, media_type="image/png", headers=headers)
     return FileResponse(path, headers=headers)

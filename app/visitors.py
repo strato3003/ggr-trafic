@@ -68,10 +68,15 @@ def is_page_visit(method: str, path: str) -> bool:
 
 
 def page_label(path: str) -> str:
-    """Chemin agrégé pour Prometheus (pas d’IP, pas de query-string)."""
+    """Chemin agrégé pour Prometheus / journal (pas d’IP, pas de query-string)."""
     raw = (path or "/").split("?", 1)[0]
     if not raw.startswith("/"):
         raw = "/" + raw
+    if raw.startswith("/#"):
+        tab = raw[2:].split("/", 1)[0].lower()
+        if tab in {"trafic", "metarea", "setup", "apropos"}:
+            return "/#" + tab
+        return "/"
     if raw != "/" and raw.endswith("/"):
         raw = raw.rstrip("/") or "/"
     if raw in _PAGE_EXACT:
@@ -79,6 +84,9 @@ def page_label(path: str) -> str:
     if raw.startswith("/trafic/"):
         vid = _lab(raw[8:].split("/", 1)[0], fallback="")
         return "/trafic/" + vid if vid else "/trafic"
+    if raw.startswith("/api/trafic/") and raw.endswith("/play"):
+        vid = _lab(raw[12:].split("/", 1)[0], fallback="")
+        return "/api/trafic/" + vid + "/play" if vid else "/api/trafic/play"
     return _lab(raw)[:80]
 
 
@@ -225,7 +233,7 @@ def _count_replay(ip: str, labels: dict[str, str], replay: str) -> None:
     visitlog.append(
         ip,
         "replay",
-        rid,
+        "/api/trafic/" + rid + "/play",
         labels.get("country") or "",
         labels.get("city") or "",
         region=labels.get("region") or "",
@@ -302,6 +310,50 @@ def schedule(request: Request) -> None:
         return
     _pending.add(ip)
     loop.create_task(_resolve_and_count(ip, path))
+
+
+def schedule_nav(request: Request, path: str) -> None:
+    """Onglets hash / ouverture mixer : URL telle qu’appelée, hors sondes."""
+    labeled = page_label(path)
+    if labeled not in {"/", "/#metarea", "/#setup", "/#apropos", "/#trafic"} and not labeled.startswith(
+        "/trafic/"
+    ):
+        return
+    if labeled == "/#trafic":
+        labeled = "/"
+    ip = client_ip(request)
+    if not ip:
+        return
+    cached = _geo_cache.get(ip)
+    if cached is not None:
+        _count(ip, cached, labeled)
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _count(ip, _geo_labels(None), labeled)
+        return
+    key = "nav:" + ip + ":" + labeled
+    if key in _pending:
+        return
+    _pending.add(key)
+    loop.create_task(_resolve_and_count_nav(ip, labeled, key))
+
+
+async def _resolve_and_count_nav(ip: str, path: str, key: str) -> None:
+    try:
+        labels = _geo_cache.get(ip)
+        if labels is None:
+            labels = _geo_labels(await geolocate(ip))
+            _geo_cache[ip] = labels
+        _count(ip, labels, path)
+    except Exception:
+        log.exception("Géoloc nav %s", ip.split(".")[0] + ".x")
+        labels = _geo_labels(None)
+        _geo_cache.setdefault(ip, labels)
+        _count(ip, labels, path)
+    finally:
+        _pending.discard(key)
 
 
 async def _resolve_and_count(ip: str, path: str) -> None:

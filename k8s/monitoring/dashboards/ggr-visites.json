@@ -1,0 +1,205 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "k3s + GGR Trafic",
+      "tooltip": "Agrégats Prometheus (sans IP)",
+      "type": "link",
+      "url": "/d/k3s-ggr-trafic"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "Prometheus reste aux **agrégats** (pas d’IP). Ici **Loki** : chaque accès horodaté.\n\nVariables **URL** et **IP** (sous-chaîne, regex échappée). Ex. URL `2026-09-20T1159Z-buddy` → qui a ouvert le mixer / Lecture. Ex. IP `90.37.x` → toutes les URL. Clic IP ou URL dans le tableau pour croiser. Vide = tout."
+      }
+    },
+    {
+      "title": "Volume (Loki)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 16, "x": 0, "y": 3 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~\".*${ip:regex}.*\" | target=~\".*${url:regex}.*\" [5m]))",
+          "legendFormat": "accès / 5 min",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Événements",
+      "type": "stat",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 3 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "reduceOptions": { "calcs": ["sum"] } },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~\".*${ip:regex}.*\" | target=~\".*${url:regex}.*\" [$__range]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Journal (ts · IP · URL)",
+      "description": "Clic IP → ses URL. Clic URL → qui l’a appelée.",
+      "type": "table",
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 10 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~\".*${ip:regex}.*\" | target=~\".*${url:regex}.*\"",
+          "queryType": "range",
+          "refId": "A",
+          "maxLines": 500
+        }
+      ],
+      "transformations": [
+        { "id": "extractFields", "options": { "source": "Line", "format": "json" } },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Line": true,
+              "id": true,
+              "labels": true,
+              "detected_level": true,
+              "ggr_visit": true,
+              "ts": true,
+              "labelTypes": true
+            },
+            "indexByName": {
+              "Time": 0,
+              "ip": 1,
+              "target": 2,
+              "kind": 3,
+              "city": 4,
+              "country": 5,
+              "region": 6,
+              "postal": 7,
+              "isp": 8,
+              "ptr": 9
+            },
+            "renameByName": {
+              "Time": "TU",
+              "ip": "IP",
+              "target": "URL",
+              "kind": "kind",
+              "city": "ville",
+              "country": "pays",
+              "isp": "FAI",
+              "ptr": "PTR"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "filterable": true } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "IP" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "URL de cette IP",
+                    "url": "/d/ggr-visites?orgId=1&${__url_time_range}&var-ip=${__value.text:percentencode}&var-url="
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "URL" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Qui a consulté cette URL",
+                    "url": "/d/ggr-visites?orgId=1&${__url_time_range}&var-url=${__value.text:percentencode}&var-ip="
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Flux Loki",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 24 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{job=\"ggr-trafic\"} |= \"ggr_visit\" | json | ggr_visit=\"true\" | ip=~\".*${ip:regex}.*\" | target=~\".*${url:regex}.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["k3s", "ggr-trafic", "loki"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "", "value": "" },
+        "hide": 0,
+        "label": "URL",
+        "name": "url",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": { "selected": false, "text": "", "value": "" },
+        "hide": 0,
+        "label": "IP",
+        "name": "ip",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "utc",
+  "title": "GGR visites",
+  "uid": "ggr-visites",
+  "version": 1
+}

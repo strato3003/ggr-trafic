@@ -16,6 +16,23 @@ data:
         url: http://prometheus.monitoring.svc:9090
         isDefault: true
         editable: false
+      - name: Loki
+        type: loki
+        access: proxy
+        uid: loki
+        url: http://loki.monitoring.svc:3100
+        editable: false
+        jsonData:
+          maxLines: 1000
+          derivedFields:
+            - datasourceUid: loki
+              matcherRegex: '"ip":"([^"]+)"'
+              name: IP
+              url: "/d/ggr-visites?var-ip=${__value.raw}"
+            - datasourceUid: loki
+              matcherRegex: '"target":"([^"]+)"'
+              name: URL
+              url: "/d/ggr-visites?var-url=${__value.raw}"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -48,7 +65,17 @@ data:
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
       "id": null,
-      "links": [],
+      "links": [
+        {
+          "asDropdown": false,
+          "icon": "dashboard",
+          "keepTime": true,
+          "title": "GGR visites (Loki)",
+          "tooltip": "Journal IP × URL",
+          "type": "link",
+          "url": "/d/ggr-visites"
+        }
+      ],
       "liveNow": false,
       "panels": [
         {
@@ -347,11 +374,11 @@ data:
         },
         {
           "title": "Journal par IP",
-          "description": "Prometheus agrège, il ne suit pas une adresse. Timeline page + replay : Setup → Journal visites (jeton admin).",
+          "description": "Prometheus agrège, sans IP. Timeline page + replay : dashboard GGR visites (Loki).",
           "type": "text",
           "gridPos": { "h": 3, "w": 24, "x": 0, "y": 48 },
           "options": {
-            "content": "Suivi d’une IP (horodatage TU, pages, replays joués) : [ggr-trafic.k3s.lpb.ovh → Setup → Journal visites](https://ggr-trafic.k3s.lpb.ovh/#setup). Les tableaux ci-dessous restent des totaux, sans adresse IP.",
+            "content": "Suivi d’une IP ou d’une URL (horodatage TU) : [GGR visites (Loki)](/d/ggr-visites). Les tableaux ci-dessous restent des totaux, sans adresse IP. Clic sur un enregistrement ou une page → qui l’a consulté.",
             "mode": "markdown"
           }
         },
@@ -376,7 +403,10 @@ data:
             "defaults": { "decimals": 0 },
             "overrides": [
               { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Lectures" }] },
-              { "matcher": { "id": "byName", "options": "replay" }, "properties": [{ "id": "displayName", "value": "Enregistrement" }] }
+              { "matcher": { "id": "byName", "options": "replay" }, "properties": [
+                { "id": "displayName", "value": "Enregistrement" },
+                { "id": "links", "value": [{ "title": "Qui a consulté (Loki)", "url": "/d/ggr-visites?var-url=${__value.raw}&${__url_time_range}" }] }
+              ] }
             ]
           }
         },
@@ -401,7 +431,10 @@ data:
             "defaults": { "decimals": 0 },
             "overrides": [
               { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Lectures" }] },
-              { "matcher": { "id": "byName", "options": "replay" }, "properties": [{ "id": "displayName", "value": "Enregistrement" }] },
+              { "matcher": { "id": "byName", "options": "replay" }, "properties": [
+                { "id": "displayName", "value": "Enregistrement" },
+                { "id": "links", "value": [{ "title": "Qui a consulté (Loki)", "url": "/d/ggr-visites?var-url=${__value.raw}&${__url_time_range}" }] }
+              ] },
               { "matcher": { "id": "byName", "options": "country" }, "properties": [{ "id": "displayName", "value": "Pays" }] },
               { "matcher": { "id": "byName", "options": "city" }, "properties": [{ "id": "displayName", "value": "Ville" }] }
             ]
@@ -428,7 +461,10 @@ data:
             "defaults": { "decimals": 0 },
             "overrides": [
               { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Visites" }] },
-              { "matcher": { "id": "byName", "options": "path" }, "properties": [{ "id": "displayName", "value": "Page" }] }
+              { "matcher": { "id": "byName", "options": "path" }, "properties": [
+                { "id": "displayName", "value": "Page" },
+                { "id": "links", "value": [{ "title": "Qui a consulté (Loki)", "url": "/d/ggr-visites?var-url=${__value.raw}&${__url_time_range}" }] }
+              ] }
             ]
           }
         },
@@ -453,7 +489,10 @@ data:
             "defaults": { "decimals": 0 },
             "overrides": [
               { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Visites" }] },
-              { "matcher": { "id": "byName", "options": "path" }, "properties": [{ "id": "displayName", "value": "Page" }] },
+              { "matcher": { "id": "byName", "options": "path" }, "properties": [
+                { "id": "displayName", "value": "Page" },
+                { "id": "links", "value": [{ "title": "Qui a consulté (Loki)", "url": "/d/ggr-visites?var-url=${__value.raw}&${__url_time_range}" }] }
+              ] },
               { "matcher": { "id": "byName", "options": "country" }, "properties": [{ "id": "displayName", "value": "Pays" }] },
               { "matcher": { "id": "byName", "options": "city" }, "properties": [{ "id": "displayName", "value": "Ville" }] }
             ]
@@ -551,8 +590,12 @@ spec:
           configMap:
             name: k3s-grafana-dashboard-provider
         - name: dash
-          configMap:
-            name: k3s-grafana-dashboard
+          projected:
+            sources:
+              - configMap:
+                  name: k3s-grafana-dashboard
+              - configMap:
+                  name: k3s-grafana-dashboard-visites
 ---
 apiVersion: v1
 kind: Service

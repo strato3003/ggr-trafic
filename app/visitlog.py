@@ -1,9 +1,11 @@
-"""Journal horodaté des visites (IP, page, replay). Pas exposé dans Prometheus."""
+"""Journal horodaté des visites (IP, page, replay). Pas d’IP dans Prometheus : ligne JSON stdout → Loki."""
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
+import sys
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -112,29 +114,63 @@ def append(
             cutoff = (datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)).isoformat()
             conn.execute("DELETE FROM events WHERE ts < ?", (cutoff,))
             conn.commit()
+        _emit_json(
+            {
+                "ggr_visit": True,
+                "ts": ts,
+                "ip": ip,
+                "kind": kind,
+                "target": target,
+                "country": country,
+                "city": city,
+                "region": region,
+                "postal": postal,
+                "isp": isp,
+                "ptr": ptr,
+            }
+        )
     except Exception:
         log.exception("Journal visites")
 
 
-def list_events(ip: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+def _emit_json(payload: dict[str, Any]) -> None:
+    """Une ligne JSON sur stdout (Promtail / Loki). Pas de label IP."""
+    try:
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+
+def list_events(
+    ip: str | None = None,
+    target: str | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
     n = max(1, min(int(limit or 200), 500))
     ip_f = (ip or "").strip()
+    tgt = (target or "").strip()[:120]
+    cols = "ts, ip, country, city, region, postal, isp, latitude, longitude, ptr, kind, target"
     with _lock:
         conn = _conn()
-        if ip_f:
+        if ip_f and tgt:
             rows = conn.execute(
-                """
-                SELECT ts, ip, country, city, region, postal, isp, latitude, longitude, ptr, kind, target
-                FROM events WHERE ip = ? ORDER BY ts DESC LIMIT ?
-                """,
+                f"SELECT {cols} FROM events WHERE ip = ? AND instr(target, ?) > 0 ORDER BY ts DESC LIMIT ?",
+                (ip_f, tgt, n),
+            ).fetchall()
+        elif ip_f:
+            rows = conn.execute(
+                f"SELECT {cols} FROM events WHERE ip = ? ORDER BY ts DESC LIMIT ?",
                 (ip_f, n),
+            ).fetchall()
+        elif tgt:
+            rows = conn.execute(
+                f"SELECT {cols} FROM events WHERE instr(target, ?) > 0 ORDER BY ts DESC LIMIT ?",
+                (tgt, n),
             ).fetchall()
         else:
             rows = conn.execute(
-                """
-                SELECT ts, ip, country, city, region, postal, isp, latitude, longitude, ptr, kind, target
-                FROM events ORDER BY ts DESC LIMIT ?
-                """,
+                f"SELECT {cols} FROM events ORDER BY ts DESC LIMIT ?",
                 (n,),
             ).fetchall()
     return [dict(r) for r in rows]

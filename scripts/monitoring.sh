@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Supervision k3s dans le NS monitoring (Prometheus, Grafana dédié).
+# Supervision k3s dans le NS monitoring (Prometheus, Loki, Grafana dédié).
 # Ne touche PAS au Grafana applicatif https://dashboard.k3s.lpb.ovh (NS grafana).
 # À lancer sur le VPS, hors 12:00 / 18:00 TU.
 set -euo pipefail
@@ -39,7 +39,9 @@ echo "Manifests monitoring (sans NS grafana)…"
 kc apply -k "$ROOT/k8s/monitoring"
 kc apply -f "$ROOT/k8s/monitoring/traefik-clientip.yaml"
 kc -n monitoring rollout restart deploy/prometheus
+kc -n monitoring rollout restart deploy/loki
 kc -n monitoring rollout restart deploy/k3s-grafana
+kc -n monitoring rollout restart ds/promtail
 
 # Plus d’Alertmanager (pas d’alertes mail).
 kc -n monitoring delete deploy alertmanager --ignore-not-found
@@ -47,7 +49,10 @@ kc -n monitoring delete svc alertmanager --ignore-not-found
 kc -n monitoring delete secret alertmanager-config --ignore-not-found
 
 kc -n monitoring rollout status deploy/prometheus --timeout=180s
+kc -n monitoring rollout status deploy/loki --timeout=180s
 kc -n monitoring rollout status deploy/kube-state-metrics --timeout=120s
+kc -n monitoring rollout status ds/promtail --timeout=120s
 kc -n monitoring rollout status deploy/k3s-grafana --timeout=180s
 
 echo "Grafana k3s : https://monitoring.k3s.lpb.ovh  (indépendant de dashboard.k3s.lpb.ovh)"
+echo "Journal visites (Loki) : https://monitoring.k3s.lpb.ovh/d/ggr-visites"

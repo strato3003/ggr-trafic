@@ -119,7 +119,10 @@ make run          # http://127.0.0.1:8080
 
 Le Grafana applicatif [https://dashboard.k3s.lpb.ovh](https://dashboard.k3s.lpb.ovh) n’est **pas** modifié.
 
-Un Grafana **k3s** séparé : [https://monitoring.k3s.lpb.ovh](https://monitoring.k3s.lpb.ovh) (agrégats). Le **journal par IP** (horodatage, pages, replays) est dans l’app : Setup → Journal visites (jeton admin, 14 jours).
+Un Grafana **k3s** séparé : [https://monitoring.k3s.lpb.ovh](https://monitoring.k3s.lpb.ovh).
+
+- **Prometheus** : agrégats (pages, replays, nœud) — **sans IP**.
+- **Loki** : chaque accès horodaté. Dashboard [GGR visites](https://monitoring.k3s.lpb.ovh/d/ggr-visites) : filtrer une **URL** (ex. dernier buddy `2026-09-20T1159Z-buddy`) pour voir qui, ou une **IP** pour voir les URL. Clic dans le tableau pour croiser. Rétention 14 jours.
 
 Sur le VPS, hors 12:00 / 18:00 TU :
 

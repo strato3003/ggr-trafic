@@ -23,7 +23,7 @@ from recorder.kiwi_list import (
     fetch_ranked_kiwis,
     pick_nearest,
 )
-from recorder.postprocess import mux_screencast, thumbnail
+from recorder.postprocess import encode_mixer_play, mux_screencast, thumbnail
 from recorder.screencast import record_screencast
 from recorder.spectrogram import write_channel_waterfall
 from recorder.kiwi_wf import HUNT_CF_KHZ, HUNT_HI_KHZ, HUNT_LO_KHZ, HUNT_ZOOM, hunt_usb_signal
@@ -1040,7 +1040,7 @@ def recover_orphaned(cfg: dict[str, Any] | None = None) -> int:
 
 
 def finalize_pending_sessions(cfg: dict[str, Any] | None = None) -> int:
-    """Mux WAV/WebM restants et backfill des waterfalls USB, une fois l’UI déjà joignable."""
+    """Mux WAV/WebM restants, backfill waterfalls USB et MP3 mixer, une fois l’UI déjà joignable."""
     cfg = cfg or load_config()
     vac_root = data_dir(cfg) / "vacations"
     if not vac_root.exists():
@@ -1119,8 +1119,16 @@ def _apply_waterfalls(session_dir: Path, jobs: list[tuple[dict[str, Any], Path]]
                 ch.pop("waterfall", None)
 
 
+def _apply_mixer_play(jobs: list[tuple[dict[str, Any], Path]]) -> None:
+    """MP3/M4A mixer en arrière-plan (idempotent). Le WAV reste sur le disque."""
+    if not jobs:
+        return
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        list(pool.map(lambda pair: encode_mixer_play(pair[1]), jobs))
+
+
 def _finalize_media(session_dir: Path, meta: dict[str, Any]) -> None:
-    """Mux WAV/WebM restants et fige le waterfall USB de chaque voie."""
+    """Mux WAV/WebM restants, waterfall USB, puis MP3 mixer."""
     channels = meta.setdefault("channels", [])
     wav_jobs: list[tuple[dict[str, Any], Path]] = []
     for ch in channels:
@@ -1156,6 +1164,7 @@ def _finalize_media(session_dir: Path, meta: dict[str, Any]) -> None:
             _mux_channel(session_dir, host, max(leftovers, key=lambda p: p.stat().st_size))
 
     _apply_waterfalls(session_dir, wav_jobs)
+    _apply_mixer_play(wav_jobs)
 
 
 def _write_meta(session_dir: Path, meta: dict[str, Any]) -> None:

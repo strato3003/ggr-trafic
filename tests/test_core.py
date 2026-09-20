@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 from datetime import datetime, timezone
 
@@ -374,12 +375,57 @@ def test_mixer_tracks_include_silent_channels():
     assert [t["id"] for t in meta["mixer_tracks"]] == ["nvis-main", "far-alt"]
     assert meta["mixer_tracks"][0]["place"] == "Amarante, Portugal"
     assert meta["mixer_tracks"][0]["src"] == "audio-nvis-main.wav"
+    assert meta["mixer_tracks"][0]["wav"] == "audio-nvis-main.wav"
     assert meta["mixer_tracks"][0]["has_audio"] is True
     assert meta["mixer_tracks"][0]["waterfall"] == "waterfall-nvis-main.png"
     assert meta["mixer_tracks"][1]["has_audio"] is False
     assert not meta["mixer_tracks"][1]["src"]
     assert not meta["mixer_tracks"][1]["waterfall"]
     assert meta["sdrs"] == 1
+
+
+def test_mixer_tracks_prefers_mp3(tmp_path):
+    from app.store import _decorate
+
+    (tmp_path / "audio-nvis-main.mp3").write_bytes(b"ID3" + b"\x00" * 80)
+    meta = _decorate(
+        {
+            "channels": [
+                {
+                    "id": "nvis-main",
+                    "audio": "audio-nvis-main.wav",
+                    "freq_khz": 4483.0,
+                    "kiwi": {"loc": "Amarante, Portugal"},
+                }
+            ]
+        },
+        tmp_path,
+    )
+    assert meta["mixer_tracks"][0]["src"] == "audio-nvis-main.mp3"
+    assert meta["mixer_tracks"][0]["wav"] == "audio-nvis-main.wav"
+    assert meta["channels"][0]["play"] == "audio-nvis-main.mp3"
+
+
+def test_encode_mixer_play_keeps_wav(tmp_path):
+    import shutil
+
+    import pytest
+
+    from recorder import postprocess
+
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg absent")
+    postprocess._encoder = None
+    wav = tmp_path / "audio-tx.wav"
+    _write_tone_wav(wav, seconds=0.4)
+    out = postprocess.encode_mixer_play(wav)
+    if out is None:
+        pytest.skip("pas d'encodeur mp3/aac dans ffmpeg")
+    assert out.suffix.lower() in {".mp3", ".m4a"}
+    assert out.stat().st_size > 64
+    assert wav.is_file()
+    again = postprocess.encode_mixer_play(wav)
+    assert again == out
 
 
 def test_finalize_pending_promotes_orphan_with_audio(tmp_path):
@@ -1159,6 +1205,12 @@ def test_visitors_records_trafic_path(tmp_path, monkeypatch):
     assert hits
     assert visitors.page_label("/trafic/2026-09-19T1159Z-buddy/") == "/trafic/2026-09-19T1159Z-buddy"
     assert visitors.page_label("/") == "/"
+    assert visitors.page_label("/#metarea") == "/#metarea"
+    assert visitors.page_label("/#setup") == "/#setup"
+    assert visitors.page_label("/#apropos") == "/#apropos"
+    assert visitors.page_label("/api/trafic/2026-09-20T1159Z-buddy/play") == (
+        "/api/trafic/2026-09-20T1159Z-buddy/play"
+    )
 
 
 def test_visitlog_ip_timeline(tmp_path, monkeypatch):
@@ -1191,6 +1243,27 @@ def test_visitlog_ip_timeline(tmp_path, monkeypatch):
     assert "T" in mine[0]["ts"]
     all_rows = visitlog.list_events()
     assert len(all_rows) == 3
+    buddy = visitlog.list_events(target="buddy")
+    assert len(buddy) == 1
+    assert buddy[0]["target"] == "2026-09-19T1159Z-buddy"
+    both = visitlog.list_events(ip="8.8.8.8", target="/")
+    assert [e["target"] for e in both] == ["/"]
+
+
+def test_visitlog_stdout_json_line(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from app import visitlog
+
+    visitlog.reset_for_tests()
+    visitlog.append("9.9.9.9", "page", "/#metarea", "France", "Paris")
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if '"ggr_visit"' in ln]
+    assert lines
+    payload = json.loads(lines[-1])
+    assert payload["ggr_visit"] is True
+    assert payload["ip"] == "9.9.9.9"
+    assert payload["target"] == "/#metarea"
+    assert payload["kind"] == "page"
+    assert "T" in payload["ts"]
 
 
 def test_geo_labels_keeps_isp_out_of_prometheus():
@@ -1242,6 +1315,33 @@ def test_visitors_records_replay_play(tmp_path, monkeypatch):
         and s.labels.get("city") == "Ashburn"
     ]
     assert hits
+    rows = visitlog.list_events(ip="8.8.8.8")
+    assert rows[0]["kind"] == "replay"
+    assert rows[0]["target"] == "/api/trafic/2026-09-19T1159Z-buddy/play"
+
+
+def test_visitors_records_nav_urls(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from app import visitlog, visitors
+
+    visitlog.reset_for_tests()
+    visitors.reset_for_tests()
+    visitors._geo_cache["8.8.8.8"] = {
+        "country": "France",
+        "city": "Paris",
+        "latitude": "48.86",
+        "longitude": "2.35",
+    }
+    req = _starlette_request("/api/nav", method="POST", forwarded="8.8.8.8")
+    visitors.schedule_nav(req, "/#metarea")
+    visitors.schedule_nav(req, "/trafic/2026-09-20T1159Z-buddy")
+    visitors.schedule_nav(req, "/#trafic")
+    visitors.schedule_nav(req, "/admin")
+    targets = [e["target"] for e in visitlog.list_events(ip="8.8.8.8")]
+    assert "/#metarea" in targets
+    assert "/trafic/2026-09-20T1159Z-buddy" in targets
+    assert "/" in targets
+    assert "/admin" not in targets
 
 
 def _pip(lon: float, lat: float, ring: list) -> bool:
