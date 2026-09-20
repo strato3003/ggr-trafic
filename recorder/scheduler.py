@@ -1,4 +1,4 @@
-"""Planification : bulletin F6KUF lundi et jeudi 18:00 TU, buddy call 12:00 TU."""
+"""Planification : F6KUF lundi et jeudi 18:00 TU, Michel FO5QB tous les jours, buddy 12:00 TU."""
 
 from __future__ import annotations
 
@@ -31,9 +31,22 @@ def _buddy_lead(cfg: dict) -> tuple[int, int]:
     return _hhmm_lead(str(buddy.get("time_utc") or "12:00"), int(buddy.get("lead_minutes") or 1))
 
 
-def _vacation_dow(cfg: dict) -> str:
-    """mon,thu — jours UTC du bulletin F6KUF."""
-    return ",".join(schedule_days(cfg))
+def _vacation_dow(cfg: dict) -> str | None:
+    """Jours UTC du cron bulletin. None = tous les jours (Michel FO5QB)."""
+    from recorder.config import tahiti_daily
+
+    if tahiti_daily(cfg):
+        return None
+    return ",".join(schedule_days(cfg)) or "mon,thu"
+
+
+def _vacation_trigger(cfg: dict) -> CronTrigger:
+    hour, minute = _lead(cfg)
+    dow = _vacation_dow(cfg)
+    kwargs: dict = {"hour": hour, "minute": minute, "timezone": "UTC"}
+    if dow:
+        kwargs["day_of_week"] = dow
+    return CronTrigger(**kwargs)
 
 
 def _add_buddy_job(scheduler: AsyncIOScheduler, cfg: dict) -> None:
@@ -57,7 +70,7 @@ def build_scheduler(cfg: dict | None = None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
         run_vacation,
-        CronTrigger(hour=hour, minute=minute, day_of_week=dow, timezone="UTC"),
+        _vacation_trigger(cfg),
         kwargs={"reason": "schedule"},
         id="ggr-vacation",
         replace_existing=True,
@@ -70,7 +83,7 @@ def build_scheduler(cfg: dict | None = None) -> AsyncIOScheduler:
         id="ggr-purge",
         replace_existing=True,
     )
-    log.info("Planification : bulletin %s %02d:%02d TU", dow, hour, minute)
+    log.info("Planification : bulletin %s %02d:%02d TU", dow or "tous les jours", hour, minute)
     if (cfg.get("buddy") or {}).get("enabled", True):
         _add_buddy_job(scheduler, cfg)
     return scheduler
@@ -80,11 +93,8 @@ def apply_vacation_schedule(scheduler: AsyncIOScheduler, cfg: dict) -> None:
     """Recale le cron après un changement d’heure / d’avance dans Réglages."""
     hour, minute = _lead(cfg)
     dow = _vacation_dow(cfg)
-    scheduler.reschedule_job(
-        "ggr-vacation",
-        trigger=CronTrigger(hour=hour, minute=minute, day_of_week=dow, timezone="UTC"),
-    )
-    log.info("Planification bulletin mise à jour : %s %02d:%02d TU", dow, hour, minute)
+    scheduler.reschedule_job("ggr-vacation", trigger=_vacation_trigger(cfg))
+    log.info("Planification bulletin mise à jour : %s %02d:%02d TU", dow or "tous les jours", hour, minute)
     apply_buddy_schedule(scheduler, cfg)
 
 

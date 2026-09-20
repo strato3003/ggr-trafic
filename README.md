@@ -1,15 +1,15 @@
-# GGR Trafic 1.1.8
+# GGR Trafic 1.1.9
 
 Archives du **trafic HF** entre le radio-club **F6KUF** et les bateaux de la flotte **Golden Globe Race**.
 
-Le **lundi et le jeudi** à **18:00 TU**, F6KUF émet un bulletin météo sur **14.135 MHz USB** (VFO calé sur 14.135000 ; le test radio manuel peut encore chasser ± 5 kHz) et écoute les accusés de réception sur **16.551 MHz USB** et **12.418 MHz USB** (± 5 kHz). Après le **cap de Bonne-Espérance** (34°21′26″S 18°28′24″E), l’émission 14.135 MHz est celle de **Michel depuis Tahiti**, jusqu’au cap Horn. Tous les jours à **12:00 TU**, un **buddy call** est écouté sur **4483 kHz USB** (principale) et **6516 kHz USB** (secours). L’application choisit les [KiwiSDR](http://kiwisdr.com/) selon la position : **bulletin 14.135 MHz** sur un récepteur près de l’émetteur **et** un près de la flotte ; **ACK** en parallèle près des bateaux, **en France** et **vers Tahiti** ; **buddy call** sur plusieurs récepteurs en NVIS et en saut 1 hop vers le centroïde des skippers suivis (défaut : Damien Guillou, Etienne Messikommer, Louis Kerdelhue). Audio USB + **screencast** de l’interface SDR pour le replay.
+Le **lundi et le jeudi** à **18:00 TU**, F6KUF émet un bulletin météo sur **14.135 MHz USB** (VFO calé sur 14.135000 ; le test radio manuel peut encore chasser ± 5 kHz) et écoute les accusés de réception sur **16.551 MHz USB** et **12.418 MHz USB** (± 5 kHz). Cette semaine : **Philippe F4HWM / F6KUF** depuis **Talmont-Saint-Hilaire**. **Michel FO5QB / F6KUF** (Tahiti) émet **tous les jours** à **18:00 TU** sur la même QRG. Après le **cap de Bonne-Espérance** (34°21′26″S 18°28′24″E), l’émission 14.135 MHz suivie en priorité est celle de Michel, jusqu’au cap Horn. Tous les jours à **12:00 TU**, un **buddy call** est écouté sur **4483 kHz USB** (principale) et **6516 kHz USB** (secours). L’application choisit les [KiwiSDR](http://kiwisdr.com/) selon la position : **bulletin 14.135 MHz** sur un récepteur près de l’émetteur **et** un près de la flotte ; **ACK** en parallèle près des bateaux, **en France** et **vers Tahiti** ; **buddy call** sur plusieurs récepteurs en NVIS et en saut 1 hop vers le centroïde des skippers suivis (défaut : Damien Guillou, Etienne Messikommer, Louis Kerdelhue). Audio USB + **screencast** de l’interface SDR pour le replay.
 
 Les trois QRG, la tolérance, l’avance et la durée se règlent dans l’UI (**Réglages**). Un **record immédiat** permet de tester le suivi ± 5 kHz sans attendre 18:00 TU.
 
 ## Fonctionnement
 
 1. **Flotte** — centroïde des bateaux en course via le tracker Yellowbrick (`/BIN/ggr2026/AllPositions3`). Buddy call : centroïde d’un sous-ensemble de skippers (trio par défaut, ou trio + flotte).
-2. **SDR** — bulletin : un Kiwi près de l’émetteur (**F6KUF**, puis **Tahiti** après Bonne-Espérance) **et** un près de la flotte ; ACK : un Kiwi près de la flotte, un en France (≤ 1500 km des Sables-d’Olonne), un vers Tahiti / Papeete (≤ 2500 km). Buddy : plusieurs Kiwi qui couvrent **4483** et **6516 kHz**, NVIS proche + saut 1 hop (~1400–3200 km à 12:00 TU), pas seulement le plus proche.
+2. **SDR** — bulletin : un Kiwi près de chaque émetteur encore audible (**Philippe / F6KUF** lun. et jeu., **Michel** tous les jours, **Cap Town** en zone SA) **et** un près de la flotte ; ACK : un Kiwi près de la flotte, un en France (≤ 1500 km de Talmont-Saint-Hilaire), un vers Tahiti / Papeete (≤ 2500 km). Buddy : plusieurs Kiwi qui couvrent **4483** et **6516 kHz**, NVIS proche + saut 1 hop (~1400–3200 km à 12:00 TU), pas seulement le plus proche.
 3. **Enregistrement** — 1 minute avant 18:00 TU, pendant 10 minutes (configurable) :
    - VFO calé sur **14.135000 MHz USB** (pas de chasse sur le bulletin programmé) puis screencast Playwright près de l’émetteur ;
    - WAV 12 kHz sur le bulletin (émetteur + flotte) **et** les deux QRG d’accusé **en même temps**, aux trois sites ;
@@ -94,7 +94,7 @@ Défauts dans [`config/default.yaml`](config/default.yaml) ; overrides runtime d
 
 | Paramètre | Valeur |
 | --- | --- |
-| Bulletin | 14.135 MHz USB, QRG 14.135000, lundi et jeudi 18:00 TU |
+| Bulletin | 14.135 MHz USB, QRG 14.135000 ; F6KUF lundi et jeudi 18:00 TU (cette semaine Philippe F4HWM, Talmont-Saint-Hilaire) ; Michel FO5QB tous les jours 18:00 TU |
 | Accusé | 16.551 MHz USB, 12.418 MHz USB (± 5 kHz ; flotte + France + Tahiti, en parallèle du bulletin) |
 | Buddy call | 4483 kHz USB (principale), 6516 kHz USB (secours), 12:00 TU, 15 min |
 | Centroïde buddy | Damien Guillou, Etienne Messikommer, Louis Kerdelhue (modifiable ; option « + flotte ») |

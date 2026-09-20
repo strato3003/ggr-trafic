@@ -61,7 +61,7 @@ def test_vacation_id_utc():
 
 
 def test_next_vacation_before_slot():
-    cfg = {"schedule": {"time_utc": "18:00", "lead_minutes": 10, "days": ["mon", "thu"]}}
+    cfg = {"schedule": {"time_utc": "18:00", "lead_minutes": 10, "days": ["mon", "thu"], "tahiti_daily": False}}
     now = datetime(2026, 9, 7, 10, 0, tzinfo=timezone.utc)
     nxt = next_vacation_utc(cfg, now)
     assert nxt.hour == 17 and nxt.minute == 50
@@ -69,7 +69,7 @@ def test_next_vacation_before_slot():
 
 
 def test_next_vacation_skips_to_thursday_then_monday():
-    cfg = {"schedule": {"time_utc": "18:00", "lead_minutes": 1, "days": ["mon", "thu"]}}
+    cfg = {"schedule": {"time_utc": "18:00", "lead_minutes": 1, "days": ["mon", "thu"], "tahiti_daily": False}}
     tuesday = datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc)
     nxt = next_vacation_utc(cfg, tuesday)
     assert nxt.date() == datetime(2026, 9, 10).date()
@@ -88,13 +88,24 @@ def test_schedule_days_default_mon_thu():
     qrg = qrg_context({"schedule": {"time_utc": "18:00", "days": ["mon", "thu"]}})
     assert qrg["schedule_days_label"] == "lundi et jeudi"
     assert qrg["schedule_days_short"] == "lun. et jeu."
+    assert qrg["tahiti_daily"] is True
+    assert "Michel tlj" in qrg["schedule_ident_short"]
+
+
+def test_next_vacation_tahiti_daily_records_tuesday():
+    cfg = {"schedule": {"time_utc": "18:00", "lead_minutes": 1, "days": ["mon", "thu"], "tahiti_daily": True}}
+    tuesday = datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc)
+    nxt = next_vacation_utc(cfg, tuesday)
+    assert nxt.date() == datetime(2026, 9, 8).date()
+    assert nxt.hour == 17 and nxt.minute == 59
 
 
 def test_scheduler_cron_is_1759_with_one_minute_lead():
     from recorder.scheduler import _lead, _vacation_dow
 
     assert _lead({"schedule": {"time_utc": "18:00", "lead_minutes": 1}}) == (17, 59)
-    assert _vacation_dow({"schedule": {"days": ["mon", "thu"]}}) == "mon,thu"
+    assert _vacation_dow({"schedule": {"days": ["mon", "thu"], "tahiti_daily": False}}) == "mon,thu"
+    assert _vacation_dow({"schedule": {"tahiti_daily": True}}) is None
 
 
 def test_next_recording_picks_buddy_in_the_morning():
@@ -953,6 +964,10 @@ def test_parse_tx_sites_max_five_and_empty_rows():
     assert len(rows) == 5
     assert rows[0]["label"] == "F6KUF"
     assert rows[1]["label"] == "Émission 2"
+    with_loc = parse_tx_sites(
+        [{"label": "Philippe F4HWM / F6KUF", "loc": "Talmont-Saint-Hilaire, Vendée", "lat": 46.46806, "lon": -1.61694}]
+    )
+    assert with_loc[0]["loc"] == "Talmont-Saint-Hilaire, Vendée"
     try:
         parse_tx_sites(rows + [{"label": "D", "lat": 4, "lon": 4}])
         raise AssertionError("expected max 5")
@@ -1231,9 +1246,11 @@ def test_fleet_uses_tahiti_tx_after_cape_of_good_hope():
     assert fleet_uses_tahiti_tx(-45.0, -120.0)  # Pacifique, ouest du Horn
     assert not fleet_uses_tahiti_tx(-50.0, -40.0)  # Atlantique après Horn
     cfg = {"sdr": {"sites": {}}}
+    tuesday = datetime(2026, 9, 8, 18, 0, tzinfo=timezone.utc)
     assert bulletin_tx_qth(cfg, 28.0, -15.0)["id"] == "france"
+    assert bulletin_tx_qth(cfg, 28.0, -15.0, when=tuesday)["id"] == "tahiti"
     assert bulletin_tx_qth(cfg, -35.0, 25.0)["id"] == "tahiti"
-    assert bulletin_tx_qth(cfg, -35.0, 25.0)["label"] == "Tahiti"
+    assert bulletin_tx_qth(cfg, -35.0, 25.0)["label"] == "Michel FO5QB / F6KUF"
 
 
 def test_bulletin_tx_qths_overlap_france_cape_tahiti():
@@ -1241,15 +1258,16 @@ def test_bulletin_tx_qths_overlap_france_cape_tahiti():
 
     cfg = {"sdr": {"sites": {}}}
 
-    def ids(lat, lon, boats=None):
-        return [q["id"] for q in bulletin_tx_qths(cfg, lat, lon, boats=boats)]
+    def ids(lat, lon, boats=None, include_france=True):
+        return [q["id"] for q in bulletin_tx_qths(cfg, lat, lon, boats=boats, include_france=include_france)]
 
-    assert ids(28.0, -15.0) == ["france"]
+    assert ids(28.0, -15.0) == ["france", "tahiti"]
+    assert ids(28.0, -15.0, include_france=False) == ["tahiti"]
     assert ids(-35.0, 10.0) == ["france", "cape", "tahiti"]
     assert ids(-35.0, 25.0) == ["france", "cape", "tahiti"]
     assert ids(-40.0, 70.0) == ["tahiti"]
     assert ids(-45.0, -120.0) == ["tahiti"]
-    assert ids(-50.0, -40.0) == ["france"]
+    assert ids(-50.0, -40.0) == ["france", "tahiti"]
 
     split = [
         {"lat": 28.0, "lon": -15.0, "name": "Atlantique"},

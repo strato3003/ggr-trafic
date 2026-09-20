@@ -371,9 +371,9 @@ _FLEET_EXTREME_MIN_KM = 400.0
 _FLEET_ACK_RADIUS_KM = 2500.0
 
 _SDR_SITE_DEFAULTS: dict[str, dict[str, Any]] = {
-    "france": {"label": "F6KUF", "lat": 46.5025, "lon": -1.7888, "radius_km": 1500.0},
+    "france": {"label": "Philippe F4HWM / F6KUF", "lat": 46.46806, "lon": -1.61694, "radius_km": 1500.0},
     "cape": {"label": "Cap Town", "lat": -33.9249, "lon": 18.4241, "radius_km": 2000.0},
-    "tahiti": {"label": "Tahiti", "lat": -17.5350, "lon": -149.5697, "radius_km": 2500.0},
+    "tahiti": {"label": "Michel FO5QB / F6KUF", "lat": -17.5350, "lon": -149.5697, "radius_km": 2500.0},
 }
 
 
@@ -449,13 +449,20 @@ def bulletin_tx_qths(
     fleet_lat: float,
     fleet_lon: float,
     boats: list[dict[str, Any]] | None = None,
+    *,
+    when: datetime | None = None,
+    include_france: bool | None = None,
 ) -> list[dict[str, Any]]:
-    """QTH 14.135 encore utiles : France, Cap Town et Tahiti peuvent coexister."""
+    """QTH 14.135 : F6KUF les jours de bulletin, Michel tous les jours, Cap Town en zone SA."""
+    from recorder.config import france_bulletin_day, tahiti_daily
+
     points = _boat_points(boats, fleet_lat, fleet_lon)
+    if include_france is None:
+        include_france = True if when is None else france_bulletin_day(cfg, when)
     want = {
-        "france": any(boat_hears_france(lat, lon) for lat, lon in points),
+        "france": bool(include_france) and any(boat_hears_france(lat, lon) for lat, lon in points),
         "cape": any(boat_hears_cape(lat, lon) for lat, lon in points),
-        "tahiti": any(boat_hears_tahiti(lat, lon) for lat, lon in points),
+        "tahiti": tahiti_daily(cfg) or any(boat_hears_tahiti(lat, lon) for lat, lon in points),
     }
     if not any(want.values()):
         want["tahiti"] = fleet_uses_tahiti_tx(fleet_lat, fleet_lon)
@@ -463,9 +470,18 @@ def bulletin_tx_qths(
     return [_sdr_site(cfg, key) for key in ("france", "cape", "tahiti") if want[key]]
 
 
-def bulletin_tx_qth(cfg: dict[str, Any], fleet_lat: float, fleet_lon: float) -> dict[str, Any]:
-    """QTH principal (screencast) : F6KUF, ou Tahiti après le cap — d’après le centroïde."""
+def bulletin_tx_qth(
+    cfg: dict[str, Any],
+    fleet_lat: float,
+    fleet_lon: float,
+    when: datetime | None = None,
+) -> dict[str, Any]:
+    """QTH principal (screencast) : F6KUF les jours de bulletin, sinon Michel."""
+    from recorder.config import france_bulletin_day
+
     if fleet_uses_tahiti_tx(fleet_lat, fleet_lon):
+        return _sdr_site(cfg, "tahiti")
+    if when is not None and not france_bulletin_day(cfg, when):
         return _sdr_site(cfg, "tahiti")
     return _sdr_site(cfg, "france")
 
@@ -521,6 +537,7 @@ def assign_vacation_kiwis(
     fleet_lon: float,
     cfg: dict[str, Any],
     boats: list[dict[str, Any]] | None = None,
+    when: datetime | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Bulletin 14.135 : Kiwi de chaque QTH encore audible + Kiwi flotte (centroïde / extrêmes).
 
@@ -532,8 +549,8 @@ def assign_vacation_kiwis(
     out: dict[str, dict[str, Any]] = {}
     used: set[str] = set()
     points = _boat_points(boats, fleet_lat, fleet_lon)
-    qths = bulletin_tx_qths(cfg, fleet_lat, fleet_lon, boats=boats)
-    club = bulletin_tx_qth(cfg, fleet_lat, fleet_lon)
+    qths = bulletin_tx_qths(cfg, fleet_lat, fleet_lon, boats=boats, when=when)
+    club = bulletin_tx_qth(cfg, fleet_lat, fleet_lon, when=when)
 
     def bind(
         role: str,

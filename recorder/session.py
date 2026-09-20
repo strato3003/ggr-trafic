@@ -179,12 +179,17 @@ def _pick_kiwis(
 
 
 def next_vacation_utc(cfg: dict[str, Any], now: datetime | None = None) -> datetime:
-    """Prochain début d’enregistrement bulletin (avance comprise), lundi et jeudi par défaut."""
+    """Prochain début d’enregistrement bulletin (avance comprise).
+
+    F6KUF : lundi et jeudi. Michel FO5QB : tous les jours si schedule.tahiti_daily.
+    """
+    from recorder.config import tahiti_daily
+
     sched = cfg.get("schedule") or {}
     hh, mm = (sched.get("time_utc") or "18:00").split(":")
     lead = int(sched.get("lead_minutes") or 1)
     now = now or datetime.now(timezone.utc)
-    allowed = set(schedule_days(cfg))
+    allowed = set(WEEKDAY_KEYS) if tahiti_daily(cfg) else set(schedule_days(cfg))
     start = now.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0) - timedelta(minutes=lead)
     for _ in range(14):
         if start > now and WEEKDAY_KEYS[start.weekday()] in allowed:
@@ -441,13 +446,15 @@ async def run_vacation(
             fleet_lon=float(fleet["lon"]),
             cfg=cfg,
             boats=core,
+            when=started,
         )
-        club = bulletin_tx_qth(cfg, float(fleet["lat"]), float(fleet["lon"]))
+        club = bulletin_tx_qth(cfg, float(fleet["lat"]), float(fleet["lon"]), when=started)
         qths = bulletin_tx_qths(
             cfg,
             float(fleet["lat"]),
             float(fleet["lon"]),
             boats=core,
+            when=started,
         )
         meta["kiwi_roles"] = {role: _kiwi_snap(kiwi) for role, kiwi in roles.items()}
         meta["bulletin_tx"] = {"id": club["id"], "label": club["label"], "lat": club["lat"], "lon": club["lon"]}

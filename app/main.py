@@ -342,11 +342,13 @@ async def _globe_page(request: Request):
             buddy_kiwis = list(roles.values())
         except Exception:
             log.exception("KiwiSDR buddy indisponibles")
+        now = datetime.now(timezone.utc)
         qths = bulletin_tx_qths(
             cfg,
             float(fleet.get("lat") or 0),
             float(fleet.get("lon") or 0),
             boats=aim.get("skippers") or [],
+            when=now,
         )
         tahiti_tx = any(qth.get("id") == "tahiti" for qth in qths)
     except Exception:

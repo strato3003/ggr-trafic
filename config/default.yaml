@@ -1,28 +1,32 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "1.1.8"
+version: "1.1.9"
 
 club:
   callsign: F6KUF
   name: "Radio-club F6KUF"
 
-# QTH d’émission du bulletin météo (max 5). Pointillé globe → centroïde des skippers suivis.
-# Recouvrement : F6KUF, Cap Town et Tahiti coexistent quand la flotte s’étale autour du cap.
+# QTH d’émission (max 5). Pointillé globe → centroïde des skippers suivis.
+# Semaine du 21 sept. 2026 : Philippe F4HWM / F6KUF depuis Talmont-Saint-Hilaire
+# (habituellement Guy F4DAI / F6KUF, Saint-Christophe-du-Ligneron).
 tx_sites:
-  - label: F6KUF
-    lat: 46.5025
-    lon: -1.7888
+  - label: Philippe F4HWM / F6KUF
+    loc: Talmont-Saint-Hilaire, Vendée
+    lat: 46.46806
+    lon: -1.61694
   - label: Cap Town
     lat: -33.9249
     lon: 18.4241
-  - label: Tahiti
+  - label: Michel FO5QB / F6KUF
+    loc: Tahiti
     lat: -17.5350
     lon: -149.5697
 
-# Trafic bulletin F6KUF : lundi et jeudi 18:00 TU (pas tous les jours).
+# F6KUF : lundi et jeudi 18:00 TU. Michel FO5QB : tous les jours 18:00 TU.
 schedule:
   # Heure TU du bulletin météo
   time_utc: "18:00"
   days: [mon, thu]
+  tahiti_daily: true
   # Démarrer 1 min avant 18:00 TU (fenêtre 17:59–18:09 TU si durée 10 min).
   lead_minutes: 1
   # Durée d’enregistrement bulletin + ACK en parallèle (ajustable dans Réglages)
@@ -112,10 +116,11 @@ sdr:
   # QRG d’enregistrement = 14135.0 kHz (pas de chasse USB sur le trafic programmé).
   sites:
     france:
-      # Les Sables-d'Olonne / F6KUF (WGS84)
-      lat: 46.5025
-      lon: -1.7888
-      label: France
+      # Talmont-Saint-Hilaire, Vendée — Philippe F4HWM / F6KUF (semaine du 21 sept. 2026)
+      # WGS84 46.46806°N 1.61694°W (Wikipedia, commune).
+      lat: 46.46806
+      lon: -1.61694
+      label: Philippe F4HWM / F6KUF
       radius_km: 1500
     cape:
       # Le Cap 33°55′30″S 18°25′27″E — recouvrement SA / début Indien
@@ -124,10 +129,10 @@ sdr:
       label: Cap Town
       radius_km: 2000
     tahiti:
-      # Papeete 17°32′6″S 149°34′11″W (relais océan Indien / Pacifique)
+      # Papeete 17°32′6″S 149°34′11″W — Michel FO5QB / F6KUF
       lat: -17.5350
       lon: -149.5697
-      label: Tahiti
+      label: Michel FO5QB / F6KUF
       radius_km: 2500
 
 storage:

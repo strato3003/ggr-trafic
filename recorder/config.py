@@ -169,7 +169,11 @@ def parse_tx_sites(raw: Any) -> list[dict[str, Any]]:
             raise ValueError(f"{TX_SITES_MAX} points d'émission au maximum")
         if not label:
             label = f"Émission {len(out) + 1}"
-        out.append({"label": label[:64], "lat": round(lat, 5), "lon": round(lon, 5)})
+        row_out: dict[str, Any] = {"label": label[:64], "lat": round(lat, 5), "lon": round(lon, 5)}
+        loc = str(row.get("loc") or "").strip()
+        if loc:
+            row_out["loc"] = loc[:96]
+        out.append(row_out)
     return out
 
 
@@ -284,6 +288,25 @@ def schedule_days(cfg: dict[str, Any] | None = None) -> list[str]:
     return parse_weekdays((cfg.get("schedule") or {}).get("days"))
 
 
+def tahiti_daily(cfg: dict[str, Any] | None = None) -> bool:
+    """Michel FO5QB : bulletin 14.135 tous les jours 18:00 TU (défaut)."""
+    cfg = cfg or {}
+    raw = (cfg.get("schedule") or {}).get("tahiti_daily")
+    if raw is None:
+        return True
+    return bool(raw)
+
+
+def france_bulletin_day(cfg: dict[str, Any] | None = None, when: datetime | None = None) -> bool:
+    """True le lundi et le jeudi TU (jours F6KUF)."""
+    from datetime import datetime, timezone
+
+    when = when or datetime.now(timezone.utc)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return WEEKDAY_KEYS[when.weekday()] in set(schedule_days(cfg))
+
+
 def schedule_days_label(days: list[str] | None = None, *, short: bool = False) -> str:
     """lundi et jeudi  /  lun. et jeu."""
     names = list(days or DEFAULT_BULLETIN_DAYS)
@@ -313,6 +336,8 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     duration = int(sched.get("duration_minutes") or 10)
     time_utc = str(sched.get("time_utc") or "18:00")
     days = schedule_days(cfg)
+    tahiti = tahiti_daily(cfg)
+    france_short = schedule_days_label(days, short=True)
     ctx = {
         "tx_khz": tx_khz,
         "ack1_khz": ack1,
@@ -326,7 +351,11 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "time_utc": time_utc,
         "schedule_days": days,
         "schedule_days_label": schedule_days_label(days),
-        "schedule_days_short": schedule_days_label(days, short=True),
+        "schedule_days_short": france_short,
+        "tahiti_daily": tahiti,
+        "schedule_ident_short": (
+            f"F6KUF {france_short} · Michel tlj" if tahiti else france_short
+        ),
         "tx_label": tx.get("label") or "Bulletin météo F6KUF",
         "ack1_label": (acks[0].get("label") if acks else None) or ack_label(ack1),
         "ack2_label": (acks[1].get("label") if len(acks) > 1 else None) or ack_label(ack2),
@@ -405,4 +434,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
             return pkg_version("ggr-vacations")
         except PackageNotFoundError:
             cfg = cfg or {}
-            return str(cfg.get("version") or "1.1.8")
+            return str(cfg.get("version") or "1.1.9")
