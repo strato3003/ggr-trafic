@@ -167,6 +167,38 @@ var kiwisdr_com =
     assert rows[0]["id"] == "abc"
 
 
+def test_kiwi_directory_cache_and_map(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from recorder.kiwi_list import map_kiwis, read_directory_cache, write_directory_cache
+
+    cfg = {"storage": {"data_dir": str(tmp_path)}}
+    write_directory_cache(
+        cfg,
+        [
+            {
+                "id": "a",
+                "name": "Les Sables",
+                "gps": "(46.5, -1.8)",
+                "url": "http://example.invalid:8073",
+                "offline": "no",
+                "loc": "Vendée",
+                "users": 1,
+                "users_max": 4,
+            },
+            {"id": "b", "name": "offline", "gps": "(1, 2)", "url": "http://x:8073", "offline": "yes"},
+            {"id": "c", "name": "no gps", "url": "http://y:8073", "offline": "no"},
+        ],
+    )
+    rows, at = read_directory_cache(cfg)
+    assert len(rows) == 3
+    assert at is not None
+    mapped = map_kiwis(rows)
+    assert len(mapped) == 1
+    assert mapped[0]["lat"] == 46.5
+    assert mapped[0]["lon"] == -1.8
+    assert mapped[0]["free_slots"] == 3
+
+
 def test_score_prefers_closer_higher_snr():
     close = {"distance_km": 400, "snr_hf": 30, "free_slots": 4}
     far = {"distance_km": 8000, "snr_hf": 10, "free_slots": 1}

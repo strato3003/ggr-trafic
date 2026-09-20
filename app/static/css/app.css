@@ -246,8 +246,10 @@ body.is-map-3d .ggr-map-2d {
   margin: 0;
   padding: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0;
   color: var(--foam);
   background: #12324c;
   border: 1px solid var(--line);
@@ -255,15 +257,47 @@ body.is-map-3d .ggr-map-2d {
   border-radius: 0 8px 8px 0;
   cursor: pointer;
   transform: translateY(-50%);
+  overflow: visible;
 }
 .map-opt-toggle:hover { background: var(--kiwi-2); }
 .map-opt-toggle__arr {
+  position: relative;
+  z-index: 1;
   display: block;
+  flex: 0 0 auto;
   width: 0;
   height: 0;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   border-left: 6px solid var(--foam);
+}
+.map-opt-toggle__lab {
+  display: none;
+}
+body:not(.map-opt-on) .map-opt-toggle {
+  width: 1.55rem;
+  height: auto;
+  min-height: 7.6rem;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  padding: 0.48rem 0.12rem 0.7rem;
+}
+body:not(.map-opt-on) .map-opt-toggle__lab {
+  display: block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--foam);
+  line-height: 1;
+  white-space: nowrap;
+}
+body:not(.map-opt-on) .map-opt-toggle__arr {
+  filter:
+    drop-shadow(0 0 2px #e8c547)
+    drop-shadow(0 0 5px rgba(232, 197, 71, 0.75));
 }
 body.map-opt-on .map-opt-toggle {
   left: calc(13.4rem + var(--rail-gap));
@@ -309,6 +343,10 @@ body.map-opt-on .map-opt-toggle__arr {
 @keyframes ggr-sdr-pulse {
   0%, 100% { stroke-width: 2; stroke-opacity: 0.72; }
   50% { stroke-width: 4.4; stroke-opacity: 1; filter: drop-shadow(0 0 3px #7dffb0); }
+}
+@keyframes ggr-sdr-dot-pulse {
+  0%, 100% { opacity: 0.32; transform: translate(-50%, -50%) scale(0.85); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.55); }
 }
 .globe-mark--pulse .globe-mark__km,
 .globe-mark--mux_kiwi .globe-mark__name {
@@ -462,8 +500,10 @@ body.kiwi-panel-off .globe-rail {
   margin: 0;
   padding: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0;
   color: var(--foam);
   background: #12324c;
   border: 1px solid var(--line);
@@ -472,21 +512,52 @@ body.kiwi-panel-off .globe-rail {
   cursor: pointer;
   transform: translateY(-50%);
   transition: right 0.18s ease;
+  overflow: visible;
 }
 .kiwi-toggle:hover { background: var(--kiwi-2); }
 .kiwi-toggle__arr {
+  position: relative;
+  z-index: 1;
   display: block;
+  flex: 0 0 auto;
   width: 0;
   height: 0;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   border-left: 6px solid var(--foam);
 }
+.kiwi-toggle__lab {
+  display: none;
+}
 body.kiwi-mix-on .kiwi-toggle { right: calc(var(--rail-mix) + var(--rail-gap)); }
-body.kiwi-panel-off .kiwi-toggle { right: 0; pointer-events: auto; }
+body.kiwi-panel-off .kiwi-toggle {
+  right: 0;
+  pointer-events: auto;
+  width: 1.55rem;
+  height: auto;
+  min-height: 9.4rem;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  padding: 0.48rem 0.12rem 0.7rem;
+}
+body.kiwi-panel-off .kiwi-toggle__lab {
+  display: block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--foam);
+  line-height: 1;
+  white-space: nowrap;
+}
 body.kiwi-panel-off .kiwi-toggle__arr {
   border-left: 0;
   border-right: 6px solid var(--foam);
+  filter:
+    drop-shadow(0 0 2px #e8c547)
+    drop-shadow(0 0 5px rgba(232, 197, 71, 0.75));
 }
 .kiwi-ident {
   padding: 0.65rem 0.8rem 0.5rem;
@@ -786,12 +857,16 @@ body.kiwi-panel-off .kiwi-toggle__arr {
 .globe-mark--mux_kiwi .globe-mark__icon {
   background: #7dffb0;
   box-shadow: 0 0 8px #3dba7a;
+  animation: ggr-sdr-dot-pulse 0.5s ease-in-out infinite;
 }
 .globe-mark--kiwi_all .globe-mark__icon {
-  width: 6px;
-  height: 6px;
-  background: #5a7a72;
-  opacity: 0.85;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #7dffb0;
+  border: 0;
+  box-shadow: none;
+  animation: ggr-sdr-dot-pulse 0.5s ease-in-out infinite;
 }
 .globe-mark--tx .globe-mark__icon {
   width: 9px;
@@ -1190,62 +1265,95 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   min-height: 11.5rem;
   max-height: 11.5rem;
 }
+body.kiwi-mix-focus .mix {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 body.kiwi-mix-focus .mix__ch:not(.is-focus) { display: none; }
 body.kiwi-mix-focus .mix__desk {
   max-height: none;
+  flex: 1 1 auto;
+  overflow: visible;
+}
+body.kiwi-mix-focus .mix__body {
+  order: 1;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 body.kiwi-mix-focus .mix__ch.is-focus {
   height: min(48vh, 26rem);
   min-height: 14rem;
   max-height: min(48vh, 26rem);
+  overflow: visible;
 }
 body.kiwi-mix-focus .mix__ch-ctrl {
-  flex: 0 0 8.8rem;
-  max-width: 8.8rem;
+  flex: 0 0 7.2rem;
+  max-width: 7.2rem;
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
 }
+body.kiwi-mix-focus .mix__fader { display: none; }
 body.kiwi-mix-focus .mix__wf-wrap {
   min-width: 12rem;
+  overflow: visible;
 }
 body.kiwi-mix-focus .mix__transport {
-  flex-wrap: wrap;
+  order: 2;
+  flex-wrap: nowrap;
+  margin: 0.35rem 0.3rem 0.4rem;
 }
 body.kiwi-mix-focus .mix__seek {
   flex: 1 1 12rem;
   min-width: 10rem;
 }
-.mix__loop-hint {
-  font: 500 0.68rem var(--sans);
-  color: var(--muted);
-  white-space: nowrap;
-}
-.mix__zoom {
-  font: 600 0.58rem var(--sans);
-  letter-spacing: 0.03em;
+.mix__loop-hint { display: none; }
+.mix__ico-btn {
+  width: 1.85rem;
+  min-width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--foam);
-  background: #1a2f40;
-  border: 1px solid var(--line);
-  padding: 0 0.32rem;
-  cursor: pointer;
-  height: 1.35rem;
-}
-.mix__loop-btn,
-.mix__zoom-off {
-  font: 600 0.7rem var(--sans);
-  color: var(--foam);
-  background: #1a2f40;
-  border: 1px solid var(--line);
-  padding: 0.15rem 0.45rem;
+  background: transparent;
+  border: 0;
   cursor: pointer;
   border-radius: 4px;
 }
+.mix__ico-btn:hover { background: #1a2f40; }
+.mix__ico {
+  width: 1.15rem;
+  height: 1.15rem;
+  display: block;
+  pointer-events: none;
+}
+.mix__zoom {
+  font-size: 0;
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  color: var(--foam);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mix__zoom:hover { background: #1a2f40; }
+.mix__zoom .mix__ico {
+  width: 1.05rem;
+  height: 1.05rem;
+}
 .mix__loop-btn[aria-pressed="true"] {
-  background: var(--brass);
-  color: var(--bg);
-  border-color: var(--brass);
+  color: var(--brass);
+  background: rgba(201, 162, 39, 0.18);
 }
 .mix__loop-lab {
   font: 600 0.7rem var(--mono);
@@ -1256,13 +1364,49 @@ body.kiwi-mix-focus .mix__seek {
   position: absolute;
   top: 0;
   bottom: 0;
-  z-index: 1;
-  background: rgba(244, 230, 195, 0.22);
-  border-left: 1px solid var(--brass);
-  border-right: 1px solid var(--brass);
+  z-index: 3;
+  background: rgba(244, 196, 80, 0.2);
   pointer-events: none;
 }
 .mix__loop[hidden] { display: none; }
+.mix__loop-h {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ew-resize;
+  pointer-events: auto;
+  z-index: 4;
+}
+.mix__loop-h--a { left: 0; transform: none; }
+.mix__loop-h--b { left: auto; right: 0; transform: none; }
+.mix__loop-h::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 3px;
+  margin-left: -1.5px;
+  background: #f4c450;
+  box-shadow: 0 0 7px #f4c450;
+}
+.mix__loop-h::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 12px;
+  height: 11px;
+  margin-left: -6px;
+  background: #f4c450;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
 .mix__wf-wrap {
   position: relative;
   flex: 1 1 auto;
@@ -1305,7 +1449,7 @@ body.kiwi-mix-focus .mix__seek {
   background: #fff;
   box-shadow: 0 0 8px #fff;
   pointer-events: none;
-  z-index: 2;
+  z-index: 5;
 }
 .mix__axis { display: none; }
 .mix__ch-ctrl {

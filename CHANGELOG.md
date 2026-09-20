@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 1.1.4 — 2026-09-20
+
+- Annuaire KiwiSDR local, rafraîchi toutes les heures : le calque SDR potentiels ne dépend plus d’un fetch à la demande.
+- SDR potentiels plus petits (4 px) avec le même clignotement 0,5 s que les SDR d’un mux.
+- Zoom d’une voie : icônes type YouTube, barre de lecture en bas, boucle avec bornes A–B façon Audacity.
+- Libellés des liaisons collés à la tangente écran du trait (le zoom / POV ne les décale plus).
+- Menus repliés : « Calques » et « Menu général » en vertical derrière la flèche, avec une légère surbrillance.
+
 ## 1.1.3 — 2026-09-20
 
 - Mux déplié : SDR du record (pas les Kiwi live), pointillés clignotants 0,5 s, libellés nom + distance.

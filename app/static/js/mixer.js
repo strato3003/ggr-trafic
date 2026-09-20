@@ -80,10 +80,17 @@ window.GgrMixer = (function () {
   let loopA = NaN;
   let loopB = NaN;
   let loopOn = false;
-  let selecting = false;
-  let selAnchor = NaN;
+  let handleDrag = null;
   const ac = new AbortController();
   const sig = { signal: ac.signal };
+  const ICO_EXPAND =
+    '<svg class="mix__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>';
+  const ICO_COLLAPSE =
+    '<svg class="mix__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>';
+  const ICO_LOOP =
+    '<svg class="mix__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>';
+  if (loopBtn && !loopBtn.querySelector("svg")) loopBtn.insertAdjacentHTML("afterbegin", ICO_LOOP);
+  if (unzoomBtn && !unzoomBtn.querySelector("svg")) unzoomBtn.insertAdjacentHTML("afterbegin", ICO_COLLAPSE);
 
   function esc(s) {
     return String(s || "")
@@ -507,9 +514,12 @@ window.GgrMixer = (function () {
     if (!playing) return;
     const t = nowT();
     updateHead();
-    if (loopOn && Number.isFinite(loopA) && Number.isFinite(loopB) && loopB - loopA > 0.15 && t >= loopB - 0.04) {
-      startSources(loopA);
-      return;
+    if (loopOn && loopOk()) {
+      const b = Math.max(loopA, loopB);
+      if (t >= b - 0.04) {
+        startSources(Math.min(loopA, loopB));
+        return;
+      }
     }
     if (duration && t >= duration - 0.03) pauseAt(duration);
   }
@@ -540,38 +550,61 @@ window.GgrMixer = (function () {
   function pointerTime(ev, canvas) {
     const rect = canvas.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / Math.max(1, rect.width)));
-    return x * duration;
+    return x * timeSpan();
+  }
+
+  function timeSpan() {
+    return duration > 0 ? duration : 1;
+  }
+
+  function loopOk() {
+    return Number.isFinite(loopA) && Number.isFinite(loopB) && loopB - loopA > 0.12;
+  }
+
+  function ensureLoopRange() {
+    if (loopOk()) {
+      if (duration > 2 && loopB <= 1.05) {
+        loopA = 0;
+        loopB = duration;
+      }
+      return true;
+    }
+    loopA = 0;
+    loopB = timeSpan();
+    return loopOk();
   }
 
   function updateLoopUi() {
-    const ok = Number.isFinite(loopA) && Number.isFinite(loopB) && loopB - loopA > 0.12;
+    const span = timeSpan();
+    const ok = loopOk();
+    const show = !!(focusId && loopOn);
     tracks.forEach((tr) => {
       if (!tr.loopEl) return;
-      if (!ok || !duration) {
-        tr.loopEl.hidden = true;
-        return;
-      }
-      tr.loopEl.hidden = false;
-      const left = Math.min(loopA, loopB) / duration;
-      const right = Math.max(loopA, loopB) / duration;
-      tr.loopEl.style.left = left * 100 + "%";
-      tr.loopEl.style.width = (right - left) * 100 + "%";
+      const onThis = show && tr.id === focusId;
+      tr.loopEl.hidden = !onThis;
+      if (!onThis || !span) return;
+      const a = ok ? Math.min(loopA, loopB) : 0;
+      const b = ok ? Math.max(loopA, loopB) : span;
+      tr.loopEl.style.left = (a / span) * 100 + "%";
+      tr.loopEl.style.width = ((b - a) / span) * 100 + "%";
     });
     if (loopLab) {
-      loopLab.hidden = !ok;
-      if (ok) loopLab.textContent = fmtTu(Math.min(loopA, loopB)) + " → " + fmtTu(Math.max(loopA, loopB));
+      loopLab.hidden = !(show && ok);
+      if (show && ok) loopLab.textContent = fmtTu(Math.min(loopA, loopB)) + " → " + fmtTu(Math.max(loopA, loopB));
     }
-    if (loopHint) loopHint.hidden = !focusId;
+    if (loopHint) loopHint.hidden = true;
     if (loopBtn) {
       loopBtn.hidden = !focusId;
-      loopBtn.setAttribute("aria-pressed", loopOn && ok ? "true" : "false");
+      loopBtn.setAttribute("aria-pressed", focusId && loopOn ? "true" : "false");
     }
     if (unzoomBtn) unzoomBtn.hidden = !focusId;
     deskEl.querySelectorAll('[data-act="zoom"]').forEach((btn) => {
       const ch = btn.closest(".mix__ch");
       const on = !!(focusId && ch && ch.getAttribute("data-id") === focusId);
-      btn.textContent = on ? "Replier" : "Zoom";
+      btn.innerHTML = on ? ICO_COLLAPSE : ICO_EXPAND;
       btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.setAttribute("aria-label", on ? "Replier" : "Plein écran");
+      btn.setAttribute("title", on ? "Replier" : "Plein écran");
     });
   }
 
@@ -590,62 +623,66 @@ window.GgrMixer = (function () {
     requestAnimationFrame(() => tracks.forEach(drawTrack));
   }
 
+  function bindLoopHandles(tr) {
+    if (!tr.loopEl) return;
+    const ha = tr.loopEl.querySelector(".mix__loop-h--a");
+    const hb = tr.loopEl.querySelector(".mix__loop-h--b");
+    if (!ha || !hb) return;
+    const start = (which, ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!duration && !timeSpan()) return;
+      handleDrag = which;
+      resumeAfterDrag = playing;
+      if (playing) pauseAt(nowT());
+      ev.currentTarget.setPointerCapture(ev.pointerId);
+    };
+    const move = (ev) => {
+      if (!handleDrag) return;
+      const t = pointerTime(ev, tr.canvas);
+      const gap = 0.2;
+      const span = timeSpan();
+      const a = Number.isFinite(loopA) ? loopA : 0;
+      const b = Number.isFinite(loopB) ? loopB : span;
+      if (handleDrag === "a") loopA = Math.max(0, Math.min(t, b - gap));
+      else loopB = Math.min(span, Math.max(t, a + gap));
+      updateLoopUi();
+    };
+    const stop = () => {
+      if (!handleDrag) return;
+      handleDrag = null;
+      if (resumeAfterDrag) startSources(Math.min(loopA, loopB));
+      resumeAfterDrag = false;
+    };
+    ha.addEventListener("pointerdown", (ev) => start("a", ev));
+    hb.addEventListener("pointerdown", (ev) => start("b", ev));
+    ha.addEventListener("pointermove", move);
+    hb.addEventListener("pointermove", move);
+    ha.addEventListener("pointerup", stop);
+    hb.addEventListener("pointerup", stop);
+    ha.addEventListener("pointercancel", stop);
+    hb.addEventListener("pointercancel", stop);
+  }
+
   function bindCanvasSeek(tr) {
     const canvas = tr.canvas;
     canvas.addEventListener("pointerdown", (ev) => {
       if (!duration) return;
-      const t = pointerTime(ev, canvas);
-      if (focusId === tr.id) {
-        selecting = true;
-        resumeAfterDrag = playing;
-        selAnchor = t;
-        loopA = t;
-        loopB = t;
-        canvas.setPointerCapture(ev.pointerId);
-        updateLoopUi();
-        return;
-      }
       resumeAfterDrag = playing;
       dragging = true;
       canvas.setPointerCapture(ev.pointerId);
-      previewSeek(t);
+      previewSeek(pointerTime(ev, canvas));
     });
     canvas.addEventListener("pointermove", (ev) => {
-      if (selecting && focusId === tr.id) {
-        loopB = pointerTime(ev, canvas);
-        updateLoopUi();
-        return;
-      }
       if (!dragging) return;
       previewSeek(pointerTime(ev, canvas));
     });
     canvas.addEventListener("pointerup", () => {
-      if (selecting) {
-        selecting = false;
-        const a = Math.min(selAnchor, loopB);
-        const b = Math.max(selAnchor, loopB);
-        if (b - a < 0.2) {
-          loopA = NaN;
-          loopB = NaN;
-          loopOn = false;
-          previewSeek(a);
-        } else {
-          loopA = a;
-          loopB = b;
-          loopOn = true;
-          previewSeek(a);
-        }
-        updateLoopUi();
-        if (resumeAfterDrag) startSources(t0);
-        resumeAfterDrag = false;
-        return;
-      }
       dragging = false;
       if (resumeAfterDrag) startSources(t0);
       resumeAfterDrag = false;
     });
     canvas.addEventListener("pointercancel", () => {
-      selecting = false;
       dragging = false;
       resumeAfterDrag = false;
     });
@@ -693,7 +730,9 @@ window.GgrMixer = (function () {
           '<div class="mix__ch-ctrl">' +
           '<label class="mix__fader"><span>Vol</span><input type="range" min="0" max="150" value="100" step="1" data-act="vol"></label>' +
           '<button type="button" class="mix__mute" data-act="mute" aria-pressed="false">Mute</button>' +
-          '<button type="button" class="mix__zoom" data-act="zoom" title="Plein écran">Zoom</button>' +
+          '<button type="button" class="mix__zoom mix__ico-btn" data-act="zoom" aria-label="Plein écran" title="Plein écran">' +
+          ICO_EXPAND +
+          "</button>" +
           '<div class="mix__meta"><strong>' +
           esc(qrg) +
           "</strong><span>" +
@@ -711,7 +750,10 @@ window.GgrMixer = (function () {
             : '<div class="mix__wf-load"' +
               (tr.waterfall ? " hidden" : "") +
               ">Extraction bande son en cours… 0 %</div>") +
-          '<div class="mix__loop" hidden></div>' +
+          '<div class="mix__loop" hidden>' +
+          '<button type="button" class="mix__loop-h mix__loop-h--a" aria-label="Borne A de la boucle"></button>' +
+          '<button type="button" class="mix__loop-h mix__loop-h--b" aria-label="Borne B de la boucle"></button>' +
+          "</div>" +
           '<div class="mix__head"></div>' +
           "</div></div>"
         );
@@ -733,6 +775,7 @@ window.GgrMixer = (function () {
         return;
       }
       bindCanvasSeek(tr);
+      bindLoopHandles(tr);
       if (zoomBtn) {
         zoomBtn.addEventListener("click", () => setFocus(focusId === tr.id ? null : tr.id));
       }
@@ -755,7 +798,15 @@ window.GgrMixer = (function () {
 
   function playToggle() {
     if (playing) pauseAt(nowT());
-    else startSources(duration && duration - t0 < 0.08 ? 0 : t0);
+    else {
+      let t = duration && duration - t0 < 0.08 ? 0 : t0;
+      if (loopOn && loopOk()) {
+        const a = Math.min(loopA, loopB);
+        const b = Math.max(loopA, loopB);
+        if (t < a || t >= b - 0.04) t = a;
+      }
+      startSources(t);
+    }
   }
 
   playBtn.addEventListener("click", playToggle, sig);
@@ -763,7 +814,13 @@ window.GgrMixer = (function () {
     loopBtn.addEventListener(
       "click",
       () => {
-        loopOn = !loopOn;
+        if (!focusId) return;
+        if (loopOn) {
+          loopOn = false;
+        } else {
+          loopOn = true;
+          ensureLoopRange();
+        }
         updateLoopUi();
       },
       sig
@@ -794,7 +851,9 @@ window.GgrMixer = (function () {
     seekEl.max = String(duration);
     seekEl.step = "0.05";
     playBtn.disabled = false;
+    if (loopOn) ensureLoopRange();
     updateHead();
+    updateLoopUi();
   }
 
   function setExtract(tr, pct, done) {

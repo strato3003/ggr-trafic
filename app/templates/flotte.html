@@ -18,6 +18,7 @@
     </div>
     <button type="button" class="map-opt-toggle" id="map-opt-toggle" aria-expanded="false" aria-controls="map-opt" aria-label="Ouvrir les calques" title="Calques">
       <span class="map-opt-toggle__arr" aria-hidden="true"></span>
+      <span class="map-opt-toggle__lab" aria-hidden="true">Calques</span>
     </button>
     <aside class="map-opt" id="map-opt" hidden>
       <p class="map-opt__title">Calques</p>
@@ -34,6 +35,7 @@
   </div>
   <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="true" aria-controls="globe-dock" aria-label="Replier le panneau" title="Replier">
     <span class="kiwi-toggle__arr" aria-hidden="true"></span>
+    <span class="kiwi-toggle__lab" aria-hidden="true">Menu général</span>
   </button>
   <aside class="globe-rail" id="globe-dock">
     <header class="kiwi-ident">
@@ -72,10 +74,10 @@
             <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
             <span class="mix__clock" id="mix-time">— TU</span>
             <span class="mix__audio-load" id="mix-audio-load" hidden></span>
-            <button type="button" class="mix__loop-btn" id="mix-loop" hidden aria-pressed="false" title="Lecture en boucle entre les bornes">Boucle</button>
+            <button type="button" class="mix__ico-btn mix__loop-btn" id="mix-loop" hidden aria-pressed="false" aria-label="Lecture en boucle" title="Boucle"></button>
             <span class="mix__loop-lab" id="mix-loop-lab" hidden></span>
-            <span class="mix__loop-hint" id="mix-loop-hint" hidden>Glisser sur le waterfall pour les bornes A–B</span>
-            <button type="button" class="mix__zoom-off" id="mix-unzoom" hidden>Replier la voie</button>
+            <span class="mix__loop-hint" id="mix-loop-hint" hidden></span>
+            <button type="button" class="mix__ico-btn mix__zoom-off" id="mix-unzoom" hidden aria-label="Replier la voie" title="Replier"></button>
             <label class="mix__seek">
               Heure TU
               <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
@@ -179,7 +181,7 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi57"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi61"></script>
 <script src="/static/js/reglages.js?v={{ version }}-kiwi54"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi58"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi62"></script>
 {% endblock %}
