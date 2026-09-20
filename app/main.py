@@ -44,9 +44,13 @@ async def lifespan(_app: FastAPI):
     recovered = recover_orphaned(cfg)
     if recovered:
         log.warning("Récupération : %s verrou(s) / vacation(s) orphelin(s)", recovered)
-    scheduler = build_scheduler(cfg)
+    scheduler = None
+    if (os.environ.get("GGR_SCHEDULER") or "1").strip() not in {"0", "off", "false", "no"}:
+        scheduler = build_scheduler(cfg)
+        scheduler.start()
+    else:
+        log.info("GGR_SCHEDULER=0 : pas d’enregistreur sur cette instance")
     _app.state.scheduler = scheduler
-    scheduler.start()
 
     async def _mux_pending() -> None:
         try:
@@ -61,7 +65,8 @@ async def lifespan(_app: FastAPI):
         yield
     finally:
         mux_task.cancel()
-        scheduler.shutdown(wait=False)
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="GGR Trafic", version=version(CFG), lifespan=lifespan)
@@ -367,6 +372,41 @@ def _trafic_meta(vid: str):
         raise HTTPException(404)
     meta.pop("_dir", None)
     return meta
+
+
+@app.get("/api/kiwis")
+async def api_kiwis():
+    """Annuaire KiwiSDR (calque SDR potentiels). Occupés inclus."""
+    cfg = load_config()
+    try:
+        fleet = await fetch_fleet(cfg, with_wx=False)
+        rows = await fetch_ranked_kiwis(
+            cfg,
+            float(fleet.get("lat") or 0),
+            float(fleet.get("lon") or 0),
+            limit=120,
+            min_free=0,
+        )
+    except Exception:
+        log.exception("Liste KiwiSDR complète")
+        rows = []
+    slim = []
+    for r in rows:
+        slim.append(
+            {
+                "id": r.get("id"),
+                "name": r.get("name"),
+                "lat": r.get("lat"),
+                "lon": r.get("lon"),
+                "loc": r.get("loc"),
+                "url": r.get("url"),
+                "distance_km": r.get("distance_km"),
+                "snr_hf": r.get("snr_hf"),
+                "free_slots": r.get("free_slots"),
+                "users_max": r.get("users_max"),
+            }
+        )
+    return {"ok": True, "kiwis": slim}
 
 
 @app.get("/api/trafic")

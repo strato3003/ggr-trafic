@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.1.3 — 2026-09-20
+
+- Mux déplié : SDR du record (pas les Kiwi live), pointillés clignotants 0,5 s, libellés nom + distance.
+- Zoom d’une voie : panneau presque pleine largeur, bornes A–B sur le waterfall, lecture en boucle.
+- Calques carte à gauche (en face du rail) : SDR actifs / potentiels, skippers, bateaux + traces, METAREA, sous-zones.
+
 ## 1.1.2 — 2026-09-20
 
 - Setup : journal visites par IP (pages consultées, replays lancés, horodatage TU), 14 jours.

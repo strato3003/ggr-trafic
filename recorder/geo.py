@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 
 EARTH_KM = 6371.0
 
@@ -48,6 +49,25 @@ def fmt_latlon(lat: float, lon: float) -> str:
     ns = "N" if lat >= 0 else "S"
     ew = "E" if lon >= 0 else "W"
     return f"{abs(lat):.3f}°{ns} {abs(lon):.3f}°{ew}"
+
+
+_FMT_RE = re.compile(
+    r"([0-9]+(?:\.[0-9]+)?)\s*°\s*([NSns])\s+([0-9]+(?:\.[0-9]+)?)\s*°\s*([EWew])"
+)
+
+
+def parse_fmt_latlon(fmt: str | None) -> tuple[float, float] | None:
+    """Inverse de fmt_latlon — pour les snaps Kiwi sans lat/lon numériques."""
+    if not fmt:
+        return None
+    m = _FMT_RE.search(str(fmt))
+    if not m:
+        return None
+    lat = float(m.group(1)) * (-1 if m.group(2).upper() == "S" else 1)
+    lon = float(m.group(3)) * (-1 if m.group(4).upper() == "W" else 1)
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        return None
+    return lat, lon
 
 
 def point_in_ring(lon: float, lat: float, ring: list) -> bool:

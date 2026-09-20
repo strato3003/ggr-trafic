@@ -16,11 +16,18 @@
       <button type="button" data-map-mode="2d" aria-pressed="false">2D</button>
       <button type="button" data-map-mode="3d" class="is-on" aria-pressed="true">3D</button>
     </div>
-    <div class="map-layers" role="group" aria-label="Calques METAREA">
-      <button type="button" class="map-layer" id="ggr-metarea" aria-pressed="true" title="Zones METAREA OMM / OHI">METAREA</button>
-      <span class="map-layers__sep" aria-hidden="true">/</span>
-      <button type="button" class="map-layer map-layer--sub" id="ggr-subzones" aria-pressed="true" title="Sous-zones haute mer de la flotte">Sous-zone</button>
-    </div>
+    <button type="button" class="map-opt-toggle" id="map-opt-toggle" aria-expanded="false" aria-controls="map-opt" aria-label="Ouvrir les calques" title="Calques">
+      <span class="map-opt-toggle__arr" aria-hidden="true"></span>
+    </button>
+    <aside class="map-opt" id="map-opt" hidden>
+      <p class="map-opt__title">Calques</p>
+      <label class="map-opt__row"><input type="checkbox" data-layer="sdrActive" checked> SDR actifs</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="sdrPotential"> SDR potentiels</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="skippers" checked> Skippers</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="boats" checked> Bateaux + traces</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="metarea" id="ggr-metarea" checked> METAREA</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="subzones" id="ggr-subzones" checked> Sous-zones</label>
+    </aside>
     <div class="globe-rec">{% include "_recording.html" %}</div>
     <p class="globe-osm-copy">© <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a>
       · METAREA <a href="https://iho.int" rel="noreferrer">OHI</a> / OMM</p>
@@ -65,6 +72,10 @@
             <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
             <span class="mix__clock" id="mix-time">— TU</span>
             <span class="mix__audio-load" id="mix-audio-load" hidden></span>
+            <button type="button" class="mix__loop-btn" id="mix-loop" hidden aria-pressed="false" title="Lecture en boucle entre les bornes">Boucle</button>
+            <span class="mix__loop-lab" id="mix-loop-lab" hidden></span>
+            <span class="mix__loop-hint" id="mix-loop-hint" hidden>Glisser sur le waterfall pour les bornes A–B</span>
+            <button type="button" class="mix__zoom-off" id="mix-unzoom" hidden>Replier la voie</button>
             <label class="mix__seek">
               Heure TU
               <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
@@ -168,7 +179,7 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi50"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi57"></script>
 <script src="/static/js/reglages.js?v={{ version }}-kiwi54"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi38"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi58"></script>
 {% endblock %}

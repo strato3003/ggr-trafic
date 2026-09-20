@@ -42,6 +42,19 @@ def test_fmt_latlon_uses_hemispheres():
     assert fmt_latlon(-33.9, 18.4).endswith("E")
 
 
+def test_parse_fmt_latlon_roundtrip():
+    from recorder.geo import parse_fmt_latlon
+
+    lat, lon = parse_fmt_latlon("28.646°N 13.905°W")
+    assert abs(lat - 28.646) < 1e-9
+    assert abs(lon - (-13.905)) < 1e-9
+    back = parse_fmt_latlon(fmt_latlon(-33.9, 18.4))
+    assert back is not None
+    assert abs(back[0] + 33.9) < 1e-9
+    assert abs(back[1] - 18.4) < 1e-9
+    assert parse_fmt_latlon("") is None
+
+
 def test_vacation_id_utc():
     dt = datetime(2026, 9, 7, 17, 50, tzinfo=timezone.utc)
     assert vacation_id(dt) == "2026-09-07T1750Z"
@@ -334,7 +347,7 @@ def test_channel_place_and_globe_keeps_mute_channels():
                     "id": "nvis-alt",
                     "freq_khz": 6516.0,
                     "audio": "audio-nvis-alt.wav",
-                    "kiwi": {"name": "0-30 MHz SDR, CT2HMR, Amarante, Portugal"},
+                    "kiwi": {"name": "0-30 MHz SDR, CT2HMR, Amarante, Portugal", "lat": 41.27, "lon": -8.08},
                     "site_label": "proche / NVIS",
                 },
                 {
@@ -351,6 +364,28 @@ def test_channel_place_and_globe_keeps_mute_channels():
     assert [c["has_audio"] for c in card["channels"]] == [True, False]
     assert card["channels"][0]["place"] == "Amarante, Portugal"
     assert card["channels"][1]["place"] == "Montmorillon 86500 FRANCE"
+    assert card["channels"][0]["lat"] == 41.27
+    assert card["channels"][0]["lon"] == -8.08
+    from_fmt = globe_vacation(
+        {
+            "id": "2026-09-20T1159Z-buddy",
+            "reason": "buddy",
+            "channels": [
+                {
+                    "id": "nvis-alt",
+                    "audio": "audio-nvis-alt.wav",
+                    "kiwi": {
+                        "name": "EA8-DF4UE, Fuerteventura, Canary Islands",
+                        "loc": "Fuerteventura, Canary Islands",
+                        "fmt": "28.646°N 13.905°W",
+                        "site_km": 599.0,
+                    },
+                }
+            ],
+        }
+    )
+    assert from_fmt["channels"][0]["lat"] == 28.646
+    assert from_fmt["channels"][0]["lon"] == -13.905
     assert card["channels"][0]["waterfall"] == ""
     assert card["channels"][1]["waterfall"] == ""
 
