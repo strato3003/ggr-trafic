@@ -67,7 +67,7 @@
     paint();
     setInterval(paint, 1000);
     const sync = () => {
-      fetch("/health", { cache: "no-store" })
+      fetch("/api/recording", { cache: "no-store" })
         .then((res) => (res.ok ? res.json() : null))
         .then((st) => {
           if (!st) return;

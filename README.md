@@ -1,4 +1,4 @@
-# GGR Trafic 1.1.11
+# GGR Trafic 1.1.12
 
 Archives du **trafic HF** entre le radio-club **F6KUF** et les bateaux de la flotte **Golden Globe Race**.
 
@@ -17,7 +17,7 @@ Les trois QRG, la tolérance, l’avance et la durée se règlent dans l’UI (*
    Buddy call : 1 minute avant **12:00 TU**, 15 minutes, **4483 kHz** + **6516 kHz** en parallèle.
 4. **Replay** — interface web (français) : liste des trafics, lecteur vidéo, pistes audio.
 
-Déploiement prévu sur un VPS **Ubuntu 26.04** avec **k3s**, dans le namespace **`ggr-trafic`**. Un seul pod sert l’UI et lance l’enregistreur (APScheduler). Le volume des archives est un PVC **5 Gio** (`local-path`, donc sur `/`) : adapté à un disque racine d’une soixantaine de Go.
+Déploiement prévu sur un VPS **Ubuntu 26.04** avec **k3s**, dans le namespace **`ggr-trafic`**. L’**UI** (`deploy/ggr-trafic`) et l’**enregistreur** (`deploy/ggr-trafic-recorder`) sont deux pods distincts : Playwright / Chromium ne saturent plus le site pendant un bulletin. Ils partagent le PVC **5 Gio** (`local-path`, donc sur `/`) : adapté à un disque racine d’une soixantaine de Go.
 
 Clone / chemin cible : **`/opt/ggr-trafic`**. Sur le VPS actuel le dépôt est encore **`/opt/ggr-vacations`** jusqu’à la migration (Kubernetes ne peut pas renommer un namespace ; les PVC d’archives vivent dans l’ancien `ggr-vacations` tant qu’on ne les a pas copiés).
 
@@ -43,7 +43,7 @@ Le NodePort `http://<IP-du-VPS>:30080` reste disponible en secours.
 Test scan 20 m (environ 2,5 min, USB 14,19–14,275 MHz) après déploiement de cette version :
 
 ```bash
-sudo k3s kubectl -n ggr-trafic exec deploy/ggr-trafic -- python -m recorder.session --test-20m
+sudo k3s kubectl -n ggr-trafic exec deploy/ggr-trafic-recorder -- python -m recorder.session --test-20m
 ```
 
 La carte **Test scan 20 m** apparaît ensuite sur l’accueil.

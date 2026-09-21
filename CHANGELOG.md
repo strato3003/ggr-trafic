@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.1.12 — 2026-09-21
+
+- UI et enregistreur sur deux pods : Chromium ne sature plus le site pendant un bulletin / buddy.
+- `/health` allégé pour kubelet ; l’état d’enregistrement passe par `/api/recording`.
+- Preview sans enregistreur ; leftover preview mis à 0 au déploiement prod.
+
 ## 1.1.11 — 2026-09-21
 
 - Onglet Trafic : heure d’antenne **12:00 TU** / **18:00 TU** (la minute d’avance sert à se caler, expliquée dans Setup).

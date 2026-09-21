@@ -8,6 +8,7 @@ spec:
   type: NodePort
   selector:
     app.kubernetes.io/name: ggr-trafic
+    app.kubernetes.io/component: web
   ports:
     - name: http
       port: 8080

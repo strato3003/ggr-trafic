@@ -18,6 +18,8 @@ patches:
   - path: delete-http-ingress.yaml
   - path: delete-legacy-ingress.yaml
   - path: delete-legacy-mw.yaml
+  - path: delete-recorder.yaml
+  - path: delete-recorder-svc.yaml
 images:
   - name: ggr-trafic
     newName: ggr-trafic

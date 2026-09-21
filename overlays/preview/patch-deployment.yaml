@@ -10,6 +10,8 @@ spec:
           env:
             - name: GGR_SCHEDULER
               value: "0"
+            - name: GGR_RECORDER_URL
+              value: ""
           resources:
             requests:
               cpu: 100m
