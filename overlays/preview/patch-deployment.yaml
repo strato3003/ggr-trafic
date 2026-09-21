@@ -12,6 +12,8 @@ spec:
               value: "0"
             - name: GGR_RECORDER_URL
               value: ""
+            - name: GGR_PUBLIC_URL
+              value: https://ggr-trafic-test.k3s.lpb.ovh
           resources:
             requests:
               cpu: 100m

@@ -437,7 +437,8 @@ body.is-unavailable .map-opt,
 body.is-unavailable .map-mode,
 body.is-unavailable .globe-rec,
 body.is-unavailable .globe-osm-copy,
-body.is-unavailable .globe-brand {
+body.is-unavailable .globe-brand,
+body.is-unavailable .ggr-auth--float {
   display: none !important;
 }
 .ggr-wait {
@@ -482,6 +483,51 @@ body.is-unavailable .globe-brand {
   font-size: 1rem;
   text-shadow: 0 1px 8px #02050a;
 }
+.ggr-auth--float {
+  position: absolute;
+  top: 0.65rem;
+  right: 2.35rem;
+  z-index: 6;
+  max-width: min(22rem, calc(100vw - 4rem));
+}
+body:not(.kiwi-panel-off) .ggr-auth--float { display: none; }
+.ggr-auth {
+  pointer-events: auto;
+}
+.kiwi-ident .ggr-auth {
+  margin: 0.45rem 0 0;
+}
+.ggr-auth__err {
+  margin: 0 0 0.35rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #3a120c;
+  background: #f3c4b8;
+  border: 1px solid #c45c48;
+  border-radius: 6px;
+}
+.ggr-auth__who,
+.ggr-auth__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.78rem;
+  color: var(--foam);
+  background: rgba(8, 22, 36, 0.88);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  text-decoration: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.ggr-auth__who strong { color: #e8c547; }
+.ggr-auth__who a {
+  color: #9ad4ff;
+  text-decoration: none;
+}
+.ggr-auth__btn:hover { background: #12324c; }
 .globe-rec {
   position: absolute;
   top: 2.55rem;
@@ -1752,4 +1798,40 @@ body.kiwi-mix-focus .mix__seek {
   body.kiwi-panel-off .kiwi-toggle { right: 0; bottom: auto; }
   .tx-site { grid-template-columns: 1fr; }
   .tx-list li { grid-template-columns: 1fr; }
+}
+
+.ggr-login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse at 50% 0%, #12324c 0%, var(--bg) 55%);
+}
+.ggr-login {
+  width: min(28rem, calc(100% - 2rem));
+  padding: 1.6rem 1.5rem 1.7rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+.ggr-login__brand {
+  margin: 0 0 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.ggr-login h1 {
+  margin: 0 0 0.45rem;
+  font-size: 1.35rem;
+}
+.ggr-login__lead {
+  margin: 0 0 1.1rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.ggr-login__btn {
+  display: inline-flex;
+  margin-top: 0.2rem;
 }

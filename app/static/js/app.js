@@ -86,11 +86,13 @@
   })();
 
   const hasToken = !!token();
+  const hasOperator = !!document.body.dataset.operator;
+  const hasAuth = hasToken || hasOperator;
   document.querySelectorAll(".js-del-vac").forEach((btn) => {
-    btn.hidden = !hasToken;
+    btn.hidden = !hasAuth;
   });
   document.querySelectorAll(".js-del-need-token").forEach((n) => {
-    n.hidden = hasToken;
+    n.hidden = hasAuth;
   });
 
   (function bindUtcClocks() {
@@ -179,8 +181,8 @@
       const id = btn.getAttribute("data-delete-trafic") || btn.getAttribute("data-delete-vacation");
       const tok = token();
       if (!id) return;
-      if (!tok) {
-        window.alert("Suppression refusée : renseigne le jeton dans Réglages, puis recharge.");
+      if (!tok && !document.body.dataset.operator) {
+        window.alert("Suppression refusée : connectez-vous avec Google, ou renseignez le jeton dans Setup.");
         return;
       }
       if (!window.confirm(`Supprimer définitivement ${id} (audio, vidéo, dossier) ?`)) return;
@@ -188,7 +190,8 @@
       try {
         const res = await fetch("/api/trafic/" + encodeURIComponent(id) + "/delete", {
           method: "POST",
-          headers: { "X-Admin-Token": tok },
+          credentials: "same-origin",
+          headers: tok ? { "X-Admin-Token": tok } : {},
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {

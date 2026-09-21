@@ -1,0 +1,14 @@
+<div class="ggr-auth">
+  {% if auth_error %}
+  <p class="ggr-auth__err" role="alert">{{ auth_error }}</p>
+  {% endif %}
+  {% if operator %}
+  <p class="ggr-auth__who">
+    <strong>{{ operator.callsign }}</strong>
+    <span>{{ operator.name }}</span>
+    <a href="/auth/logout">Déconnexion</a>
+  </p>
+  {% elif google_sso %}
+  <a class="ggr-auth__btn" href="/auth/google">Se connecter avec Google</a>
+  {% endif %}
+</div>

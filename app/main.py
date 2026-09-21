@@ -15,8 +15,9 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from starlette.middleware.sessions import SessionMiddleware
 
-from app import globe_tiles, metarea, store
+from app import auth_google, globe_tiles, metarea, operators, store
 from recorder.config import ack_label, display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_label, bulletin_tx_qths, fetch_ranked_kiwis, kiwi_directory, map_kiwis, read_directory_cache
@@ -48,7 +49,7 @@ async def _proxy_to_recorder(request: Request) -> JSONResponse:
     """Relais UI → pod enregistreur (record manuel)."""
     url = f"{_recorder_base()}{request.url.path}"
     headers: dict[str, str] = {}
-    tok = request.headers.get("x-admin-token")
+    tok = request.headers.get("x-admin-token") or os.environ.get("GGR_ADMIN_TOKEN") or ""
     if tok:
         headers["X-Admin-Token"] = tok
     raw = await request.body()
@@ -83,6 +84,10 @@ async def lifespan(_app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     log.info("Templates : %s → %s", ROOT / "templates", list((ROOT / "templates").glob("*.html")))
     cfg = load_config()
+    try:
+        operators.seed(cfg)
+    except Exception:
+        log.exception("Liste opérateurs")
     scheduler = None
     if _scheduler_enabled():
         recovered = recover_orphaned(cfg)
@@ -130,7 +135,26 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="GGR Trafic", version=version(CFG), lifespan=lifespan)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=auth_google.session_secret(),
+    session_cookie="ggr_session",
+    same_site="lax",
+    https_only=auth_google.session_https_only(),
+    max_age=30 * 24 * 3600,
+)
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    if auth_google.is_public_path(request.url.path):
+        return await call_next(request)
+    if auth_google.session_operator(request):
+        return await call_next(request)
+    if request.url.path.startswith("/api/") or request.url.path.startswith("/media/"):
+        return JSONResponse({"ok": False, "detail": "Connexion requise"}, status_code=401)
+    return RedirectResponse("/login", status_code=302)
 
 
 @app.middleware("http")
@@ -226,6 +250,9 @@ def _ctx(request: Request, **extra):
         "recording_state": store.recording_state(cfg),
         "next_recording_iso": next_recording_utc(cfg).isoformat(),
         "admin_configured": _admin_configured(cfg),
+        "google_sso": auth_google.google_configured(),
+        "operator": auth_google.session_operator(request),
+        "auth_error": auth_google.auth_error_message(request),
         **qrg,
         **extra,
     }
@@ -242,6 +269,16 @@ def _require_admin(x_admin_token: str | None, cfg: dict | None = None) -> None:
     expected = (cfg.get("web") or {}).get("admin_token") or os.environ.get("GGR_ADMIN_TOKEN") or ""
     if not expected or x_admin_token != expected:
         raise HTTPException(403, "Jeton administrateur invalide")
+
+
+def _require_operator(
+    request: Request,
+    x_admin_token: str | None,
+    cfg: dict | None = None,
+) -> None:
+    if auth_google.session_operator(request):
+        return
+    _require_admin(x_admin_token, cfg)
 
 
 def _clock_utc(time_utc: str) -> datetime:
@@ -271,6 +308,65 @@ def _buddy_clock_utc(cfg) -> datetime:
 async def health():
     # Léger : kubelet poll toutes les 5–15 s. L’état d’enregistrement est sur /api/recording.
     return {"ok": True, "version": version(CFG)}
+
+
+@app.get("/auth/google")
+async def auth_google_start(request: Request):
+    client = auth_google.google_client()
+    if client is None:
+        return auth_google.login_redirect("sso")
+    redirect_uri = auth_google.public_base(request) + "/auth/google/callback"
+    return await client.google.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/auth/google/callback")
+async def auth_google_callback(request: Request):
+    if request.query_params.get("error"):
+        return auth_google.login_redirect("cancelled")
+    client = auth_google.google_client()
+    if client is None:
+        return auth_google.login_redirect("sso")
+    try:
+        token = await client.google.authorize_access_token(request)
+    except Exception:
+        log.exception("SSO Google")
+        return auth_google.login_redirect("cancelled")
+    userinfo = token.get("userinfo") if isinstance(token, dict) else None
+    try:
+        op = auth_google.accept_google_user(userinfo)
+    except auth_google.AuthDenied as exc:
+        return auth_google.login_redirect(exc.reason)
+    request.session["operator"] = {
+        "email": op["email"],
+        "callsign": op["callsign"],
+        "name": op["name"],
+    }
+    return RedirectResponse("/", status_code=302)
+
+
+@app.get("/auth/logout")
+@app.post("/auth/logout")
+async def auth_logout(request: Request):
+    try:
+        request.session.clear()
+    except AssertionError:
+        pass
+    return RedirectResponse("/login", status_code=302)
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    if auth_google.session_operator(request):
+        return RedirectResponse("/", status_code=302)
+    return render(request, "login.html")
+async def api_me(request: Request):
+    op = auth_google.session_operator(request)
+    return {
+        "ok": True,
+        "authenticated": op is not None,
+        "sso": auth_google.google_configured(),
+        "operator": op,
+    }
 
 
 @app.get("/api/recording")
@@ -353,12 +449,13 @@ async def api_nav(request: Request):
 
 @app.get("/api/visits")
 async def api_visits(
+    request: Request,
     ip: str | None = None,
     target: str | None = None,
     limit: int = 200,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
-    _require_admin(x_admin_token)
+    _require_operator(request, x_admin_token)
     from app import visitlog
 
     rows = visitlog.list_events(ip=ip, target=target, limit=limit)
@@ -533,9 +630,9 @@ async def api_vacation_one(vacation_id: str):
     return _trafic_meta(vacation_id)
 
 
-async def _trafic_delete(vid: str, x_admin_token: str | None):
+async def _trafic_delete(request: Request, vid: str, x_admin_token: str | None):
     cfg = load_config()
-    _require_admin(x_admin_token, cfg)
+    _require_operator(request, x_admin_token, cfg)
     err = store.delete_vacation(vid, cfg)
     if err == "introuvable":
         raise HTTPException(404, "Trafic introuvable")
@@ -548,35 +645,39 @@ async def _trafic_delete(vid: str, x_admin_token: str | None):
 
 @app.delete("/api/trafic/{trafic_id}")
 async def api_trafic_delete(
+    request: Request,
     trafic_id: str,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
-    return await _trafic_delete(trafic_id, x_admin_token)
+    return await _trafic_delete(request, trafic_id, x_admin_token)
 
 
 @app.delete("/api/vacations/{vacation_id}")
 async def api_vacation_delete(
+    request: Request,
     vacation_id: str,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
-    return await _trafic_delete(vacation_id, x_admin_token)
+    return await _trafic_delete(request, vacation_id, x_admin_token)
 
 
 @app.post("/api/trafic/{trafic_id}/delete")
 async def api_trafic_delete_post(
+    request: Request,
     trafic_id: str,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
     """Alias POST : certains proxys bloquent DELETE."""
-    return await _trafic_delete(trafic_id, x_admin_token)
+    return await _trafic_delete(request, trafic_id, x_admin_token)
 
 
 @app.post("/api/vacations/{vacation_id}/delete")
 async def api_vacation_delete_post(
+    request: Request,
     vacation_id: str,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
-    return await _trafic_delete(vacation_id, x_admin_token)
+    return await _trafic_delete(request, vacation_id, x_admin_token)
 
 
 @app.get("/api/settings")
@@ -604,7 +705,7 @@ async def api_settings_put(
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
     cfg = load_config()
-    _require_admin(x_admin_token, cfg)
+    _require_operator(request, x_admin_token, cfg)
     try:
         body = await request.json()
     except Exception as exc:
@@ -733,7 +834,7 @@ async def api_record(
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
     cfg = load_config()
-    _require_admin(x_admin_token, cfg)
+    _require_operator(request, x_admin_token, cfg)
     if not _scheduler_enabled():
         return await _proxy_to_recorder(request)
     if store.recording_in_progress(cfg):

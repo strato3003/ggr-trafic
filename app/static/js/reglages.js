@@ -92,10 +92,9 @@
   const headers = () => {
     const token = (tokenInput && tokenInput.value) || "";
     if (token) localStorage.setItem(TOKEN_KEY, token);
-    return {
-      "Content-Type": "application/json",
-      "X-Admin-Token": token,
-    };
+    const h = { "Content-Type": "application/json" };
+    if (token) h["X-Admin-Token"] = token;
+    return h;
   };
 
   const _detail = (data) => {

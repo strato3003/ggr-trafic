@@ -2,14 +2,23 @@
 
 <form id="reglages-form" class="settings" autocomplete="off">
   <fieldset>
-    <legend>Jeton (obligatoire pour enregistrer et sauver)</legend>
+    <legend>Connexion opérateur</legend>
+    {% if operator %}
+    <p class="hint">Connecté : <strong>{{ operator.callsign }}</strong> ({{ operator.name }} · {{ operator.email }}).
+      Jeton optionnel, conservé pour les scripts <code>curl</code>.</p>
+    {% elif google_sso %}
+    <p class="hint">Connectez-vous avec Google (liste blanche e-mail ↔ indicatif) pour sauver et enregistrer.
+      Le jeton admin reste un secours.</p>
+    {% endif %}
     <label>
       Jeton administrateur
       <input name="admin_token" type="password" autocomplete="off"
-             placeholder="coller le jeton ici">
+             placeholder="coller le jeton ici (optionnel si SSO)">
     </label>
-    {% if not admin_configured %}
-    <p class="err">Aucun jeton n’est configuré sur le serveur.</p>
+    {% if not admin_configured and not google_sso %}
+    <p class="err">Aucun jeton ni SSO n’est configuré sur le serveur.</p>
+    {% elif not admin_configured %}
+    <p class="hint">Pas de jeton serveur : utilisez « Se connecter avec Google ».</p>
     {% endif %}
   </fieldset>
 

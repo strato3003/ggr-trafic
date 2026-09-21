@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} — connexion</title>
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi69">
+</head>
+<body class="ggr-login-page">
+  <main class="ggr-login">
+    <p class="ggr-login__brand">{{ app_name }} <span class="ver">{{ version }}</span></p>
+    <h1>Connexion opérateur</h1>
+    <p class="ggr-login__lead">Accès réservé aux indicatifs autorisés (e-mail Google lié à l’indicatif).</p>
+    {% if auth_error %}
+    <p class="ggr-auth__err" role="alert">{{ auth_error }}</p>
+    {% endif %}
+    {% if google_sso %}
+    <a class="ggr-auth__btn ggr-login__btn" href="/auth/google">Se connecter avec Google</a>
+    {% else %}
+    <p class="ggr-auth__err" role="alert">{{ auth_error or "Connexion Google indisponible (client SSO non configuré)." }}</p>
+    {% endif %}
+  </main>
+</body>
+</html>

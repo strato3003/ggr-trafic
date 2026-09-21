@@ -10,6 +10,7 @@
     <p class="globe-brand">
       <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
     </p>
+    <div class="ggr-auth--float">{% include "_auth.html" %}</div>
     <div id="ggr-globe" class="ggr-globe" role="region" aria-label="Globe 3D flotte GGR et KiwiSDR"></div>
     <div id="ggr-map" class="ggr-map-2d" role="region" aria-label="Carte 2D flotte GGR et KiwiSDR"></div>
     <div class="map-mode" role="group" aria-label="Vue 2D ou 3D">
@@ -59,6 +60,7 @@
       <p class="kiwi-ident__clock">
         {% include "_recording.html" %}
       </p>
+      {% include "_auth.html" %}
     </header>
 
     <div class="kiwi-tabs" role="tablist">
@@ -188,7 +190,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
 <script src="/static/js/mixer.js?v={{ version }}-kiwi66"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi56"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi57"></script>
 <script src="/static/js/wait.js?v={{ version }}-kiwi1"></script>
 <script src="/static/js/globe.js?v={{ version }}-kiwi73"></script>
 {% endblock %}

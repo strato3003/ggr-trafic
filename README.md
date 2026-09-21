@@ -88,6 +88,31 @@ curl -X POST -H "X-Admin-Token: …" \
 
 Les QRG survivent au redéploiement (fichier `/data/settings.json` sur le PVC). Le ConfigMap k3s reste le défaut.
 
+## Connexion Google (liste blanche)
+
+Le globe et le replay ne sont visibles **qu’après** connexion Google (e-mail vérifié **et** présent dans la liste blanche). Un e-mail hors liste affiche : *Cet e-mail n'est pas autorisé à accéder à l'application.* `/health` et `/metrics` restent publics pour kubelet / Prometheus.
+
+1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → identifiant OAuth **application Web**.
+2. Origines JS : `https://ggr-trafic-test.k3s.lpb.ovh` (recette) et `https://ggr-trafic.k3s.lpb.ovh` (prod plus tard). Local : `http://127.0.0.1:8080`.
+3. URI de redirection : `https://ggr-trafic-test.k3s.lpb.ovh/auth/google/callback` (prod : `https://ggr-trafic.k3s.lpb.ovh/auth/google/callback` ; local : `http://127.0.0.1:8080/auth/google/callback`).
+4. Poser les secrets k3s (`google-client-id`, `google-client-secret`, `session-secret`) puis redéployer l’UI.
+
+Liste de référence (`/data/operators.json` sur le PVC) :
+
+```bash
+python -m app.operators list
+python -m app.operators add Nom,email,indicatif
+python -m app.operators update F4IAE --email nouveau@example.com
+python -m app.operators delete F4IAE
+python -m app.operators seed   # JNoel F4IAE, Guy F4DAI, PhilippeHWM F4HWM, Jean-Yves F1FDA
+```
+
+En prod :
+
+```bash
+sudo k3s kubectl -n ggr-trafic exec deploy/ggr-trafic -- python -m app.operators list
+```
+
 ## Configuration radio
 
 Défauts dans [`config/default.yaml`](config/default.yaml) ; overrides runtime dans **Réglages**.

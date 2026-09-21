@@ -1,0 +1,143 @@
+"""Google SSO : e-mail vérifié puis liste blanche indicatif."""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import Any
+from urllib.parse import urlencode
+
+from fastapi import Request
+from fastapi.responses import RedirectResponse
+
+from app import operators
+
+log = logging.getLogger(__name__)
+
+DENIED = "Cet e-mail n'est pas autorisé à accéder à l'application."
+UNVERIFIED = "L'adresse Google n'est pas vérifiée."
+CANCELLED = "Connexion Google annulée."
+SSO_OFF = "Connexion Google indisponible (client SSO non configuré)."
+
+AUTH_MESSAGES = {
+    "denied": DENIED,
+    "unverified": UNVERIFIED,
+    "cancelled": CANCELLED,
+    "sso": SSO_OFF,
+}
+
+
+class AuthDenied(Exception):
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
+def google_configured() -> bool:
+    return bool(
+        (os.environ.get("GGR_GOOGLE_CLIENT_ID") or "").strip()
+        and (os.environ.get("GGR_GOOGLE_CLIENT_SECRET") or "").strip()
+    )
+
+
+def session_secret() -> str:
+    return (
+        (os.environ.get("GGR_SESSION_SECRET") or "").strip()
+        or (os.environ.get("GGR_ADMIN_TOKEN") or "").strip()
+        or "dev-ggr-trafic-session"
+    )
+
+
+def session_https_only() -> bool:
+    raw = (os.environ.get("GGR_SESSION_SECURE") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def public_base(request: Request) -> str:
+    env = (os.environ.get("GGR_PUBLIC_URL") or "").rstrip("/")
+    if env:
+        return env
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}"
+
+
+def auth_error_message(request: Request) -> str | None:
+    return AUTH_MESSAGES.get(str(request.query_params.get("auth") or ""))
+
+
+def session_operator(request: Request) -> dict[str, Any] | None:
+    try:
+        blob = request.session.get("operator")
+    except AssertionError:
+        return None
+    if not isinstance(blob, dict):
+        return None
+    email = str(blob.get("email") or "").strip()
+    if not email:
+        return None
+    found = operators.find_by_email(email)
+    return operators.public_view(found)
+
+
+def _email_verified(value: Any) -> bool:
+    if value is True or value == 1:
+        return True
+    if isinstance(value, str) and value.strip().lower() in {"true", "1", "yes"}:
+        return True
+    return False
+
+
+def accept_google_user(userinfo: dict[str, Any] | None) -> dict[str, Any]:
+    """Cas A / B : e-mail Google vérifié et présent dans la liste blanche."""
+    info = userinfo if isinstance(userinfo, dict) else {}
+    email = str(info.get("email") or "").strip()
+    if not email:
+        raise AuthDenied("unverified")
+    if not _email_verified(info.get("email_verified")):
+        raise AuthDenied("unverified")
+    op = operators.find_by_email(email)
+    if op is None:
+        log.warning("SSO refusé : e-mail hors liste blanche")
+        raise AuthDenied("denied")
+    operators.mark_login(op["email"])
+    return op
+
+
+def login_redirect(reason: str) -> RedirectResponse:
+    qs = urlencode({"auth": reason})
+    return RedirectResponse(f"/login?{qs}", status_code=302)
+
+
+_PUBLIC_EXACT = frozenset({"/health", "/metrics", "/login", "/favicon.ico"})
+_PUBLIC_PREFIX = ("/static/", "/auth/")
+
+
+def is_public_path(path: str) -> bool:
+    raw = (path or "/").split("?", 1)[0]
+    if raw in _PUBLIC_EXACT:
+        return True
+    return any(raw.startswith(p) for p in _PUBLIC_PREFIX)
+
+
+_oauth = None
+
+
+def google_client():
+    """Client Authlib Google, ou None si le secret n’est pas posé."""
+    global _oauth
+    if not google_configured():
+        return None
+    if _oauth is None:
+        from authlib.integrations.starlette_client import OAuth
+
+        oauth = OAuth()
+        oauth.register(
+            name="google",
+            client_id=os.environ.get("GGR_GOOGLE_CLIENT_ID"),
+            client_secret=os.environ.get("GGR_GOOGLE_CLIENT_SECRET"),
+            server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+            client_kwargs={"scope": "openid email profile"},
+        )
+        _oauth = oauth
+    return _oauth

@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }} {{ version }}{% block title %}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi68">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi69">
   {% block extra_head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}"{% if operator %} data-operator="{{ operator.callsign }}"{% endif %}>
   <header class="mast">
     <div class="mast__brand">
       <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
@@ -68,7 +68,7 @@
   <footer class="foot">
     <p>{{ app_name }} {{ version }} — enregistrements KiwiSDR selon le centroïde des skippers suivis.</p>
   </footer>
-  <script src="/static/js/app.js?v={{ version }}-kiwi32"></script>
+  <script src="/static/js/app.js?v={{ version }}-kiwi33"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

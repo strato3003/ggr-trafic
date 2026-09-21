@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 # Pages HTML réellement rendues (pas les redirections /flotte, /a-propos, sondes, tuiles).
 _PAGE_EXACT = {"/"}
 _PAGE_PREFIXES = ("/trafic/",)
-_SKIP_PREFIXES = ("/health", "/metrics", "/static", "/api/", "/media/")
+_SKIP_PREFIXES = ("/health", "/metrics", "/static", "/api/", "/media/", "/auth", "/login")
 
 # Coordonnées absentes : Prometheus exige les mêmes labels à chaque observation.
 NO_COORD = "none"
