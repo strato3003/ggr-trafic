@@ -2016,3 +2016,27 @@ def test_metarea_without_grid_reads_full_official_bulletin():
     assert "Skipper test" not in body["lecture"]
     assert "METAREA X" in body["lecture"]
     assert "nord-est 4 ou 5" in body["lecture"].lower()
+
+
+def test_scheduler_enabled_env(monkeypatch):
+    from app import main
+
+    monkeypatch.delenv("GGR_SCHEDULER", raising=False)
+    assert main._scheduler_enabled() is True
+    monkeypatch.setenv("GGR_SCHEDULER", "0")
+    assert main._scheduler_enabled() is False
+    monkeypatch.setenv("GGR_SCHEDULER", "off")
+    assert main._scheduler_enabled() is False
+    monkeypatch.setenv("GGR_SCHEDULER", "1")
+    assert main._scheduler_enabled() is True
+
+
+def test_health_payload_is_light():
+    import asyncio
+
+    from app.main import health
+
+    body = asyncio.run(health())
+    assert body["ok"] is True
+    assert "version" in body
+    assert "recording" not in body

@@ -36,16 +36,58 @@ ROOT = Path(__file__).resolve().parent
 CFG = load_config()
 
 
+def _scheduler_enabled() -> bool:
+    return (os.environ.get("GGR_SCHEDULER") or "1").strip().lower() not in {"0", "off", "false", "no"}
+
+
+def _recorder_base() -> str:
+    return (os.environ.get("GGR_RECORDER_URL") or "http://ggr-trafic-recorder:8080").rstrip("/")
+
+
+async def _proxy_to_recorder(request: Request) -> JSONResponse:
+    """Relais UI → pod enregistreur (record manuel)."""
+    url = f"{_recorder_base()}{request.url.path}"
+    headers: dict[str, str] = {}
+    tok = request.headers.get("x-admin-token")
+    if tok:
+        headers["X-Admin-Token"] = tok
+    raw = await request.body()
+    if raw:
+        headers["Content-Type"] = request.headers.get("content-type") or "application/json"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(url, content=raw or None, headers=headers)
+    except httpx.HTTPError as exc:
+        log.warning("Relais enregistreur %s : %s", request.url.path, exc)
+        raise HTTPException(503, "Enregistreur injoignable") from exc
+    try:
+        payload = r.json()
+    except ValueError:
+        payload = {"ok": False, "detail": (r.text or "")[:500]}
+    return JSONResponse(payload, status_code=r.status_code)
+
+
+async def _notify_recorder_reschedule() -> None:
+    url = f"{_recorder_base()}/api/internal/reschedule"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.post(url)
+        if r.status_code >= 400:
+            log.warning("Replanification enregistreur HTTP %s", r.status_code)
+    except httpx.HTTPError as exc:
+        log.warning("Replanification enregistreur : %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     log.info("Templates : %s → %s", ROOT / "templates", list((ROOT / "templates").glob("*.html")))
     cfg = load_config()
-    recovered = recover_orphaned(cfg)
-    if recovered:
-        log.warning("Récupération : %s verrou(s) / vacation(s) orphelin(s)", recovered)
     scheduler = None
-    if (os.environ.get("GGR_SCHEDULER") or "1").strip() not in {"0", "off", "false", "no"}:
+    if _scheduler_enabled():
+        recovered = recover_orphaned(cfg)
+        if recovered:
+            log.warning("Récupération : %s verrou(s) / vacation(s) orphelin(s)", recovered)
         scheduler = build_scheduler(cfg)
         scheduler.start()
     else:
@@ -60,7 +102,7 @@ async def lifespan(_app: FastAPI):
         except Exception:
             log.exception("Finalisation média")
 
-    mux_task = asyncio.create_task(_mux_pending())
+    mux_task = asyncio.create_task(_mux_pending()) if _scheduler_enabled() else None
 
     async def _kiwi_directory_loop() -> None:
         try:
@@ -80,7 +122,8 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
-        mux_task.cancel()
+        if mux_task is not None:
+            mux_task.cancel()
         kiwi_task.cancel()
         if scheduler is not None:
             scheduler.shutdown(wait=False)
@@ -226,6 +269,12 @@ def _buddy_clock_utc(cfg) -> datetime:
 
 @app.get("/health")
 async def health():
+    # Léger : kubelet poll toutes les 5–15 s. L’état d’enregistrement est sur /api/recording.
+    return {"ok": True, "version": version(CFG)}
+
+
+@app.get("/api/recording")
+async def api_recording():
     cfg = load_config()
     rec = store.recording_state(cfg)
     return {
@@ -237,6 +286,17 @@ async def health():
         "recording_ends_at": rec["ends_at"],
         "next_recording_at": next_recording_utc(cfg).isoformat(),
     }
+
+
+@app.post("/api/internal/reschedule")
+async def api_internal_reschedule(request: Request):
+    if not _scheduler_enabled():
+        raise HTTPException(404)
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        raise HTTPException(503, "Pas de planificateur")
+    apply_vacation_schedule(scheduler, load_config())
+    return {"ok": True}
 
 
 @app.get("/metrics")
@@ -658,6 +718,8 @@ async def api_settings_put(
     scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler is not None:
         apply_vacation_schedule(scheduler, new_cfg)
+    elif not _scheduler_enabled():
+        await _notify_recorder_reschedule()
     qrg = qrg_context(new_cfg)
     qrg["ok"] = True
     qrg["admin_configured"] = _admin_configured(new_cfg)
@@ -672,6 +734,8 @@ async def api_record(
 ):
     cfg = load_config()
     _require_admin(x_admin_token, cfg)
+    if not _scheduler_enabled():
+        return await _proxy_to_recorder(request)
     if store.recording_in_progress(cfg):
         raise HTTPException(409, "Enregistrement déjà en cours")
     duration = None

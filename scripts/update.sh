@@ -123,7 +123,7 @@ recording_active() {
       return 0
     fi
   fi
-  pod="$(kc -n "$KNS" get pod -l app.kubernetes.io/name=ggr-trafic -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  pod="$(kc -n "$KNS" get pod -l app.kubernetes.io/component=recorder -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
   if [[ -n "$pod" ]] && kc -n "$KNS" exec --request-timeout=8s "$pod" -- test -f /data/.recording.lock >/dev/null 2>&1; then
     return 0
   fi
@@ -304,14 +304,22 @@ apply_clusterissuer
 kc apply -k "$ROOT/k8s"
 copy_legacy_secret_if_needed
 kc -n "$KNS" set image "deploy/ggr-trafic" "web=${IMAGE}"
+kc -n "$KNS" set image "deploy/ggr-trafic-recorder" "recorder=${IMAGE}"
 
 if [[ "$IMAGE" == ghcr.io/* ]]; then
   kc -n "$KNS" patch deploy ggr-trafic --type json \
     -p '[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
+  kc -n "$KNS" patch deploy ggr-trafic-recorder --type json \
+    -p '[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
 fi
 
 kc -n "$KNS" rollout restart "deploy/ggr-trafic"
+kc -n "$KNS" rollout restart "deploy/ggr-trafic-recorder"
 kc -n "$KNS" rollout status "deploy/ggr-trafic" --timeout=180s
+kc -n "$KNS" rollout status "deploy/ggr-trafic-recorder" --timeout=180s
+if kc get ns "$PREVIEW_NS" >/dev/null 2>&1; then
+  kc -n "$PREVIEW_NS" scale deploy/ggr-trafic --replicas=0 >/dev/null 2>&1 || true
+fi
 echo "Déployé : ${IMAGE}"
 echo "UI : https://ggr-trafic.k3s.lpb.ovh"
 if kc get ns "$OLD_KNS" >/dev/null 2>&1; then

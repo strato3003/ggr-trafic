@@ -1,23 +1,24 @@
+# Enregistreur isolé : Chromium / Kiwi ne saturent plus l’UI.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ggr-trafic
+  name: ggr-trafic-recorder
   labels:
     app.kubernetes.io/name: ggr-trafic
-    app.kubernetes.io/component: web
+    app.kubernetes.io/component: recorder
 spec:
   replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: ggr-trafic
-      app.kubernetes.io/component: web
+      app.kubernetes.io/component: recorder
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
         app.kubernetes.io/name: ggr-trafic
-        app.kubernetes.io/component: web
+        app.kubernetes.io/component: recorder
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
@@ -26,7 +27,7 @@ spec:
       securityContext:
         fsGroup: 1000
       containers:
-        - name: web
+        - name: recorder
           image: ggr-trafic:local
           imagePullPolicy: IfNotPresent
           ports:
@@ -38,9 +39,7 @@ spec:
             - name: GGR_CONFIG
               value: /config/config.yaml
             - name: GGR_SCHEDULER
-              value: "0"
-            - name: GGR_RECORDER_URL
-              value: http://ggr-trafic-recorder:8080
+              value: "1"
             - name: GGR_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -49,31 +48,18 @@ spec:
                   optional: true
           resources:
             requests:
-              cpu: 250m
-              memory: 384Mi
+              cpu: 400m
+              memory: 512Mi
             limits:
-              cpu: "1"
-              memory: 1Gi
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            periodSeconds: 15
-            timeoutSeconds: 5
-            failureThreshold: 8
+              cpu: "2"
+              memory: 2500Mi
+          # Pas de liveness HTTP : Playwright bloque la boucle, kubelet tuait le pod (exit 137).
           startupProbe:
             httpGet:
               path: /health
               port: http
             periodSeconds: 5
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 36
           volumeMounts:
             - name: data
@@ -81,6 +67,8 @@ spec:
             - name: config
               mountPath: /config
               readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -88,3 +76,24 @@ spec:
         - name: config
           configMap:
             name: ggr-trafic-config
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ggr-trafic-recorder
+  labels:
+    app.kubernetes.io/name: ggr-trafic
+    app.kubernetes.io/component: recorder
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ggr-trafic
+    app.kubernetes.io/component: recorder
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

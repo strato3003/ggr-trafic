@@ -4,6 +4,7 @@ namespace: ggr-trafic
 resources:
   - pvc.yaml
   - deployment.yaml
+  - recorder.yaml
   - service.yaml
   - ingress.yaml
   - redirect.yaml
