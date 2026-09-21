@@ -120,6 +120,43 @@ def _decorate(meta: dict[str, Any], folder: Path | None = None) -> dict[str, Any
     return meta
 
 
+def _sched_hhmm(raw: Any, fallback: str) -> tuple[int, int]:
+    text = str(raw or fallback).strip()
+    try:
+        parts = text.split(":")
+        hh = int(parts[0])
+        mm = int(parts[1][:2]) if len(parts) > 1 else 0
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            return hh, mm
+    except (TypeError, ValueError, IndexError):
+        pass
+    fh, fm = fallback.split(":", 1)
+    return int(fh), int(fm[:2])
+
+
+def _air_at(meta: dict[str, Any]) -> str | None:
+    """Heure d’antenne (12:00 / 18:00 TU), pas le démarrage d’enregistrement (avance)."""
+    started = _parse_iso(meta.get("started_at"))
+    raw = meta.get("started_at")
+    if started is None:
+        return str(raw) if raw else None
+    if meta.get("is_test"):
+        return started.isoformat()
+    if meta.get("is_buddy"):
+        blob = meta.get("buddy") or {}
+        hh, mm = _sched_hhmm(blob.get("time_utc"), "12:00")
+        lead = int(blob.get("lead_minutes") or 1)
+    else:
+        blob = meta.get("schedule") or {}
+        hh, mm = _sched_hhmm(blob.get("time_utc"), "18:00")
+        lead = int(blob.get("lead_minutes") or 1)
+    scheduled = started.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    window = timedelta(minutes=max(0, lead) + 1)
+    if timedelta(0) <= (scheduled - started) <= window:
+        return scheduled.isoformat()
+    return started.isoformat()
+
+
 def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
     """Carte légère pour le globe 3D : position, pistes audio, pas tout le metadata."""
     decorated = _decorate(dict(meta))
@@ -168,6 +205,7 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
         "id": decorated.get("id"),
         "title": decorated.get("title"),
         "started_at": decorated.get("started_at"),
+        "air_at": _air_at(decorated),
         "status": decorated.get("status"),
         "is_buddy": bool(decorated.get("is_buddy")),
         "is_test": bool(decorated.get("is_test")),
@@ -334,6 +372,95 @@ def delete_vacation(vacation_id: str, cfg: dict[str, Any] | None = None) -> str 
     return None
 
 
+def _folder_bytes(folder: Path) -> int:
+    total = 0
+    try:
+        for path in folder.rglob("*"):
+            if path.is_file():
+                total += path.stat().st_size
+    except OSError:
+        pass
+    return total
+
+
+def _fmt_size(n: int) -> str:
+    if n < 1024:
+        return f"{n} o"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.0f} kio"
+    if n < 1024 * 1024 * 1024:
+        return f"{n / (1024 * 1024):.1f} Mio"
+    return f"{n / (1024 * 1024 * 1024):.2f} Gio"
+
+
+def _kind_label(meta: dict[str, Any]) -> str:
+    if meta.get("is_buddy"):
+        return "buddy"
+    if meta.get("is_test"):
+        return "test"
+    return "bulletin"
+
+
+def vacation_summaries(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Liste compacte (id, heure d’antenne, taille) pour purge manuelle."""
+    cfg = cfg or load_config()
+    rows: list[dict[str, Any]] = []
+    for meta in list_vacations(cfg):
+        vid = str(meta.get("id") or "")
+        folder = vacations_root(cfg) / vid
+        rows.append(
+            {
+                "id": vid,
+                "kind": _kind_label(meta),
+                "air_at": _air_at(meta),
+                "started_at": meta.get("started_at"),
+                "status": meta.get("status"),
+                "bytes": _folder_bytes(folder) if folder.is_dir() else 0,
+            }
+        )
+    return rows
+
+
+def purge_older_than(
+    cfg: dict[str, Any] | None = None,
+    *,
+    days: int | None = None,
+    before: datetime | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Supprime les vacations dont started_at est strictement avant la date de coupure."""
+    cfg = cfg or load_config()
+    if before is None:
+        n = int(days if days is not None else (cfg.get("storage") or {}).get("retention_days") or 14)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max(0, n))
+    else:
+        cutoff = before if before.tzinfo else before.replace(tzinfo=timezone.utc)
+        cutoff = cutoff.astimezone(timezone.utc)
+    targets: list[str] = []
+    deleted: list[str] = []
+    errors: list[tuple[str, str]] = []
+    for meta in list_vacations(cfg):
+        vid = str(meta.get("id") or "")
+        stamp = _parse_iso(str(meta.get("started_at") or ""))
+        if stamp is None or stamp >= cutoff:
+            continue
+        targets.append(vid)
+        if dry_run:
+            continue
+        err = delete_vacation(vid, cfg)
+        if err:
+            errors.append((vid, err))
+        else:
+            deleted.append(vid)
+    return {
+        "cutoff": cutoff.isoformat(),
+        "dry_run": dry_run,
+        "targets": targets,
+        "deleted": deleted,
+        "errors": errors,
+    }
+
+
 def iso_to_label(iso: str | None) -> str:
     if not iso:
         return ""
@@ -348,3 +475,93 @@ def iso_to_label(iso: str | None) -> str:
 
 def default_cfg() -> dict[str, Any]:
     return load_config()
+
+
+def _cli_air(iso: str | None) -> str:
+    text = (iso or "").replace("T", " ")
+    if len(text) >= 16:
+        text = text[:16]
+    return f"{text} TU" if text else "—"
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Lister / supprimer des vacations (hors UI)."""
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        prog="python -m app.store",
+        description="Lister ou purger les trafics enregistrés (pas de menu UI).",
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("list", help="Lister id, type, heure d’antenne TU, taille")
+    p_del = sub.add_parser("delete", help="Supprimer un ou plusieurs identifiants")
+    p_del.add_argument("ids", nargs="+", help="ex. 2026-09-11T1759Z")
+    p_purge = sub.add_parser(
+        "purge",
+        help="Supprimer les vacations plus anciennes que N jours, ou avant une date TU",
+    )
+    p_purge.add_argument(
+        "--days",
+        type=int,
+        default=None,
+        help="âge minimum (défaut : retention_days de la config)",
+    )
+    p_purge.add_argument("--before", metavar="AAAA-MM-JJ", help="coupure exclusive TU (ex. 2026-09-14)")
+    p_purge.add_argument("--dry-run", action="store_true", help="afficher sans supprimer")
+    args = parser.parse_args(argv)
+    cfg = load_config()
+
+    if args.cmd == "list":
+        rows = vacation_summaries(cfg)
+        if not rows:
+            print("Aucune vacation.")
+            return
+        total = 0
+        print(f"{'ID':<32} {'TYPE':<9} {'ANTENNE':<20} {'TAILLE':>8}  STATUT")
+        for row in rows:
+            total += int(row["bytes"] or 0)
+            print(
+                f"{row['id']:<32} {row['kind']:<9} {_cli_air(row.get('air_at')):<20} "
+                f"{_fmt_size(int(row['bytes'] or 0)):>8}  {row.get('status') or '—'}"
+            )
+        print(f"{len(rows)} vacation(s) · {_fmt_size(total)}")
+        return
+
+    if args.cmd == "delete":
+        failed = 0
+        for vid in args.ids:
+            err = delete_vacation(vid, cfg)
+            if err:
+                print(f"{vid} : {err}", file=sys.stderr)
+                failed += 1
+            else:
+                print(f"supprimé {vid}")
+        if failed:
+            raise SystemExit(1)
+        return
+
+    before = None
+    if args.before:
+        try:
+            before = datetime.strptime(args.before, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            print("Date --before invalide (AAAA-MM-JJ).", file=sys.stderr)
+            raise SystemExit(2)
+    result = purge_older_than(cfg, days=args.days, before=before, dry_run=args.dry_run)
+    verb = "à supprimer" if result["dry_run"] else "supprimé"
+    if not result["targets"]:
+        print(f"Rien à purger (coupure {result['cutoff'][:16].replace('T', ' ')} TU).")
+        return
+    for vid in result["targets"]:
+        mark = vid if result["dry_run"] or vid in result["deleted"] else f"{vid} (échec)"
+        print(f"{verb} {mark}")
+    for vid, err in result["errors"]:
+        print(f"{vid} : {err}", file=sys.stderr)
+    print(f"{len(result['targets'])} cible(s), coupure {result['cutoff'][:16].replace('T', ' ')} TU")
+    if result["errors"]:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

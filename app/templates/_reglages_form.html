@@ -66,6 +66,10 @@
       <input name="lead_minutes" type="number" step="1" min="0" max="15" required
              value="{{ schedule_lead }}">
     </label>
+    <p class="hint">
+      Cette minute d’avance sert à se caler (Kiwi, VFO) avant l’heure d’antenne.
+      L’onglet Trafic affiche {{ time_utc }} TU, pas l’heure de démarrage (17:59).
+    </p>
     <label>
       Durée du trafic (min)
       <input name="duration_minutes" type="number" step="1" min="1" max="45" required
@@ -157,6 +161,10 @@
       <input name="buddy_lead" type="number" step="1" min="0" max="15" required
              value="{{ buddy_lead }}">
     </label>
+    <p class="hint">
+      Même principe : se caler avant {{ buddy_time_utc }} TU. Trafic affiche
+      {{ buddy_time_utc }}, pas 11:59.
+    </p>
     <label>
       Durée (min)
       <input name="buddy_duration_minutes" type="number" step="1" min="1" max="45" required
