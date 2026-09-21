@@ -88,8 +88,10 @@
     skippers: prefOn("ggr-layer-skippers", "skippers", true),
     boats: prefOn("ggr-layer-boats", "boats", true),
   };
+  let panelOpenedOnce = false;
 
   function setPanelOpen(on) {
+    if (on) panelOpenedOnce = true;
     document.body.classList.toggle("kiwi-panel-off", !on);
     if (kiwiToggle) {
       kiwiToggle.setAttribute("aria-expanded", on ? "true" : "false");
@@ -108,11 +110,6 @@
     }, 200);
   }
 
-  if (kiwiToggle) {
-    kiwiToggle.addEventListener("click", () => {
-      setPanelOpen(document.body.classList.contains("kiwi-panel-off"));
-    });
-  }
   document.body.classList.add("is-map-3d");
   document.body.classList.remove("is-map-2d");
 
@@ -184,13 +181,19 @@
   }
 
   const traficQBoot = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
-  const bootTab = parseHash();
-  const bootPanel =
-    !!traficQBoot || bootTab === "setup" || bootTab === "metarea";
-  setPanelOpen(bootPanel);
+  setPanelOpen(!!traficQBoot);
+
+  if (kiwiToggle) {
+    kiwiToggle.addEventListener("click", () => {
+      const opening = document.body.classList.contains("kiwi-panel-off");
+      if (opening && !panelOpenedOnce) showTab("apropos");
+      setPanelOpen(opening);
+    });
+  }
 
   document.querySelectorAll(".kiwi-tabs [data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      panelOpenedOnce = true;
       showTab(btn.getAttribute("data-tab"));
       setPanelOpen(true);
     });
@@ -198,7 +201,7 @@
   window.addEventListener("hashchange", () => {
     showTab(parseHash());
   });
-  showTab(parseHash());
+  showTab(traficQBoot ? "trafic" : "apropos");
 
   function esc(s) {
     return String(s || "")
@@ -1067,7 +1070,8 @@
     }
     root.innerHTML = rows
       .map((v) => {
-        const when = (v.started_at || "").replace("T", " ").slice(0, 16);
+        let when = (v.air_at || v.started_at || "").replace("T", " ").slice(0, 16);
+        if (when) when += " TU";
         const tag = v.is_buddy ? "Buddy call" : v.is_test ? "Test" : "Bulletin météo";
         const n = audioSdrs(v);
         const title = v.title && v.title !== v.id ? " · " + esc(v.title) : "";

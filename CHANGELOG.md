@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.1.11 — 2026-09-21
+
+- Onglet Trafic : heure d’antenne **12:00 TU** / **18:00 TU** (la minute d’avance sert à se caler, expliquée dans Setup).
+- Menu général fermé à l’arrivée ; première ouverture manuelle sur **À propos**.
+- Purge manuelle des archives : `python -m app.store list|delete|purge` (hors UI).
+
 ## 1.1.10 — 2026-09-20
 
 - À propos : ordre des émetteurs bulletin selon la flotte — Guy F4DAI (cette semaine Philippe F4HWM), puis Cap Town, enfin Michel FO5QB.

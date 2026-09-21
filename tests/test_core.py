@@ -334,6 +334,41 @@ def test_delete_vacation_refuses_running(tmp_path):
     assert folder.exists()
 
 
+def test_purge_older_than_dry_run_and_delete(tmp_path):
+    from app.store import list_vacations, purge_older_than
+
+    cfg = {"storage": {"data_dir": str(tmp_path), "retention_days": 14}}
+    root = tmp_path / "vacations"
+    old = root / "2026-09-01T1759Z"
+    recent = root / "2026-09-20T1759Z"
+    old.mkdir(parents=True)
+    recent.mkdir(parents=True)
+    (old / "metadata.json").write_text(
+        '{"id": "2026-09-01T1759Z", "reason": "schedule", "status": "complete",'
+        ' "started_at": "2026-09-01T17:59:00+00:00"}',
+        encoding="utf-8",
+    )
+    (recent / "metadata.json").write_text(
+        '{"id": "2026-09-20T1759Z", "reason": "schedule", "status": "complete",'
+        ' "started_at": "2026-09-20T17:59:00+00:00"}',
+        encoding="utf-8",
+    )
+    preview = purge_older_than(
+        cfg,
+        before=datetime(2026, 9, 14, tzinfo=timezone.utc),
+        dry_run=True,
+    )
+    assert preview["targets"] == ["2026-09-01T1759Z"]
+    assert preview["deleted"] == []
+    assert old.exists()
+    done = purge_older_than(cfg, before=datetime(2026, 9, 14, tzinfo=timezone.utc))
+    assert done["deleted"] == ["2026-09-01T1759Z"]
+    assert not old.exists()
+    assert recent.exists()
+    ids = [v["id"] for v in list_vacations(cfg)]
+    assert ids == ["2026-09-20T1759Z"]
+
+
 def test_recording_state_idle_without_lock(tmp_path):
     from app.store import recording_state
 
@@ -426,6 +461,24 @@ def test_channel_place_and_globe_keeps_mute_channels():
         }
     )
     assert card["is_buddy"] is True
+    assert card["air_at"].startswith("2026-09-13T12:00")
+    bulletin = globe_vacation(
+        {
+            "id": "2026-09-15T1759Z",
+            "reason": "schedule",
+            "started_at": "2026-09-15T17:59:00+00:00",
+        }
+    )
+    assert bulletin["is_buddy"] is False
+    assert bulletin["air_at"].startswith("2026-09-15T18:00")
+    mid_day = globe_vacation(
+        {
+            "id": "2026-09-15T1530Z",
+            "reason": "schedule",
+            "started_at": "2026-09-15T15:30:00+00:00",
+        }
+    )
+    assert mid_day["air_at"].startswith("2026-09-15T15:30")
     assert card["sdrs"] == 1
     assert [c["has_audio"] for c in card["channels"]] == [True, False]
     assert card["channels"][0]["place"] == "Amarante, Portugal"
