@@ -135,6 +135,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="GGR Trafic", version=version(CFG), lifespan=lifespan)
+app.add_middleware(auth_google.RequireLoginMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=auth_google.session_secret(),
@@ -144,17 +145,6 @@ app.add_middleware(
     max_age=30 * 24 * 3600,
 )
 app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
-
-
-@app.middleware("http")
-async def require_login(request: Request, call_next):
-    if auth_google.is_public_path(request.url.path):
-        return await call_next(request)
-    if auth_google.session_operator(request):
-        return await call_next(request)
-    if request.url.path.startswith("/api/") or request.url.path.startswith("/media/"):
-        return JSONResponse({"ok": False, "detail": "Connexion requise"}, status_code=401)
-    return RedirectResponse("/login", status_code=302)
 
 
 @app.middleware("http")
@@ -354,11 +344,14 @@ async def auth_logout(request: Request):
     return RedirectResponse("/login", status_code=302)
 
 
-@app.get("/login", response_class=HTMLResponse)
+@app.api_route("/login", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def login_page(request: Request):
     if auth_google.session_operator(request):
         return RedirectResponse("/", status_code=302)
     return render(request, "login.html")
+
+
+@app.get("/api/me")
 async def api_me(request: Request):
     op = auth_google.session_operator(request)
     return {

@@ -56,7 +56,8 @@ def test_google_whitelist_cases(tmp_path, monkeypatch):
     )
 
 
-def test_public_paths_and_login_redirect():
+def test_public_paths_and_login_redirect(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
     assert auth_google.is_public_path("/health")
     assert auth_google.is_public_path("/login")
     assert auth_google.is_public_path("/auth/google")
@@ -67,3 +68,5 @@ def test_public_paths_and_login_redirect():
     loc = auth_google.login_redirect("denied").headers["location"]
     assert loc.startswith("/login?")
     assert "auth=denied" in loc
+    assert auth_google.is_public_path("/login/")
+    assert auth_google.operator_from_mapping({"operator": {"email": "nobody@x.test"}}) is None

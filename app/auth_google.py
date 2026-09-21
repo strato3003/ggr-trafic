@@ -8,7 +8,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from fastapi import Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app import operators
 
@@ -66,11 +66,10 @@ def auth_error_message(request: Request) -> str | None:
     return AUTH_MESSAGES.get(str(request.query_params.get("auth") or ""))
 
 
-def session_operator(request: Request) -> dict[str, Any] | None:
-    try:
-        blob = request.session.get("operator")
-    except AssertionError:
+def operator_from_mapping(session: Any) -> dict[str, Any] | None:
+    if not isinstance(session, dict):
         return None
+    blob = session.get("operator")
     if not isinstance(blob, dict):
         return None
     email = str(blob.get("email") or "").strip()
@@ -78,6 +77,13 @@ def session_operator(request: Request) -> dict[str, Any] | None:
         return None
     found = operators.find_by_email(email)
     return operators.public_view(found)
+
+
+def session_operator(request: Request) -> dict[str, Any] | None:
+    try:
+        return operator_from_mapping(request.session)
+    except AssertionError:
+        return None
 
 
 def _email_verified(value: Any) -> bool:
@@ -115,9 +121,11 @@ _PUBLIC_PREFIX = ("/static/", "/auth/")
 
 def is_public_path(path: str) -> bool:
     raw = (path or "/").split("?", 1)[0]
+    if raw != "/" and raw.endswith("/"):
+        raw = raw.rstrip("/")
     if raw in _PUBLIC_EXACT:
         return True
-    return any(raw.startswith(p) for p in _PUBLIC_PREFIX)
+    return any((path or "/").startswith(p) for p in _PUBLIC_PREFIX)
 
 
 _oauth = None
@@ -141,3 +149,28 @@ def google_client():
         )
         _oauth = oauth
     return _oauth
+
+
+class RequireLoginMiddleware:
+    """ASGI pur : lit scope['session'] (BaseHTTPMiddleware ne voit pas le cookie)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        path = scope.get("path") or "/"
+        if is_public_path(path):
+            await self.app(scope, receive, send)
+            return
+        if operator_from_mapping(scope.get("session")):
+            await self.app(scope, receive, send)
+            return
+        if path.startswith("/api/") or path.startswith("/media/"):
+            response = JSONResponse({"ok": False, "detail": "Connexion requise"}, status_code=401)
+            await response(scope, receive, send)
+            return
+        response = RedirectResponse("/login", status_code=302)
+        await response(scope, receive, send)
