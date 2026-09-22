@@ -46,7 +46,7 @@ data:
         kubernetes_sd_configs:
           - role: pod
             namespaces:
-              names: [ggr-trafic]
+              names: [ggr-trafic, ggr-trafic-preview]
         pipeline_stages:
           - cri: {}
         relabel_configs:

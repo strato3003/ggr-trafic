@@ -67,7 +67,7 @@ build_local() {
   fi
   # stdout du build / import ne doit jamais alimenter IMAGE (sinon InvalidImageName).
   as_root docker build -t "$img" "$ROOT"
-  as_root docker save "$img" | as_root k3s ctr images import -
+  as_root docker save "$img" | as_root k3s ctr -n k8s.io images import -
 }
 
 # Copie ggr-vacations-secrets → ggr-trafic-secrets si le nouveau secret n'existe pas encore.
@@ -97,6 +97,37 @@ else:
     md.pop("annotations", None)
 md["name"] = "ggr-trafic-secrets"
 md["namespace"] = "ggr-trafic"
+doc["metadata"] = md
+doc.pop("status", None)
+json.dump(doc, sys.stdout)
+' | kc apply -f -
+}
+
+# Secret prod → preview (jeton, Google, session) si le preview n’en a pas.
+copy_preview_secret_if_needed() {
+  if kc -n "$PREVIEW_NS" get secret ggr-trafic-secrets >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! kc -n "$KNS" get secret ggr-trafic-secrets >/dev/null 2>&1; then
+    echo "Pas de secret ${KNS}/ggr-trafic-secrets à copier vers preview." >&2
+    return 0
+  fi
+  echo "Copie du secret ${KNS}/ggr-trafic-secrets → ${PREVIEW_NS}…"
+  kc -n "$KNS" get secret ggr-trafic-secrets -o json | python3 -c '
+import json, sys
+doc = json.load(sys.stdin)
+md = dict(doc.get("metadata") or {})
+for key in ("uid", "resourceVersion", "creationTimestamp", "generation",
+            "managedFields", "selfLink", "ownerReferences"):
+    md.pop(key, None)
+ann = dict(md.get("annotations") or {})
+ann.pop("kubectl.kubernetes.io/last-applied-configuration", None)
+if ann:
+    md["annotations"] = ann
+else:
+    md.pop("annotations", None)
+md["name"] = "ggr-trafic-secrets"
+md["namespace"] = "ggr-trafic-preview"
 doc["metadata"] = md
 doc.pop("status", None)
 json.dump(doc, sys.stdout)
@@ -230,7 +261,7 @@ build_preview_image() {
     exit 1
   fi
   as_root docker build -t "$img" "$src"
-  as_root docker save "$img" | as_root k3s ctr images import -
+  as_root docker save "$img" | as_root k3s ctr -n k8s.io images import -
 }
 
 deploy_preview() {
@@ -249,7 +280,9 @@ deploy_preview() {
   ensure_cert_manager
   apply_clusterissuer
   kc apply -f "$src/overlays/preview/namespace.yaml"
+  copy_preview_secret_if_needed
   kc apply -k "$src/overlays/preview"
+  kc -n "$PREVIEW_NS" scale deploy/ggr-trafic --replicas=1 >/dev/null 2>&1 || true
   kc -n "$PREVIEW_NS" set image "deploy/ggr-trafic" "web=ggr-trafic:preview"
   kc -n "$PREVIEW_NS" rollout restart "deploy/ggr-trafic"
   kc -n "$PREVIEW_NS" rollout status "deploy/ggr-trafic" --timeout=180s

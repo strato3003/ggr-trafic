@@ -1,6 +1,25 @@
 (() => {
   const TOKEN_KEY = "ggr-admin-token";
   const token = () => localStorage.getItem(TOKEN_KEY) || "";
+  window.GGR_t = window.GGR_t || (function () {
+    let table = {};
+    try {
+      const node = document.getElementById("ggr-i18n");
+      table = JSON.parse((node && node.textContent) || "{}") || {};
+    } catch {
+      table = {};
+    }
+    return function t(key, vars) {
+      let s = table[key] || key;
+      if (vars) {
+        Object.keys(vars).forEach((k) => {
+          s = s.split("{" + k + "}").join(String(vars[k]));
+        });
+      }
+      return s;
+    };
+  })();
+  const t = window.GGR_t;
 
   const pad = (n) => String(n).padStart(2, "0");
 
@@ -9,7 +28,7 @@
     const tick = () => {
       const ms = target.getTime() - Date.now();
       if (ms <= 0) {
-        el.textContent = "en cours / voir demain";
+        el.textContent = t("rec_live");
         return;
       }
       const s = Math.floor(ms / 1000);
@@ -17,7 +36,7 @@
       const h = Math.floor((s % 86400) / 3600);
       const m = Math.floor((s % 3600) / 60);
       const sec = s % 60;
-      el.textContent = (d ? `${d} j ` : "") + `${pad(h)}:${pad(m)}:${pad(sec)}`;
+      el.textContent = (d ? t("rec_days", { d: d }) : "") + `${pad(h)}:${pad(m)}:${pad(sec)}`;
     };
     tick();
     setInterval(tick, 1000);
@@ -29,7 +48,7 @@
     const first = document.querySelector(".js-rec");
     let rec = {
       recording: first && first.classList.contains("is-live"),
-      recording_label: "Enregistrement",
+      recording_label: t("rec_label"),
       recording_ends_at: first ? first.dataset.ends || "" : "",
       next_recording_at: first ? first.dataset.next || "" : "",
     };
@@ -45,14 +64,14 @@
         const label = el.querySelector(".js-rec-label");
         const clock = el.querySelector(".js-rec-clock");
         if (live) {
-          const name = rec.recording_label || "Enregistrement";
-          if (label) label.textContent = name + " en cours";
+          const name = rec.recording_label || t("rec_label");
+          if (label) label.textContent = t("rec_now", { label: name });
           if (rec.recording_ends_at) el.dataset.ends = rec.recording_ends_at;
           const ends = Date.parse(el.dataset.ends || "");
           if (clock) clock.textContent = Number.isFinite(ends) ? hms(ends - Date.now()) : "—";
           return;
         }
-        if (label) label.textContent = "Prochain enregistrement";
+        if (label) label.textContent = t("rec_next");
         if (rec.next_recording_at) el.dataset.next = rec.next_recording_at;
         const next = Date.parse(el.dataset.next || "");
         if (!clock) return;
@@ -86,11 +105,13 @@
   })();
 
   const hasToken = !!token();
+  const hasOperator = !!document.body.dataset.operator;
+  const hasAuth = hasToken || hasOperator;
   document.querySelectorAll(".js-del-vac").forEach((btn) => {
-    btn.hidden = !hasToken;
+    btn.hidden = !hasAuth;
   });
   document.querySelectorAll(".js-del-need-token").forEach((n) => {
-    n.hidden = hasToken;
+    n.hidden = hasAuth;
   });
 
   (function bindUtcClocks() {
@@ -117,9 +138,13 @@
         ui = document.createElement("div");
         ui.className = "tu-player";
         ui.innerHTML =
-          '<button type="button" class="tu-player__play" aria-pressed="false">Lecture</button>' +
+          '<button type="button" class="tu-player__play" aria-pressed="false">' +
+          t("play") +
+          "</button>" +
           '<span class="media-tu__clock">— TU</span>' +
-          '<label class="tu-player__seek">Heure TU<input type="range" min="0" max="1" step="0.05" value="0"></label>';
+          '<label class="tu-player__seek">' +
+          t("time_utc") +
+          '<input type="range" min="0" max="1" step="0.05" value="0"></label>';
         media.insertAdjacentElement("afterend", ui);
         const playBtn = ui.querySelector(".tu-player__play");
         const clock = ui.querySelector(".media-tu__clock");
@@ -135,7 +160,7 @@
             if (!seeking) seek.value = String(t);
           }
           const on = !media.paused && !media.ended;
-          playBtn.textContent = on ? "Pause" : "Lecture";
+          playBtn.textContent = on ? t("pause") : t("play");
           playBtn.setAttribute("aria-pressed", on ? "true" : "false");
         };
         playBtn.addEventListener("click", () => {
@@ -179,16 +204,17 @@
       const id = btn.getAttribute("data-delete-trafic") || btn.getAttribute("data-delete-vacation");
       const tok = token();
       if (!id) return;
-      if (!tok) {
-        window.alert("Suppression refusée : renseigne le jeton dans Réglages, puis recharge.");
+      if (!tok && !document.body.dataset.operator) {
+        window.alert(t("del_denied"));
         return;
       }
-      if (!window.confirm(`Supprimer définitivement ${id} (audio, vidéo, dossier) ?`)) return;
+      if (!window.confirm(t("del_confirm", { id: id }))) return;
       btn.disabled = true;
       try {
         const res = await fetch("/api/trafic/" + encodeURIComponent(id) + "/delete", {
           method: "POST",
-          headers: { "X-Admin-Token": tok },
+          credentials: "same-origin",
+          headers: tok ? { "X-Admin-Token": tok } : {},
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
@@ -203,7 +229,7 @@
         const detail = Array.isArray(data.detail)
           ? data.detail.map((x) => x.msg || x).join(" ")
           : data.detail;
-        window.alert(detail || `Suppression impossible (${res.status})`);
+        window.alert(detail || t("del_fail", { status: res.status }));
       } catch (err) {
         window.alert(String(err));
       } finally {

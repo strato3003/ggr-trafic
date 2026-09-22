@@ -471,6 +471,16 @@ async def run_vacation(
         for role, label in (("tx_fleet_west", "flotte ouest"), ("tx_fleet_east", "flotte est")):
             if role in roles:
                 extra_tx.append({"id": role.removeprefix("tx_").replace("_", "-"), "label": label, "role": role})
+        for role, kiwi in roles.items():
+            if str(role).startswith("tx_beam"):
+                n = str(role).removeprefix("tx_beam")
+                extra_tx.append(
+                    {
+                        "id": f"beam{n}",
+                        "label": kiwi.get("site_label") or f"faisceau {n}",
+                        "role": role,
+                    }
+                )
         ack_sites = [
             {"id": sid, "label": kiwi.get("site_label") or sid}
             for sid, kiwi in roles.items()

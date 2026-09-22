@@ -2,100 +2,95 @@
 
 <form id="reglages-form" class="settings" autocomplete="off">
   <fieldset>
-    <legend>Jeton (obligatoire pour enregistrer et sauver)</legend>
+    <legend>{{ t('setup_login') }}</legend>
+    {% if operator %}
+    <p class="hint">{{ t('setup_logged', call=operator.callsign, name=operator.name, email=operator.email) }}</p>
+    {% elif google_sso %}
+    <p class="hint">{{ t('setup_login_hint') }}</p>
+    {% endif %}
     <label>
-      Jeton administrateur
+      {{ t('setup_token') }}
       <input name="admin_token" type="password" autocomplete="off"
-             placeholder="coller le jeton ici">
+             placeholder="{{ t('setup_token_ph') }}">
     </label>
-    {% if not admin_configured %}
-    <p class="err">Aucun jeton n’est configuré sur le serveur.</p>
+    {% if not admin_configured and not google_sso %}
+    <p class="err">{{ t('setup_no_auth') }}</p>
+    {% elif not admin_configured %}
+    <p class="hint">{{ t('setup_no_token') }}</p>
     {% endif %}
   </fieldset>
 
   <fieldset id="record-test">
-    <legend>1 · Tester une fréquence maintenant</legend>
-    <p class="hint">Lance un screencast + audio USB sur <strong>une seule QRG</strong>
-      (kHz 14135 ou MHz 14.135), Kiwi le plus proche de la flotte.
-      Ne change pas les fréquences du bulletin {{ schedule_ident_short }} {{ time_utc }} TU.</p>
+    <legend>{{ t('setup_test_legend') }}</legend>
+    <p class="hint">{{ t('setup_test_hint', days=schedule_ident_short, time=time_utc) }}</p>
     <label>
-      QRG
+      {{ t('setup_qrg') }}
       <input name="test_freq" type="number" step="0.0001" min="1.5" max="30000" required
              value="{{ '%.4f'|format(tx_khz) }}">
     </label>
     <label>
-      Durée du test (min)
+      {{ t('setup_test_dur') }}
       <input name="test_duration_minutes" type="number" step="1" min="1" max="45" required value="2">
     </label>
     <label class="settings__check">
       <input name="test_hunt" type="checkbox" checked>
-      Chercher un signal USB à ± {{ qrg_tolerance_khz }} kHz (QRM)
+      {{ t('setup_hunt', tol=qrg_tolerance_khz) }}
     </label>
     <p class="settings__actions">
-      <button type="button" class="btn btn--rx" id="record-qrg">Lancer le test radio</button>
+      <button type="button" class="btn btn--rx" id="record-qrg">{{ t('setup_test_go') }}</button>
     </p>
     <p class="settings-msg" data-for="qrg" role="status"></p>
   </fieldset>
 
   <fieldset>
-    <legend>2 · Fréquences du bulletin {{ schedule_days_short }} {{ time_utc }} TU (kHz USB)</legend>
-    <p class="hint">Ces valeurs servent au passage du {{ schedule_days_label }} et au bouton « trafic complet ».
-      <strong>Sauver</strong> écrit seulement le fichier de config, sans allumer de Kiwi.</p>
+    <legend>{{ t('setup_freq_legend', days=schedule_days_short, time=time_utc) }}</legend>
+    <p class="hint">{{ t('setup_freq_hint', days=schedule_days_label) }}</p>
     <label>
-      Bulletin {{ club_callsign }}
+      {{ t('setup_tx', club=club_callsign) }}
       <input name="tx_khz" type="number" step="0.0001" min="1000" max="30000" required
              value="{{ '%.4f'|format(tx_khz) }}">
     </label>
     <label>
-      Accusé 16 m ({{ ack1_mhz }} MHz, ± {{ qrg_tolerance_khz }} kHz)
+      {{ t('setup_ack16', mhz=ack1_mhz, tol=qrg_tolerance_khz) }}
       <input name="ack1_khz" type="number" step="0.0001" min="1000" max="30000" required
              value="{{ '%.4f'|format(ack1_khz) }}">
     </label>
     <label>
-      Accusé 12 m ({{ ack2_mhz }} MHz, ± {{ qrg_tolerance_khz }} kHz)
+      {{ t('setup_ack12', mhz=ack2_mhz, tol=qrg_tolerance_khz) }}
       <input name="ack2_khz" type="number" step="0.0001" min="1000" max="30000" required
              value="{{ '%.4f'|format(ack2_khz) }}">
     </label>
     <label>
-      Suivi QRM TX (± kHz)
+      {{ t('setup_tol') }}
       <input name="qrg_tolerance_khz" type="number" step="0.1" min="0.1" max="15" required
              value="{{ qrg_tolerance_khz }}">
     </label>
     <label>
-      Avance avant {{ time_utc }} TU (min)
+      {{ t('setup_lead', time=time_utc) }}
       <input name="lead_minutes" type="number" step="1" min="0" max="15" required
              value="{{ schedule_lead }}">
     </label>
-    <p class="hint">
-      Cette minute d’avance sert à se caler (Kiwi, VFO) avant l’heure d’antenne.
-      L’onglet Trafic affiche {{ time_utc }} TU, pas l’heure de démarrage (17:59).
-    </p>
+    <p class="hint">{{ t('setup_lead_hint', time=time_utc) }}</p>
     <label>
-      Durée du trafic (min)
+      {{ t('setup_dur') }}
       <input name="duration_minutes" type="number" step="1" min="1" max="45" required
              value="{{ duration_minutes }}">
     </label>
     <p class="settings__actions">
-      <button type="submit" class="btn" id="save-qrg">Sauver les fréquences</button>
+      <button type="submit" class="btn" id="save-qrg">{{ t('setup_save_qrg') }}</button>
     </p>
     <p class="settings-msg" data-for="save" role="status"></p>
   </fieldset>
 
   <fieldset>
-    <legend>Points d’émission du bulletin (max 5)</legend>
-    <p class="hint">
-      QTH d’où part le bulletin météo. Cette semaine : Philippe F4HWM / F6KUF
-      (Talmont-Saint-Hilaire). Michel FO5QB tous les jours. Recouvrement Cap Town
-      quand la flotte s’étale autour du cap. Le globe trace un
-      pointillé vers le centroïde des skippers cochés : distance et azimut d’antenne
-      (vrai nord). Enregistré avec « Sauver les fréquences ».
-    </p>
+    <legend>{{ t('setup_tx_legend') }}</legend>
+    <p class="hint">{{ t('setup_tx_hint') }}</p>
     <div class="tx-sites">
       {% for i in range(5) %}
       {% set s = (tx_sites or [])[i] if (tx_sites or [])|length > i else {} %}
       <div class="tx-site">
         <label>
-          Nom
+          {{ t('setup_name') }}
           <input name="tx_label_{{ i }}" type="text" maxlength="64" placeholder="indicatif"
                  value="{{ s.label or '' }}">
         </label>
@@ -103,12 +98,12 @@
         <input type="hidden" name="tx_loc_{{ i }}" value="{{ s.loc }}">
         {% endif %}
         <label>
-          Latitude
+          {{ t('setup_lat') }}
           <input name="tx_lat_{{ i }}" type="number" step="any" min="-90" max="90"
                  placeholder="lat" value="{{ s.lat if s.lat is defined else '' }}">
         </label>
         <label>
-          Longitude
+          {{ t('setup_lon') }}
           <input name="tx_lon_{{ i }}" type="number" step="any" min="-180" max="180"
                  placeholder="lon" value="{{ s.lon if s.lon is defined else '' }}">
         </label>
@@ -118,59 +113,49 @@
   </fieldset>
 
   <fieldset>
-    <legend>3 · Trafic complet (comme un bulletin {{ schedule_days_short }} {{ time_utc }} TU)</legend>
-    <p class="hint">Enregistre <strong>maintenant</strong> le bulletin (14.135 MHz, émetteur + flotte)
-      + les deux ACK depuis des KiwiSDR répartis, pendant la durée indiquée ci-dessus.
-      À utiliser pour un vrai passage, pas pour un essai QRG.</p>
+    <legend>{{ t('setup_full_legend', days=schedule_days_short, time=time_utc) }}</legend>
+    <p class="hint">{{ t('setup_full_hint') }}</p>
     <p class="settings__actions">
-      <button type="button" class="btn" id="record-now">Lancer le trafic complet</button>
+      <button type="button" class="btn" id="record-now">{{ t('setup_full_go') }}</button>
     </p>
     <p class="settings-msg" data-for="vac" role="status"></p>
   </fieldset>
 
   <fieldset id="buddy-call">
-    <legend>4 · Buddy call {{ buddy_time_utc }} TU</legend>
-    <p class="hint">
-      Écoute <strong>{{ '%.0f'|format(buddy_main_khz) }} kHz</strong> (principale) et
-      <strong>{{ '%.0f'|format(buddy_alt_khz) }} kHz</strong> (secours) sur
-      <strong>4 KiwiSDR</strong> répartis (NVIS, saut 1 hop, diversité).
-      Le centroïde (bulletin et buddy) est uniquement celui des skippers cochés.
-    </p>
+    <legend>{{ t('setup_buddy_legend', time=buddy_time_utc) }}</legend>
+    <p class="hint">{{ t('setup_buddy_hint', main=('%.0f'|format(buddy_main_khz)), alt=('%.0f'|format(buddy_alt_khz))) }}</p>
     <input type="hidden" name="buddy_kiwi_count" value="4">
     <label class="settings__check">
       <input name="buddy_enabled" type="checkbox" {% if buddy_enabled %}checked{% endif %}>
-      Enregistrement quotidien à {{ buddy_time_utc }} TU
+      {{ t('setup_buddy_daily', time=buddy_time_utc) }}
     </label>
     <label>
-      QRG principale (kHz)
+      {{ t('setup_buddy_main') }}
       <input name="buddy_main_khz" type="number" step="0.0001" min="1000" max="30000" required
              value="{{ '%.4f'|format(buddy_main_khz) }}">
     </label>
     <label>
-      QRG secours (kHz)
+      {{ t('setup_buddy_alt') }}
       <input name="buddy_alt_khz" type="number" step="0.0001" min="1000" max="30000" required
              value="{{ '%.4f'|format(buddy_alt_khz) }}">
     </label>
     <label>
-      Heure TU
+      {{ t('setup_utc') }}
       <input name="buddy_time_utc" type="text" required pattern="[0-2][0-9]:[0-5][0-9]"
              value="{{ buddy_time_utc }}">
     </label>
     <label>
-      Avance (min)
+      {{ t('setup_buddy_lead') }}
       <input name="buddy_lead" type="number" step="1" min="0" max="15" required
              value="{{ buddy_lead }}">
     </label>
-    <p class="hint">
-      Même principe : se caler avant {{ buddy_time_utc }} TU. Trafic affiche
-      {{ buddy_time_utc }}, pas 11:59.
-    </p>
+    <p class="hint">{{ t('setup_buddy_lead_hint', time=buddy_time_utc) }}</p>
     <label>
-      Durée (min)
+      {{ t('setup_buddy_dur') }}
       <input name="buddy_duration_minutes" type="number" step="1" min="1" max="45" required
              value="{{ buddy_duration_minutes }}">
     </label>
-    <p class="hint">Skippers à prendre en compte pour le centroïde (noms tracker Yellowbrick)</p>
+    <p class="hint">{{ t('setup_skippers') }}</p>
     {% if boats %}
     <ul class="skipper-list" id="globe-skippers">
       {% for b in boats %}
@@ -185,73 +170,64 @@
     </ul>
     {% else %}
     <label>
-      Un skipper par ligne
+      {{ t('setup_skippers_text') }}
       <textarea name="buddy_skippers_text" rows="4">{{ buddy_skippers | join('\n') }}</textarea>
     </label>
     {% endif %}
     <p class="settings__actions">
-      <button type="button" class="btn" id="save-buddy">Sauver le buddy call</button>
-      <button type="button" class="btn" id="globe-save-buddy">Sauver le centroïde (globe)</button>
+      <button type="button" class="btn" id="save-buddy">{{ t('setup_save_buddy') }}</button>
+      <button type="button" class="btn" id="globe-save-buddy">{{ t('setup_save_centroid') }}</button>
     </p>
     <p class="settings-msg" id="globe-buddy-msg" data-for="buddy" role="status" hidden></p>
   </fieldset>
 
   <fieldset>
-    <legend>Page d’attente</legend>
-    <p class="hint">
-      En cas d’incident manifeste (globe noir, script cassé) ou pour une
-      maintenance : les visiteurs voient « Site momentanément indisponible »
-      devant le globe 3D en faible transparence et flou. Recette :
-      <code>/?wait=1</code>.
-    </p>
+    <legend>{{ t('setup_wait_legend') }}</legend>
+    <p class="hint">{{ t('setup_wait_hint') }}</p>
     <label class="settings__check">
       <input name="unavailable" type="checkbox"{% if unavailable %} checked{% endif %}>
-      Activer la page d’attente
+      {{ t('setup_wait_on') }}
     </label>
     <p class="settings__actions">
-      <button type="button" class="btn" id="save-wait">Sauver la page d’attente</button>
+      <button type="button" class="btn" id="save-wait">{{ t('setup_save_wait') }}</button>
     </p>
     <p class="settings-msg" data-for="wait" role="status"></p>
   </fieldset>
 
   <fieldset>
-    <legend>Affichage globe (défauts)</legend>
+    <legend>{{ t('setup_disp_legend') }}</legend>
     {% set disp = display if display is defined else {} %}
-    <p class="hint">
-      État d’arrivée pour tout visiteur. Les calques de la carte restent
-      modifiables localement. Le bandeau GGR trafic HF se masque aussi tant
-      que METAREA est allumé (chevauchement à l’équateur).
-    </p>
+    <p class="hint">{{ t('setup_disp_hint') }}</p>
     <label class="settings__check">
       <input name="display_banner" type="checkbox"{% if disp.banner %} checked{% endif %}>
-      Bandeau GGR trafic HF
+      {{ t('layer_banner') }}
     </label>
     <label class="settings__check">
       <input name="display_sdr_fleet" type="checkbox"{% if disp.sdr_fleet %} checked{% endif %}>
-      SDR choisis selon centre flotte (prochain buddy / bulletin)
+      {{ t('setup_disp_sdr') }}
     </label>
     <label class="settings__check">
       <input name="display_sdr_potential" type="checkbox"{% if disp.sdr_potential %} checked{% endif %}>
-      SDR potentiels
+      {{ t('layer_potential') }}
     </label>
     <label class="settings__check">
       <input name="display_skippers" type="checkbox"{% if disp.skippers %} checked{% endif %}>
-      Skippers
+      {{ t('layer_skippers') }}
     </label>
     <label class="settings__check">
       <input name="display_boats" type="checkbox"{% if disp.boats %} checked{% endif %}>
-      Bateaux + traces
+      {{ t('layer_boats') }}
     </label>
     <label class="settings__check">
       <input name="display_metarea" type="checkbox"{% if disp.metarea %} checked{% endif %}>
-      METAREA
+      {{ t('layer_metarea') }}
     </label>
     <label class="settings__check">
       <input name="display_subzones" type="checkbox"{% if disp.subzones %} checked{% endif %}>
-      Sous-zones
+      {{ t('layer_subzones') }}
     </label>
     <p class="settings__actions">
-      <button type="button" class="btn" id="save-display">Sauver l’affichage</button>
+      <button type="button" class="btn" id="save-display">{{ t('setup_save_disp') }}</button>
     </p>
     <p class="settings-msg" data-for="display" role="status"></p>
   </fieldset>

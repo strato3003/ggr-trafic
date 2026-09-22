@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %} · Setup{% endblock %}
+{% block title %} · {{ t('nav_setup') }}{% endblock %}
 {% block content %}
 <article class="prose">
-  <h1>Setup radio</h1>
+  <h1>{{ t('setup_title') }}</h1>
 </article>
 {% include "_reglages_form.html" %}
 {% endblock %}
 {% block extra_js %}
-<script src="/static/js/reglages.js?v={{ version }}-kiwi56"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi58"></script>
 {% endblock %}

@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent
 SUBZONES_PATH = ROOT / "static" / "geo" / "metarea2-subzones.json"
 METAREAS_PATH = ROOT / "static" / "geo" / "metareas.json"
 WWMIWS = "https://wwmiws.wmo.int/index.php/metareas"
-UA = "GGR-Trafic/1.1.12 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
+UA = "GGR-Trafic/1.1.13 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
 CACHE_TTL_S = 20 * 60
 # Grilles intérieures officielles (rectangles + océan). Les autres METAREA
 # basculent seules via le polygone OHI + le bulletinset WWMIWS du même n°.
@@ -37,6 +37,11 @@ DISCLAIMER = (
     "Ce texte est un condensé automatique, calculé d’après les bulletins WWMIWS "
     "et la position de la flotte. Il appartient à l’OM d’en vérifier le contenu "
     "sur le bulletin officiel avant toute lecture à l’antenne."
+)
+DISCLAIMER_EN = (
+    "This text is an automatic digest, computed from WWMIWS bulletins "
+    "and the fleet position. The operator must check it against the official "
+    "bulletin before any on-air reading."
 )
 # Bulletins côtiers / NAVTEX de la page WWMIWS. COASTAL_FOR = filtre METAREA II
 # (on ne charge Corsen que si la flotte y est). Pour VII, VIII-S, X, XIV, XV :
@@ -131,9 +136,49 @@ _MOIS = {
     "december": "décembre",
 }
 
-# Phrases longues d’abord — vocabulaire bulletin marine MF, pour lecture HF.
+# Phrases longues d’abord — vocabulaire bulletin marine MF / UK, pour lecture HF.
 # Pas de mots isolés (to/of/in/at) : ils cassent les positions 40N23W.
 _FR_RAW: list[tuple[str, str]] = [
+    (r"\bAT LEAST\b", "au moins"),
+    (r"\bwith associated ridge in Bay of Biscay\b", "avec dorsale associée dans le golfe de Gascogne"),
+    (r"\bin Bay of Biscay\b", "dans le golfe de Gascogne"),
+    (r"\bBay of Biscay\b", "golfe de Gascogne"),
+    (r"\bgradually filling\b", "se comblant progressivement"),
+    (r"\bslowly filling\b", "se comblant lentement"),
+    (r"\bgradually deepening\b", "se creusant progressivement"),
+    (r"\bTropical depression\b", "dépression tropicale"),
+    (r"\bTropical storm\b", "tempête tropicale"),
+    (r"\bPost-tropical\b", "post-tropicale"),
+    (r"\bHurricane\b", "ouragan"),
+    (r"\bTropical wave near\b", "onde tropicale près de"),
+    (r"\bTropical wave along\b", "onde tropicale le long de"),
+    (r"\bTropical wave\b", "onde tropicale"),
+    (r"\bwith associated trough over\b", "avec talweg associé sur"),
+    (r"\bwith associated trough\b", "avec talweg associé"),
+    (r"\bassociated trough over\b", "talweg associé sur"),
+    (r"\bassociated trough\b", "talweg associé"),
+    (r"\bwith associated ridge in\b", "avec dorsale associée dans"),
+    (r"\bwith associated ridge over\b", "avec dorsale associée sur"),
+    (r"\bnorthwestern areas\b", "les régions du nord-ouest"),
+    (r"\bnortheastern areas\b", "les régions du nord-est"),
+    (r"\bsouthwestern areas\b", "les régions du sud-ouest"),
+    (r"\bsoutheastern areas\b", "les régions du sud-est"),
+    (r"\bnorthern areas\b", "les régions du nord"),
+    (r"\bsouthern areas\b", "les régions du sud"),
+    (r"\bwestern areas\b", "les régions de l'ouest"),
+    (r"\beastern areas\b", "les régions de l'est"),
+    (r"\bmoving westward at around\b", "se déplaçant vers l'ouest à environ"),
+    (r"\bmoving eastward at around\b", "se déplaçant vers l'est à environ"),
+    (r"\bmoving westward\b", "se déplaçant vers l'ouest"),
+    (r"\bmoving eastward\b", "se déplaçant vers l'est"),
+    (r"\bmoving northward\b", "se déplaçant vers le nord"),
+    (r"\bmoving southward\b", "se déplaçant vers le sud"),
+    (r"\bat around\b", "à environ"),
+    (r"\bcontinuing to\b", "se poursuivant jusqu'à"),
+    (r"\bcontinuing\b", "se poursuivant"),
+    (r"\bbecoming High\b", "devenant anticyclonique"),
+    (r"\band expected\b", "et prévu"),
+    (r"\band then\b", "puis"),
     (r"\bGibraltar Strait\b", "détroit de Gibraltar"),
     (r"\bEast of Cadiz\b", "est de Cadix"),
     (r"\bin and leeward strait\b", "dans le détroit et sous le vent"),
@@ -147,7 +192,6 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bComplex low\b", "Dépression complexe"),
     (r"\bNew low expected\b", "Nouvelle dépression prévue"),
     (r"\bThundery low\b", "Dépression orageuse"),
-    (r"\bTropical wave along\b", "Onde tropicale le long de"),
     (r"\bMonsoon trough near\b", "Talweg de mousson près de"),
     (r"\bThe ITCZ extends from\b", "La ZCIT s'étend de"),
     (r"\band continues to\b", "et se poursuit vers"),
@@ -249,12 +293,6 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bextreme southwest\b", "extrême sud-ouest"),
     (r"\bextreme west\b", "extrême ouest"),
     (r"\bextreme east\b", "extrême est"),
-    (r"\bIn northwest\b", "Au nord-ouest"),
-    (r"\bIn southeast\b", "Au sud-est"),
-    (r"\bIn west\b", "À l'ouest"),
-    (r"\bIn east\b", "À l'est"),
-    (r"\bIn north\b", "Au nord"),
-    (r"\bIn south\b", "Au sud"),
     (r"\bin northwest\b", "au nord-ouest"),
     (r"\bin northeast\b", "au nord-est"),
     (r"\bin southwest\b", "au sud-ouest"),
@@ -321,8 +359,7 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bgale\b", "coup de vent"),
     (r"\bLeast\b", "au moins"),
     (r"\bleast\b", "au moins"),
-    (r"\bFROM\b", "De"),
-    (r"\bAT LEAST\b", "au moins"),
+    (r"\bFROM\b", "de"),
     (r"\bHigh\b", "Anticyclone"),
     (r"\bLow\b", "Dépression"),
     (r"\bSlight\b", "Mer peu agitée"),
@@ -332,6 +369,8 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bgusts\b", "rafales"),
     (r"\bthen\b", "puis"),
     (r"\bbut\b", "mais"),
+    (r"\bwith\b", "avec"),
+    (r"\band\b", "et"),
     (r"\bUTC\b", "TU"),
     (r"\bkt\b", "nd"),
 ]
@@ -477,12 +516,50 @@ def parse_official_at(text: str) -> datetime | None:
         return None
 
 
-def official_label(dt: datetime | None, fallback: str = "") -> str:
+def official_label(dt: datetime | None, fallback: str = "", lang: str = "fr") -> str:
     if dt is None:
         return fallback
+    if _ui_lang(lang) == "en":
+        days = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+        months = (
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        )
+        return f"{days[dt.weekday()]} {dt.day} {months[dt.month - 1]} {dt.year} at {dt:%H:%M} UTC"
     jour = _JOURS[dt.strftime("%A").lower()]
     mois = _MOIS[dt.strftime("%B").lower()]
     return f"{jour} {dt.day} {mois} {dt.year} à {dt:%H:%M} TU"
+
+
+def _fr_clock(raw: str) -> str:
+    hhmm = str(raw or "").zfill(4)
+    return f"{hhmm[:2]}:{hhmm[2:]}"
+
+
+def _fr_datetimes(text: str) -> str:
+    """Dates anglaises du bulletin (Tuesday 22 September 2026 at 0750 UTC)."""
+
+    def _full(m: re.Match[str]) -> str:
+        jour = _JOURS[m.group(1).lower()]
+        mois = _MOIS[m.group(3).lower()]
+        return f"{jour} {int(m.group(2))} {mois} {m.group(4)} à {_fr_clock(m.group(5))} TU"
+
+    s = _OFFICIAL_AT.sub(_full, text)
+    for en, fr in _JOURS.items():
+        s = re.sub(rf"\b{en}\b", fr, s, flags=re.I)
+    for en, fr in _MOIS.items():
+        s = re.sub(rf"\b{en}\b", fr, s, flags=re.I)
+    return s
 
 
 def fr_marine(text: str) -> str:
@@ -490,13 +567,15 @@ def fr_marine(text: str) -> str:
     s = " ".join(str(text or "").split())
     if not s:
         return ""
+    s = _fr_datetimes(s)
     for pat, repl in _FR_PHRASES:
         s = pat.sub(repl, s)
     s = re.sub(r"\s+or\s+", " ou ", s, flags=re.I)
+    s = re.sub(r"(?<![/\d])(\d{3,4})\s*TU\b", lambda m: _fr_clock(m.group(1)) + " TU", s)
     s = re.sub(r"\s+", " ", s).strip()
     s = re.sub(r"\s+([,.;:])", r"\1", s)
-    if s and s[0].islower():
-        s = s[0].upper() + s[1:]
+    bits = re.split(r"(?<=[.!?])\s+", s)
+    s = " ".join((p[0].upper() + p[1:] if p and p[0].islower() else p) for p in bits if p)
     return s
 
 
@@ -852,11 +931,23 @@ def _pick_zone_blocks(blocks: list[dict[str, Any]], wanted: set[str], *, has_gri
     return picked
 
 
-def _block_line(block: dict[str, Any]) -> str:
+def _ui_lang(lang: str | None) -> str:
+    return "en" if str(lang or "").lower().startswith("en") else "fr"
+
+
+def disclaimer_for(lang: str | None) -> str:
+    return DISCLAIMER_EN if _ui_lang(lang) == "en" else DISCLAIMER
+
+
+def _block_line(block: dict[str, Any], lang: str = "fr") -> str:
     titre = block.get("header") or ", ".join(block.get("names") or [])
     ligne = f"{titre}."
-    if block.get("fr"):
-        ligne += " " + block["fr"]
+    if _ui_lang(lang) == "en":
+        txt = block.get("en_text") or block.get("fr") or ""
+    else:
+        txt = block.get("fr") or ""
+    if txt:
+        ligne += " " + txt
     return ligne
 
 
@@ -873,7 +964,9 @@ def build_digest(
     coordinator: str = "Météo-France Toulouse",
     has_grid: bool = True,
     coastal: list[dict[str, Any]] | None = None,
+    lang: str = "fr",
 ) -> dict[str, Any]:
+    en = _ui_lang(lang) == "en"
     here = [b for b in located if b.get("metarea") == roman]
     if not here:
         here = located
@@ -894,36 +987,58 @@ def build_digest(
     out_for_fleet = (not has_grid) or _zone_hits_text(fleet_zones + extra_zones, forecast.get("outlook_en") or "")
 
     lecture: list[str] = []
-    off = official_label(forecast.get("official_at"))
-    who = coordinator or "service météo maritime"
-    lecture.append(f"Bulletin haute mer METAREA {roman}, {who}" + (f", {off}." if off else "."))
+    off = official_label(forecast.get("official_at"), lang=lang)
+    who = coordinator or ("maritime weather service" if en else "service météo maritime")
+    if en:
+        lecture.append(f"High seas forecast METAREA {roman}, {who}" + (f", {off}." if off else "."))
+    else:
+        lecture.append(f"Bulletin haute mer METAREA {roman}, {who}" + (f", {off}." if off else "."))
     if not has_grid:
         for warn in applied:
-            if warn.get("fr"):
-                lecture.append("Avis. " + warn["fr"])
-        full = forecast.get("full_fr") or forecast.get("synopsis_fr") or ""
+            body = (warn.get("en") if en else warn.get("fr")) or warn.get("en") or warn.get("fr") or ""
+            if body:
+                lecture.append(("Warning. " if en else "Avis. ") + body)
+        full = (
+            (forecast.get("full_en") or forecast.get("synopsis_en") or "")
+            if en
+            else (forecast.get("full_fr") or forecast.get("synopsis_fr") or "")
+        )
         if full:
             lecture.append(full)
         else:
-            lecture.append("Bulletin officiel récupéré, texte non exploitable.")
+            lecture.append(
+                "Official bulletin retrieved, text not usable."
+                if en
+                else "Bulletin officiel récupéré, texte non exploitable."
+            )
     else:
         for warn in applied:
-            if warn.get("fr"):
-                lecture.append("Avis. " + warn["fr"])
+            body = (warn.get("en") if en else warn.get("fr")) or warn.get("en") or warn.get("fr") or ""
+            if body:
+                lecture.append(("Warning. " if en else "Avis. ") + body)
         if skipped_warn:
             lecture.append(
-                "Un avis haute mer est en vigueur hors des sous-zones de la flotte. "
+                "A high-seas warning is in force outside the fleet sub-zones. "
+                "Check it on the official warnings bulletin."
+                if en
+                else "Un avis haute mer est en vigueur hors des sous-zones de la flotte. "
                 "Le vérifier sur le bulletin officiel des avis."
             )
-        if forecast.get("synopsis_fr"):
-            lecture.append("Situation générale. " + forecast["synopsis_fr"])
+        syn = (forecast.get("synopsis_en") if en else forecast.get("synopsis_fr")) or ""
+        if syn:
+            lecture.append(("General situation. " if en else "Situation générale. ") + syn)
         if not picked:
-            lecture.append("Pas de prévision de zone pour la position actuelle.")
+            lecture.append(
+                "No zone forecast for the current position."
+                if en
+                else "Pas de prévision de zone pour la position actuelle."
+            )
         else:
             for block in picked:
-                lecture.append(_block_line(block))
-        if out_for_fleet and forecast.get("outlook_fr"):
-            lecture.append("Tendance. " + forecast["outlook_fr"])
+                lecture.append(_block_line(block, lang))
+        outlook = (forecast.get("outlook_en") if en else forecast.get("outlook_fr")) or ""
+        if out_for_fleet and outlook:
+            lecture.append(("Outlook. " if en else "Tendance. ") + outlook)
 
     coastal_used: list[dict[str, Any]] = []
     seen_coastal: set[str] = set()
@@ -951,17 +1066,22 @@ def build_digest(
             seen_coastal.update(names)
             if blob:
                 seen_txt.add(blob)
-        gale_fr = item.get("gale_fr") or ""
-        if not czones and not gale_fr:
+        has_gale = bool(item.get("gale_fr"))
+        if not czones and not has_gale:
             continue
         coastal_used.append(item)
-        titre = item.get("title") or item.get("gts") or "côtier"
+        titre = item.get("title") or item.get("gts") or ("coastal" if en else "côtier")
         gts = item.get("gts") or ""
-        lecture.append(f"Bulletin côtier {titre}" + (f" ({gts})" if gts else "") + ".")
-        if gale_fr:
-            lecture.append("Avis de coup de vent. " + gale_fr)
+        if en:
+            lecture.append(f"Coastal forecast {titre}" + (f" ({gts})" if gts else "") + ".")
+        else:
+            lecture.append(f"Bulletin côtier {titre}" + (f" ({gts})" if gts else "") + ".")
+        if has_gale:
+            gale_txt = (item.get("gale_en") if en else item.get("gale_fr")) or item.get("gale_fr") or ""
+            if gale_txt:
+                lecture.append(("Gale warning. " if en else "Avis de coup de vent. ") + gale_txt)
         for block in czones:
-            lecture.append(_block_line(block))
+            lecture.append(_block_line(block, lang))
 
     return {
         "fleet_zones": fleet_zones,
@@ -1029,6 +1149,7 @@ def assemble(
     links: dict[str, str] | None = None,
     area: dict[str, Any] | None = None,
     coastal: list[dict[str, Any]] | None = None,
+    lang: str = "fr",
 ) -> dict[str, Any]:
     fc = load_subzones()
     located = locate_boats(boats, fc)
@@ -1055,6 +1176,7 @@ def assemble(
         coordinator=coordinator,
         has_grid=has_grid,
         coastal=coastal,
+        lang=lang,
     )
     warning = warnings[0] if warnings else {}
     official = forecast.get("official_at") or (warning or {}).get("official_at")
@@ -1074,14 +1196,14 @@ def assemble(
         "coordinator": coordinator,
         "product": product,
         "has_subzones": has_grid,
-        "disclaimer": DISCLAIMER,
+        "disclaimer": disclaimer_for(lang),
         "official_at": official.isoformat() if isinstance(official, datetime) else None,
-        "official_label": official_label(official if isinstance(official, datetime) else None),
+        "official_label": official_label(official if isinstance(official, datetime) else None, lang=lang),
         "schedule_utc": list(SCHEDULE.get(name) or SCHEDULE.get(roman) or ()),
         "gts": gts,
         "wwmiws_date": wwmiws_date,
         "retrieved_at": fetched.isoformat() if fetched else None,
-        "retrieved_label": official_label(fetched) if fetched else wwmiws_date,
+        "retrieved_label": official_label(fetched, lang=lang) if fetched else wwmiws_date,
         "links": out_links,
         "boats": located,
         "fleet_zones": digest["fleet_zones"],
@@ -1236,19 +1358,22 @@ async def _cached_set(n: int, force: bool = False) -> dict[str, Any]:
     return {**pack, "stale": False}
 
 
-def _merge_parts(parts: list[dict[str, Any]], located: list[dict[str, Any]]) -> dict[str, Any]:
+def _merge_parts(parts: list[dict[str, Any]], located: list[dict[str, Any]], lang: str = "fr") -> dict[str, Any]:
+    en = _ui_lang(lang) == "en"
     if not parts:
         urls = wwmiws_urls(2)
+        miss = "WWMIWS bulletin unavailable." if en else "Bulletin WWMIWS indisponible."
+        empty = "High seas bulletin unavailable for now." if en else "Bulletin haute mer indisponible pour le moment."
         return {
             "ok": False,
-            "error": "Bulletin WWMIWS indisponible.",
+            "error": miss,
             "metarea": "—",
             "metareas": [],
             "links": urls,
             "geojson": {"type": "FeatureCollection", "features": []},
-            "disclaimer": DISCLAIMER,
-            "paragraphs": ["Bulletin haute mer indisponible pour le moment."],
-            "lecture": "Bulletin haute mer indisponible pour le moment.",
+            "disclaimer": disclaimer_for(lang),
+            "paragraphs": [empty],
+            "lecture": empty,
             "fleet_zones": [],
             "boats": located,
         }
@@ -1283,20 +1408,25 @@ def _merge_parts(parts: list[dict[str, Any]], located: list[dict[str, Any]]) -> 
     return first
 
 
-async def snapshot(boats: list[dict[str, Any]], force: bool = False) -> dict[str, Any]:
+async def snapshot(boats: list[dict[str, Any]], force: bool = False, lang: str = "fr") -> dict[str, Any]:
     """Bulletins WWMIWS des METAREA occupées par la flotte, cache 20 min."""
     located = locate_boats(boats)
     nums = sorted({int(b["metarea_n"]) for b in located if b.get("metarea_n")})
     if not nums:
+        empty = (
+            "No boat in a known maritime METAREA."
+            if _ui_lang(lang) == "en"
+            else "Aucun bateau en METAREA maritime connue."
+        )
         return {
             "ok": True,
             "metarea": "—",
             "metareas": [],
             "links": wwmiws_urls(2),
             "geojson": {"type": "FeatureCollection", "features": []},
-            "disclaimer": DISCLAIMER,
-            "paragraphs": ["Aucun bateau en METAREA maritime connue."],
-            "lecture": "Aucun bateau en METAREA maritime connue.",
+            "disclaimer": disclaimer_for(lang),
+            "paragraphs": [empty],
+            "lecture": empty,
             "fleet_zones": [],
             "boats": located,
         }
@@ -1324,8 +1454,8 @@ async def snapshot(boats: list[dict[str, Any]], force: bool = False) -> dict[str
         }
         fleet_z, extra_z, _warn_z = zone_sets(by_n or located)
         coastal = await load_coastal(catalog, fleet_z + extra_z, fleet_z + extra_z, force=force)
-        body = assemble(raw, boats, links, area, coastal=coastal)
+        body = assemble(raw, boats, links, area, coastal=coastal, lang=lang)
         if stale:
             body["stale"] = True
         parts.append(body)
-    return _merge_parts(parts, located)
+    return _merge_parts(parts, located, lang=lang)

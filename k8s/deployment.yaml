@@ -47,6 +47,58 @@ spec:
                   name: ggr-trafic-secrets
                   key: admin-token
                   optional: true
+            - name: GGR_GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ggr-trafic-secrets
+                  key: google-client-id
+                  optional: true
+            - name: GGR_GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ggr-trafic-secrets
+                  key: google-client-secret
+                  optional: true
+            - name: GGR_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ggr-trafic-secrets
+                  key: session-secret
+                  optional: true
+            - name: GGR_SESSION_SECURE
+              value: "1"
+            - name: GGR_PUBLIC_URL
+              value: https://ggr-trafic.k3s.lpb.ovh
+            - name: GGR_SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ggr-trafic-secrets
+                  key: smtp-host
+                  optional: true
+            - name: GGR_SMTP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ggr-trafic-secrets
+                  key: smtp-port
+                  optional: true
+            - name: GGR_SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ggr-trafic-secrets
+                  key: smtp-user
+                  optional: true
+            - name: GGR_SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ggr-trafic-secrets
+                  key: smtp-password
+                  optional: true
+            - name: GGR_SMTP_FROM
+              valueFrom:
+                secretKeyRef:
+                  name: ggr-trafic-secrets
+                  key: smtp-from
+                  optional: true
           resources:
             requests:
               cpu: 250m

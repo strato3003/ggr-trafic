@@ -3,47 +3,47 @@
 {% block content %}
 <article class="vac" data-started="{{ trafic.started_at or '' }}">
   <header class="vac__head">
-    <p class="crumb"><a href="/#trafic">← Trafic</a></p>
+    <p class="crumb"><a href="/#trafic">{{ t('crumb_trafic') }}</a></p>
     <h1>{{ trafic.title or (trafic.started_at | when) }}</h1>
     <p class="meta">
       {% if trafic.is_buddy %}<span class="badge">Buddy call</span>{% endif %}
-      {% if trafic.is_test %}<span class="badge">{{ trafic.title or 'Test' }}</span>{% endif %}
+      {% if trafic.is_test %}<span class="badge">{{ trafic.title or t('vac_test') }}</span>{% endif %}
       {{ trafic.club.callsign if trafic.club else club_callsign }}
       · {{ trafic.status }}
     </p>
     <p class="vac__actions">
       <button type="button" class="btn btn--danger js-del-vac" hidden
-              data-delete-trafic="{{ trafic.id }}">Supprimer ce trafic</button>
-      <span class="hint js-del-need-token">Suppression : coller le jeton dans Setup, puis recharger cette page.</span>
+              data-delete-trafic="{{ trafic.id }}">{{ t('del_trafic') }}</button>
+      <span class="hint js-del-need-token">{{ t('del_need_token') }}</span>
     </p>
   </header>
 
   <section class="mix mix--rows" id="mix" data-vid="{{ trafic.id }}" data-started="{{ trafic.started_at or '' }}">
-    <h2>Table de mixage</h2>
+    <h2>{{ t('mix_table') }}</h2>
     <div class="mix__transport">
-      <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
+      <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="{{ t('play') }}" title="{{ t('play') }}"></button>
       <span class="mix__clock" id="mix-time">— TU</span>
       <span class="mix__audio-load" id="mix-audio-load" hidden></span>
-      <button type="button" class="mix__ico-btn mix__loop-btn" id="mix-loop" hidden aria-pressed="false" aria-label="Lecture en boucle" title="Boucle"></button>
+      <button type="button" class="mix__ico-btn mix__loop-btn" id="mix-loop" hidden aria-pressed="false" aria-label="{{ t('loop') }}" title="{{ t('loop') }}"></button>
       <span class="mix__loop-lab" id="mix-loop-lab" hidden></span>
-      <button type="button" class="mix__ico-btn mix__zoom-off" id="mix-unzoom" hidden aria-label="Replier la voie" title="Replier"></button>
+      <button type="button" class="mix__ico-btn mix__zoom-off" id="mix-unzoom" hidden aria-label="{{ t('collapse_track') }}" title="{{ t('menu_collapse_short') }}"></button>
       <label class="mix__seek">
-        Heure TU
+        {{ t('time_utc') }}
         <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
       </label>
     </div>
     <div class="mix__body" id="ggr-mix">
       <div class="mix__desk" id="mix-strips"></div>
     </div>
-    <p class="hint mix__status" id="mix-status">Préparation du mixage…</p>
+    <p class="hint mix__status" id="mix-status">{{ t('mix_prep') }}</p>
   </section>
   <script type="application/json" id="ggr-mix-data">{{ (trafic.mixer_tracks or []) | tojson }}</script>
 
   {% if trafic.error %}
-  <p class="err">Erreur : {{ trafic.error }}</p>
+  <p class="err">{{ t('traffic_error', err=trafic.error) }}</p>
   {% endif %}
 </article>
 {% endblock %}
 {% block extra_js %}
-<script src="/static/js/mixer.js?v={{ version }}-kiwi66"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi67"></script>
 {% endblock %}

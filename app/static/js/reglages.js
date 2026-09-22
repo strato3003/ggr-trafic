@@ -5,6 +5,8 @@
   const recordQrgBtn = document.getElementById("record-qrg");
   if (!form) return;
 
+  const t = window.GGR_t || function (key) { return key; };
+
   const TOKEN_KEY = "ggr-admin-token";
   const tokenInput = form.elements.namedItem("admin_token");
   if (tokenInput && !tokenInput.value) {
@@ -92,10 +94,9 @@
   const headers = () => {
     const token = (tokenInput && tokenInput.value) || "";
     if (token) localStorage.setItem(TOKEN_KEY, token);
-    return {
-      "Content-Type": "application/json",
-      "X-Admin-Token": token,
-    };
+    const h = { "Content-Type": "application/json" };
+    if (token) h["X-Admin-Token"] = token;
+    return h;
   };
 
   const _detail = (data) => {
@@ -124,13 +125,20 @@
     ev.preventDefault();
     const btn = document.getElementById("save-qrg");
     busy(btn, true);
-    say("save", "Sauvegarde en cours…", true);
+    say("save", t("saving_qrg"), true);
     try {
       const data = await saveSettings();
       say(
         "save",
-        `Fréquences mémorisées : ${data.tx_mhz} / ${data.ack1_mhz} / ${data.ack2_mhz} MHz · buddy ${data.buddy_main_khz} / ${data.buddy_alt_khz} kHz à ${data.buddy_time_utc} TU` +
-          ` · ${(data.tx_sites || []).length} QTH d’émission.`,
+        t("saved_qrg", {
+          tx: data.tx_mhz,
+          ack1: data.ack1_mhz,
+          ack2: data.ack2_mhz,
+          main: data.buddy_main_khz,
+          alt: data.buddy_alt_khz,
+          time: data.buddy_time_utc,
+          n: (data.tx_sites || []).length,
+        }),
         true
       );
     } catch (err) {
@@ -143,7 +151,7 @@
   if (recordQrgBtn) {
     recordQrgBtn.addEventListener("click", async () => {
       busy(recordQrgBtn, true);
-      say("qrg", "Contact du serveur, démarrage du test…", true);
+      say("qrg", t("test_starting"), true);
       const huntEl = form.elements.namedItem("test_hunt");
       try {
         const res = await fetch("/api/trafic/record", {
@@ -160,13 +168,16 @@
         if (res.status === 202) {
           say(
             "qrg",
-            `Test radio lancé sur ${data.freq_mhz} MHz pendant ${data.duration_minutes} min` +
-              `${data.hunt ? " (chasse USB ± QRM)" : ""}. Elle apparaîtra dans Trafic à la fin.`,
+            t("test_ok", {
+              mhz: data.freq_mhz,
+              min: data.duration_minutes,
+              hunt: data.hunt ? t("hunt_qrm") : "",
+            }),
             true
           );
           return;
         }
-        say("qrg", _detail(data) || `Erreur ${res.status}`, false);
+        say("qrg", _detail(data) || t("err_http", { status: res.status }), false);
       } catch (err) {
         say("qrg", String(err), false);
       } finally {
@@ -178,7 +189,7 @@
   if (recordBtn) {
     recordBtn.addEventListener("click", async () => {
       busy(recordBtn, true);
-      say("vac", "Sauvegarde des QRG puis démarrage du trafic…", true);
+      say("vac", t("vac_starting"), true);
       try {
         await saveSettings();
         const res = await fetch("/api/trafic/record", {
@@ -192,12 +203,12 @@
         if (res.status === 202) {
           say(
             "vac",
-            `Trafic complet lancé (${data.duration_minutes} min) : 4 KiwiSDR répartis. Liste Trafic à la fin.`,
+            t("vac_ok", { min: data.duration_minutes }),
             true
           );
           return;
         }
-        say("vac", _detail(data) || `Erreur ${res.status}`, false);
+        say("vac", _detail(data) || t("err_http", { status: res.status }), false);
       } catch (err) {
         say("vac", String(err), false);
       } finally {
@@ -210,15 +221,18 @@
   if (saveBuddyBtn) {
     saveBuddyBtn.addEventListener("click", async () => {
       busy(saveBuddyBtn, true);
-      say("buddy", "Sauvegarde du buddy call…", true);
+      say("buddy", t("buddy_saving"), true);
       try {
         const data = await saveSettings();
         say(
           "buddy",
-          `Buddy call mémorisé : ${data.buddy_main_khz} / ${data.buddy_alt_khz} kHz à ${data.buddy_time_utc} TU` +
-            ` · ${data.buddy_enabled ? "actif" : "désactivé"}` +
-            ` · centroïde ${ (data.buddy_skippers || []).join(", ") || "aucun skipper" }` +
-            ` · 4 Kiwi.`,
+          t("buddy_ok", {
+            main: data.buddy_main_khz,
+            alt: data.buddy_alt_khz,
+            time: data.buddy_time_utc,
+            state: data.buddy_enabled ? t("buddy_on") : t("buddy_off"),
+            skippers: (data.buddy_skippers || []).join(", ") || t("no_skipper"),
+          }),
           true
         );
       } catch (err) {
@@ -233,12 +247,12 @@
   if (saveDisplayBtn) {
     saveDisplayBtn.addEventListener("click", async () => {
       busy(saveDisplayBtn, true);
-      say("display", "Sauvegarde de l’affichage…", true);
+      say("display", t("disp_saving"), true);
       try {
         const data = await saveSettings();
         const d = (data && data.display) || payload().display;
         window.dispatchEvent(new CustomEvent("ggr-display", { detail: d }));
-        say("display", "Affichage globe mémorisé (défauts pour les visiteurs).", true);
+        say("display", t("disp_saved"), true);
       } catch (err) {
         say("display", String(err), false);
       } finally {
@@ -251,14 +265,12 @@
   if (saveWaitBtn) {
     saveWaitBtn.addEventListener("click", async () => {
       busy(saveWaitBtn, true);
-      say("wait", "Sauvegarde de la page d’attente…", true);
+      say("wait", t("wait_saving"), true);
       try {
         const data = await saveSettings();
         say(
           "wait",
-          data.unavailable
-            ? "Page d’attente activée : les visiteurs voient le globe flouté."
-            : "Page d’attente désactivée.",
+          data.unavailable ? t("wait_on_ok") : t("wait_off_ok"),
           true
         );
       } catch (err) {

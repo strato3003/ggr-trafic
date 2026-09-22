@@ -9,37 +9,42 @@
   <div class="globe-stage">
     <p class="globe-brand">
       <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
+      <span class="ggr-lang ggr-lang--globe" role="group" aria-label="Language">
+        <a href="/lang/fr" class="{% if lang == 'fr' %}is-on{% endif %}">{{ t('lang_fr') }}</a>
+        <a href="/lang/en" class="{% if lang == 'en' %}is-on{% endif %}">{{ t('lang_en') }}</a>
+      </span>
     </p>
-    <div id="ggr-globe" class="ggr-globe" role="region" aria-label="Globe 3D flotte GGR et KiwiSDR"></div>
-    <div id="ggr-map" class="ggr-map-2d" role="region" aria-label="Carte 2D flotte GGR et KiwiSDR"></div>
-    <div class="map-mode" role="group" aria-label="Vue 2D ou 3D">
+    <div class="ggr-auth--float">{% include "_auth.html" %}</div>
+    <div id="ggr-globe" class="ggr-globe" role="region" aria-label="{{ t('map_3d') }}"></div>
+    <div id="ggr-map" class="ggr-map-2d" role="region" aria-label="{{ t('map_2d') }}"></div>
+    <div class="map-mode" role="group" aria-label="{{ t('map_2d') }} / {{ t('map_3d') }}">
       <button type="button" data-map-mode="2d" aria-pressed="false">2D</button>
       <button type="button" data-map-mode="3d" class="is-on" aria-pressed="true">3D</button>
     </div>
-    <button type="button" class="map-opt-toggle" id="map-opt-toggle" aria-expanded="false" aria-controls="map-opt" aria-label="Ouvrir les calques" title="Calques">
+    <button type="button" class="map-opt-toggle" id="map-opt-toggle" aria-expanded="false" aria-controls="map-opt" aria-label="{{ t('layers') }}" title="{{ t('layers') }}">
       <span class="map-opt-toggle__arr" aria-hidden="true"></span>
-      <span class="map-opt-toggle__lab" aria-hidden="true">Calques</span>
+      <span class="map-opt-toggle__lab" aria-hidden="true">{{ t('layers') }}</span>
     </button>
     <aside class="map-opt" id="map-opt" hidden>
-      <p class="map-opt__title">Calques</p>
-      <label class="map-opt__row"><input type="checkbox" data-layer="banner" checked> Bandeau GGR trafic HF</label>
-      <label class="map-opt__row" title="Kiwi retenus pour le prochain buddy 12:00 TU et le bulletin {{ schedule_ident_short }} {{ time_utc }} TU, d’après le centroïde des skippers suivis">
+      <p class="map-opt__title">{{ t('layers') }}</p>
+      <label class="map-opt__row"><input type="checkbox" data-layer="banner" checked> {{ t('layer_banner') }}</label>
+      <label class="map-opt__row" title="{{ t('layer_sdr_title') }}">
         <input type="checkbox" data-layer="sdrActive" checked>
-        SDR choisis selon centre flotte
+        {{ t('layer_sdr') }}
       </label>
-      <label class="map-opt__row"><input type="checkbox" data-layer="sdrPotential"> SDR potentiels</label>
-      <label class="map-opt__row"><input type="checkbox" data-layer="skippers" checked> Skippers</label>
-      <label class="map-opt__row"><input type="checkbox" data-layer="boats" checked> Bateaux + traces</label>
-      <label class="map-opt__row"><input type="checkbox" data-layer="metarea" id="ggr-metarea" checked> METAREA</label>
-      <label class="map-opt__row"><input type="checkbox" data-layer="subzones" id="ggr-subzones" checked> Sous-zones</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="sdrPotential"> {{ t('layer_potential') }}</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="skippers" checked> {{ t('layer_skippers') }}</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="boats" checked> {{ t('layer_boats') }}</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="metarea" id="ggr-metarea" checked> {{ t('layer_metarea') }}</label>
+      <label class="map-opt__row"><input type="checkbox" data-layer="subzones" id="ggr-subzones" checked> {{ t('layer_subzones') }}</label>
     </aside>
     <div class="globe-rec">{% include "_recording.html" %}</div>
     <p class="globe-osm-copy">© <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a>
-      · METAREA <a href="https://iho.int" rel="noreferrer">OHI</a> / OMM</p>
+      · {{ t('osm_iho') }} <a href="https://iho.int" rel="noreferrer">IHO</a> / WMO</p>
   </div>
-  <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="false" aria-controls="globe-dock" aria-label="Ouvrir le menu général" title="Menu général">
+  <button type="button" class="kiwi-toggle" id="kiwi-toggle" aria-expanded="false" aria-controls="globe-dock" aria-label="{{ t('menu') }}" title="{{ t('menu') }}">
     <span class="kiwi-toggle__arr" aria-hidden="true"></span>
-    <span class="kiwi-toggle__lab" aria-hidden="true">Menu général</span>
+    <span class="kiwi-toggle__lab" aria-hidden="true">{{ t('menu') }}</span>
   </button>
   <aside class="globe-rail" id="globe-dock">
     <header class="kiwi-ident">
@@ -54,18 +59,19 @@
         Buddy {{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz · {{ buddy_time_utc }} TU
       </p>
       <p class="kiwi-ident__qrg">
-        Émission bulletin : {{ bulletin_tx_label | default('F6KUF') }}
+        {{ t('tx_on_air') }} : {{ bulletin_tx_label | default('F6KUF') }}
       </p>
       <p class="kiwi-ident__clock">
         {% include "_recording.html" %}
       </p>
+      {% include "_auth.html" %}
     </header>
 
     <div class="kiwi-tabs" role="tablist">
-      <button type="button" data-tab="trafic" role="tab" aria-selected="false">Trafic</button>
-      <button type="button" data-tab="metarea" role="tab" aria-selected="false">METAREA</button>
-      <button type="button" data-tab="setup" role="tab" aria-selected="false">Setup</button>
-      <button type="button" class="is-on" data-tab="apropos" role="tab" aria-selected="true">À propos</button>
+      <button type="button" data-tab="trafic" role="tab" aria-selected="false">{{ t('nav_trafic') }}</button>
+      <button type="button" data-tab="metarea" role="tab" aria-selected="false">{{ t('nav_metarea') }}</button>
+      <button type="button" data-tab="setup" role="tab" aria-selected="false">{{ t('nav_setup') }}</button>
+      <button type="button" class="is-on" data-tab="apropos" role="tab" aria-selected="true">{{ t('nav_about') }}</button>
     </div>
 
     <div class="kiwi-ident-sel" id="globe-sel" hidden></div>
@@ -75,22 +81,22 @@
       <div id="mix-park" hidden>
         <section class="mix mix--rows" id="mix" hidden data-ggr-mix="host">
           <div class="mix__transport">
-            <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="Lecture" title="Lecture"></button>
+            <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="{{ t('play') }}" title="{{ t('play') }}"></button>
             <span class="mix__clock" id="mix-time">— TU</span>
             <span class="mix__audio-load" id="mix-audio-load" hidden></span>
-            <button type="button" class="mix__ico-btn mix__loop-btn" id="mix-loop" hidden aria-pressed="false" aria-label="Lecture en boucle" title="Boucle"></button>
+            <button type="button" class="mix__ico-btn mix__loop-btn" id="mix-loop" hidden aria-pressed="false" aria-label="{{ t('loop') }}" title="{{ t('loop') }}"></button>
             <span class="mix__loop-lab" id="mix-loop-lab" hidden></span>
             <span class="mix__loop-hint" id="mix-loop-hint" hidden></span>
-            <button type="button" class="mix__ico-btn mix__zoom-off" id="mix-unzoom" hidden aria-label="Replier la voie" title="Replier"></button>
+            <button type="button" class="mix__ico-btn mix__zoom-off" id="mix-unzoom" hidden aria-label="{{ t('collapse_track') }}" title="{{ t('menu_collapse_short') }}"></button>
             <label class="mix__seek">
-              Heure TU
+              {{ t('time_utc') }}
               <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
             </label>
           </div>
           <div class="mix__body" id="ggr-mix">
             <div class="mix__desk" id="mix-strips"></div>
           </div>
-          <p class="hint mix__status" id="mix-status" hidden>Choisir un trafic.</p>
+          <p class="hint mix__status" id="mix-status" hidden>{{ t('pick_trafic') }}</p>
         </section>
       </div>
     </div>
@@ -102,25 +108,25 @@
         {% if buddy_aim and buddy_aim.warning %}<p class="err">{{ buddy_aim.warning }}</p>{% endif %}
       </div>
       {% endif %}
-      <p class="hint">QTH d’émission : poser un point sur la carte ou le globe, puis sauver.</p>
+      <p class="hint">{{ t('tx_qth_hint') }}</p>
       <ul class="tx-list" id="globe-tx-list"></ul>
       <p class="settings__actions">
-        <button type="button" class="btn" id="globe-tx-place">Poser un QTH sur le globe</button>
-        <button type="button" class="btn" id="globe-save-tx">Sauver les QTH</button>
+        <button type="button" class="btn" id="globe-tx-place">{{ t('place_qth') }}</button>
+        <button type="button" class="btn" id="globe-save-tx">{{ t('save_qth') }}</button>
       </p>
       <p class="settings-msg" id="globe-tx-msg" hidden></p>
       {% include "_reglages_form.html" %}
       <details class="globe-tables">
-        <summary>Tableaux bateaux et KiwiSDR</summary>
+        <summary>{{ t('tables') }}</summary>
         {% if fleet.boats %}
         <table class="tbl">
           <thead>
-            <tr><th>Skipper</th><th>Voile</th><th>Position</th></tr>
+            <tr><th>{{ t('skipper') }}</th><th>{{ t('sail') }}</th><th>{{ t('position') }}</th></tr>
           </thead>
           <tbody>
             {% for b in fleet.boats %}
             <tr>
-              <td>{{ b.name }}{% if buddy_aim and b.name in buddy_aim.skipper_names %} <span class="badge">centroïde</span>{% endif %}</td>
+              <td>{{ b.name }}{% if buddy_aim and b.name in buddy_aim.skipper_names %} <span class="badge">{{ t('centroid_badge') }}</span>{% endif %}</td>
               <td>{{ b.sail or '—' }}</td>
               <td>{{ '%.3f'|format(b.lat) }}, {{ '%.3f'|format(b.lon) }}</td>
             </tr>
@@ -128,10 +134,10 @@
           </tbody>
         </table>
         {% endif %}
-        <h2>KiwiSDR buddy call</h2>
+        <h2>{{ t('kiwi_buddy') }}</h2>
         <table class="tbl">
           <thead>
-            <tr><th>Rôle</th><th>Récepteur</th><th>Distance</th><th>Zone</th></tr>
+            <tr><th>{{ t('role') }}</th><th>{{ t('receiver') }}</th><th>{{ t('distance') }}</th><th>{{ t('zone') }}</th></tr>
           </thead>
           <tbody>
             {% for k in buddy_kiwis or [] %}
@@ -142,7 +148,25 @@
               <td>{{ k.prop_zone or '—' }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="4" class="meta">Aucun Kiwi couvrant 4483 et 6516 kHz pour le moment.</td></tr>
+            <tr><td colspan="4" class="meta">{{ t('none_buddy') }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <h2>{{ t('kiwi_beam') }}</h2>
+        <table class="tbl">
+          <thead>
+            <tr><th>{{ t('role') }}</th><th>{{ t('receiver') }}</th><th>{{ t('distance_tx') }}</th><th>{{ t('fleet') }}</th></tr>
+          </thead>
+          <tbody>
+            {% for k in beam_kiwis or [] %}
+            <tr>
+              <td>{{ k.site_label or k.site }}</td>
+              <td><a href="{{ k.url }}" rel="noreferrer">{{ k.name }}</a></td>
+              <td>{{ k.site_km }} km</td>
+              <td>{{ k.fleet_km }} km</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="meta">{{ t('none_beam') }}</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -155,8 +179,25 @@
 
     <div class="kiwi-page" data-page="metarea" id="page-metarea" hidden>
       <article class="prose kiwi-metarea" id="ggr-metarea-page" aria-live="polite">
-        <h1>METAREA II — haute mer</h1>
-        <p class="hint" id="ggr-metarea-status">Chargement du bulletin WWMIWS…</p>
+        <h1>{{ t('metarea_title') }}</h1>
+        <div class="ggr-speech" id="ggr-speech">
+          <p class="hint">{{ t('speech_hint') }}</p>
+          <label>{{ t('speech_voice') }}
+            <select id="ggr-speech-voice">
+              {% for v in tts_voices %}
+              <option value="{{ v.id }}">{{ v.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="button" class="btn" id="ggr-speech-play">{{ t('speech_play') }}</button>
+          <button type="button" class="btn" id="ggr-speech-stop">{{ t('speech_stop') }}</button>
+          <button type="button" class="btn" id="ggr-speech-mp3">{{ t('speech_mp3') }}</button>
+          <a class="btn" id="ggr-speech-dl" hidden download="bulletin-metarea.mp3">{{ t('speech_download') }}</a>
+          <audio id="ggr-speech-audio" controls preload="none"></audio>
+        </div>
+        <div id="ggr-metarea-body">
+          <p class="hint" id="ggr-metarea-status">{{ t('metarea_loading') }}</p>
+        </div>
       </article>
     </div>
 
@@ -173,6 +214,8 @@
   "boats": fleet.boats or [],
   "kiwis": kiwis or [],
   "buddy_kiwis": buddy_kiwis or [],
+  "beam_kiwis": beam_kiwis or [],
+  "tts_voices": tts_voices or [],
   "trafics": globe_trafics or [],
   "tx_sites": tx_sites or [],
   "skippers": buddy_skippers,
@@ -187,8 +230,8 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi66"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi56"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi67"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi58"></script>
 <script src="/static/js/wait.js?v={{ version }}-kiwi1"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi73"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi76"></script>
 {% endblock %}

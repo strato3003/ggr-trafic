@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 # Pages HTML réellement rendues (pas les redirections /flotte, /a-propos, sondes, tuiles).
 _PAGE_EXACT = {"/"}
 _PAGE_PREFIXES = ("/trafic/",)
-_SKIP_PREFIXES = ("/health", "/metrics", "/static", "/api/", "/media/")
+_SKIP_PREFIXES = ("/health", "/metrics", "/static", "/api/", "/media/", "/auth", "/login")
 
 # Coordonnées absentes : Prometheus exige les mêmes labels à chaque observation.
 NO_COORD = "none"
@@ -195,13 +195,62 @@ def _journal_coords(labels: dict[str, str]) -> tuple[str, str]:
     return lat, lon
 
 
-def _count(ip: str, labels: dict[str, str], path: str) -> None:
+def terminal_type(ua: str) -> str:
+    """ordinateur / mobile / tablette / bot / inconnu — jamais en label Prometheus."""
+    raw = (ua or "").strip()
+    if not raw:
+        return "inconnu"
+    low = raw.lower()
+    if re.search(r"bot|crawler|spider|slurp|preview|facebookexternal|whatsapp|telegram", low):
+        return "bot"
+    if "ipad" in low or "tablet" in low or "playbook" in low:
+        return "tablette"
+    if "android" in low and "mobile" not in low:
+        return "tablette"
+    if any(
+        token in low
+        for token in ("iphone", "ipod", "android", "webos", "blackberry", "iemobile", "opera mini", "mobile")
+    ):
+        return "mobile"
+    return "ordinateur"
+
+
+def operator_fields(request: Request | None) -> dict[str, str]:
+    """Indicatif / e-mail / surnom / domicile ANFR pour Loki (jamais en label Prometheus)."""
+    blob: Any = None
+    if request is not None:
+        blob = request.scope.get("ggr_operator")
+        if not isinstance(blob, dict):
+            from app import auth_google
+
+            blob = auth_google.session_operator(request)
+    if not isinstance(blob, dict):
+        return {"callsign": "", "email": "", "surnom": "", "domicile": ""}
+    return {
+        "callsign": _lab(str(blob.get("callsign") or ""), fallback="", limit=16),
+        "email": _lab(str(blob.get("email") or ""), fallback="", limit=120),
+        "surnom": _lab(str(blob.get("name") or blob.get("surnom") or ""), fallback="", limit=40),
+        "domicile": _lab(str(blob.get("domicile") or ""), fallback="", limit=80),
+    }
+
+
+def visit_context(request: Request | None) -> dict[str, str]:
+    fields = operator_fields(request)
+    ua = ""
+    if request is not None:
+        ua = request.headers.get("user-agent") or ""
+    fields["terminal"] = terminal_type(ua)
+    return fields
+
+
+def _count(ip: str, labels: dict[str, str], path: str, operator: dict[str, str] | None = None) -> None:
     VISITS.labels(**_prom_labels(labels), path=page_label(path)).inc()
     _unique_ips.add(ip)
     UNIQUE.set(len(_unique_ips))
     from app import visitlog
 
     lat, lon = _journal_coords(labels)
+    op = operator or {}
     visitlog.append(
         ip,
         "page",
@@ -214,10 +263,15 @@ def _count(ip: str, labels: dict[str, str], path: str) -> None:
         latitude=lat,
         longitude=lon,
         ptr=labels.get("ptr") or "",
+        callsign=op.get("callsign") or "",
+        email=op.get("email") or "",
+        surnom=op.get("surnom") or "",
+        terminal=op.get("terminal") or "",
+        domicile=op.get("domicile") or "",
     )
 
 
-def _count_replay(ip: str, labels: dict[str, str], replay: str) -> None:
+def _count_replay(ip: str, labels: dict[str, str], replay: str, operator: dict[str, str] | None = None) -> None:
     rid = replay_label(replay)
     prom = _prom_labels(labels)
     REPLAYS.labels(
@@ -230,6 +284,7 @@ def _count_replay(ip: str, labels: dict[str, str], replay: str) -> None:
     from app import visitlog
 
     lat, lon = _journal_coords(labels)
+    op = operator or {}
     visitlog.append(
         ip,
         "replay",
@@ -242,6 +297,11 @@ def _count_replay(ip: str, labels: dict[str, str], replay: str) -> None:
         latitude=lat,
         longitude=lon,
         ptr=labels.get("ptr") or "",
+        callsign=op.get("callsign") or "",
+        email=op.get("email") or "",
+        surnom=op.get("surnom") or "",
+        terminal=op.get("terminal") or "",
+        domicile=op.get("domicile") or "",
     )
 
 
@@ -257,34 +317,35 @@ def schedule_replay(request: Request, trafic_id: str) -> None:
     rid = replay_label(trafic_id)
     if not rid or rid == "inconnu":
         return
+    op = visit_context(request)
     cached = _geo_cache.get(ip)
     if cached is not None:
-        _count_replay(ip, cached, rid)
+        _count_replay(ip, cached, rid, op)
         return
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        _count_replay(ip, _geo_labels(None), rid)
+        _count_replay(ip, _geo_labels(None), rid, op)
         return
     key = "replay:" + ip
     if key in _pending:
         return
     _pending.add(key)
-    loop.create_task(_resolve_and_count_replay(ip, rid, key))
+    loop.create_task(_resolve_and_count_replay(ip, rid, key, op))
 
 
-async def _resolve_and_count_replay(ip: str, rid: str, key: str) -> None:
+async def _resolve_and_count_replay(ip: str, rid: str, key: str, operator: dict[str, str] | None = None) -> None:
     try:
         labels = _geo_cache.get(ip)
         if labels is None:
             labels = _geo_labels(await geolocate(ip))
             _geo_cache[ip] = labels
-        _count_replay(ip, labels, rid)
+        _count_replay(ip, labels, rid, operator)
     except Exception:
         log.exception("Géoloc replay %s", ip.split(".")[0] + ".x")
         labels = _geo_labels(None)
         _geo_cache.setdefault(ip, labels)
-        _count_replay(ip, labels, rid)
+        _count_replay(ip, labels, rid, operator)
     finally:
         _pending.discard(key)
 
@@ -297,19 +358,20 @@ def schedule(request: Request) -> None:
     if not ip:
         return
     path = request.url.path
+    op = visit_context(request)
     cached = _geo_cache.get(ip)
     if cached is not None:
-        _count(ip, cached, path)
+        _count(ip, cached, path, op)
         return
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        _count(ip, _geo_labels(None), path)
+        _count(ip, _geo_labels(None), path, op)
         return
     if ip in _pending:
         return
     _pending.add(ip)
-    loop.create_task(_resolve_and_count(ip, path))
+    loop.create_task(_resolve_and_count(ip, path, op))
 
 
 def schedule_nav(request: Request, path: str) -> None:
@@ -324,50 +386,51 @@ def schedule_nav(request: Request, path: str) -> None:
     ip = client_ip(request)
     if not ip:
         return
+    op = visit_context(request)
     cached = _geo_cache.get(ip)
     if cached is not None:
-        _count(ip, cached, labeled)
+        _count(ip, cached, labeled, op)
         return
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        _count(ip, _geo_labels(None), labeled)
+        _count(ip, _geo_labels(None), labeled, op)
         return
     key = "nav:" + ip + ":" + labeled
     if key in _pending:
         return
     _pending.add(key)
-    loop.create_task(_resolve_and_count_nav(ip, labeled, key))
+    loop.create_task(_resolve_and_count_nav(ip, labeled, key, op))
 
 
-async def _resolve_and_count_nav(ip: str, path: str, key: str) -> None:
+async def _resolve_and_count_nav(ip: str, path: str, key: str, operator: dict[str, str] | None = None) -> None:
     try:
         labels = _geo_cache.get(ip)
         if labels is None:
             labels = _geo_labels(await geolocate(ip))
             _geo_cache[ip] = labels
-        _count(ip, labels, path)
+        _count(ip, labels, path, operator)
     except Exception:
         log.exception("Géoloc nav %s", ip.split(".")[0] + ".x")
         labels = _geo_labels(None)
         _geo_cache.setdefault(ip, labels)
-        _count(ip, labels, path)
+        _count(ip, labels, path, operator)
     finally:
         _pending.discard(key)
 
 
-async def _resolve_and_count(ip: str, path: str) -> None:
+async def _resolve_and_count(ip: str, path: str, operator: dict[str, str] | None = None) -> None:
     try:
         labels = _geo_cache.get(ip)
         if labels is None:
             labels = _geo_labels(await geolocate(ip))
             _geo_cache[ip] = labels
-        _count(ip, labels, path)
+        _count(ip, labels, path, operator)
     except Exception:
         log.exception("Géoloc visite %s", ip.split(".")[0] + ".x")
         labels = _geo_labels(None)
         _geo_cache.setdefault(ip, labels)
-        _count(ip, labels, path)
+        _count(ip, labels, path, operator)
     finally:
         _pending.discard(ip)
 

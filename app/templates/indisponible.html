@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ lang | default('fr') }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ app_name }} — indisponible</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi68">
+  <title>{{ app_name }} — {{ t('unavailable_title') }}</title>
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi73">
 </head>
 <body class="globe-page kiwi-panel-off is-map-3d is-unavailable" data-ggr-force-wait="1">
   <div class="globe-app" data-ggr-force-wait="1">

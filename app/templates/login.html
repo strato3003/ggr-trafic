@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="{{ lang | default('fr') }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} — {{ t('login_title') }}</title>
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi73">
+</head>
+<body class="ggr-login-page">
+  <main class="ggr-login">
+    <p class="ggr-login__brand">{{ app_name }} <span class="ver">{{ version }}</span>
+      <span class="ggr-lang">
+        <a href="/lang/fr?next=/login" class="{% if lang == 'fr' %}is-on{% endif %}">{{ t('lang_fr') }}</a>
+        <a href="/lang/en?next=/login" class="{% if lang == 'en' %}is-on{% endif %}">{{ t('lang_en') }}</a>
+      </span>
+    </p>
+    <h1>{{ t('login_title') }}</h1>
+    <p class="ggr-login__lead">{{ t('login_lead') }}</p>
+    {% if auth_error %}
+    <p class="ggr-auth__err" role="alert">{{ auth_error }}</p>
+    {% endif %}
+    {% if auth_notice %}
+    <p class="ggr-auth__ok" role="status">{{ auth_notice }}</p>
+    {% endif %}
+    <form class="ggr-login__form" method="post" action="/login" autocomplete="username">
+      <input type="hidden" name="nonce" value="{{ login_nonce }}">
+      <label>
+        {{ t('email') }}
+        <input type="email" name="email" required maxlength="120"
+               value="{{ pending_email }}" placeholder="prenom@example.com"
+               autocomplete="username">
+      </label>
+      <button type="submit" class="ggr-auth__btn ggr-login__btn">{{ t('send_link') }}</button>
+    </form>
+    {% if pending_email or auth_notice %}
+    <form class="ggr-login__form ggr-login__form--otp" method="post" action="/login/otp" autocomplete="one-time-code">
+      <input type="hidden" name="nonce" value="{{ login_nonce }}">
+      <input type="hidden" name="email" value="{{ pending_email }}">
+      <label>
+        {{ t('otp') }}
+        <input type="text" name="code" inputmode="numeric" pattern="[0-9 ]{6,8}"
+               maxlength="8" required placeholder="000000" autocomplete="one-time-code">
+      </label>
+      <button type="submit" class="ggr-auth__btn ggr-login__btn">{{ t('otp_ok') }}</button>
+    </form>
+    {% endif %}
+    {% if google_sso %}
+    <p class="ggr-login__or">{{ t('login_or') }}</p>
+    <a class="ggr-auth__btn ggr-login__btn" href="/auth/google">{{ t('login_google') }}</a>
+    {% endif %}
+  </main>
+</body>
+</html>

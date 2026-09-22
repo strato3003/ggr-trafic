@@ -26,6 +26,46 @@ def initial_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float
     return (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
 
 
+def azimuth_delta(az1: float, az2: float) -> float:
+    """Écart de cap en degrés (0–180)."""
+    return abs((float(az1) - float(az2) + 180.0) % 360.0 - 180.0)
+
+
+def cross_track_km(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+    latp: float,
+    lonp: float,
+) -> float:
+    """Distance (km) au grand cercle (lat1,lon1) → (lat2,lon2), y compris au-delà du 2e point."""
+    d13 = haversine_km(lat1, lon1, latp, lonp) / EARTH_KM
+    theta13 = math.radians(initial_bearing(lat1, lon1, latp, lonp))
+    theta12 = math.radians(initial_bearing(lat1, lon1, lat2, lon2))
+    xt = math.asin(max(-1.0, min(1.0, math.sin(d13) * math.sin(theta13 - theta12))))
+    return abs(xt) * EARTH_KM
+
+
+def along_track_frac(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+    latp: float,
+    lonp: float,
+) -> float:
+    """Fraction le long du GC 1→2 : 0 à l’origine, 1 à la flotte, >1 au-delà, <0 en arrière."""
+    d12 = haversine_km(lat1, lon1, lat2, lon2) / EARTH_KM
+    if d12 < 1e-9:
+        return 0.0
+    d13 = haversine_km(lat1, lon1, latp, lonp) / EARTH_KM
+    theta13 = math.radians(initial_bearing(lat1, lon1, latp, lonp))
+    theta12 = math.radians(initial_bearing(lat1, lon1, lat2, lon2))
+    at = math.atan2(math.sin(d13) * math.cos(theta13 - theta12), math.cos(d13))
+    return at / d12
+
+
 def centroid(points: list[tuple[float, float]]) -> tuple[float, float] | None:
     """Centroïde sphérique approximé (moyenne vectorielle unitaire)."""
     if not points:
@@ -42,6 +82,29 @@ def centroid(points: list[tuple[float, float]]) -> tuple[float, float] | None:
     hyp = math.sqrt(x * x + y * y)
     lon = math.degrees(math.atan2(y, x))
     lat = math.degrees(math.atan2(z, hyp))
+    return lat, lon
+
+
+def along_great_circle(
+    lat1: float, lon1: float, lat2: float, lon2: float, frac: float
+) -> tuple[float, float]:
+    """Point à la fraction *frac* (0–1) sur l’orthodromie (lat1,lon1) → (lat2,lon2)."""
+    t = min(max(float(frac), 0.0), 1.0)
+    p1, l1 = math.radians(lat1), math.radians(lon1)
+    p2, l2 = math.radians(lat2), math.radians(lon2)
+    dphi = p2 - p1
+    dlmb = l2 - l1
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    d = 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1.0 - a)))
+    if d < 1e-9:
+        return float(lat1), float(lon1)
+    u = math.sin((1.0 - t) * d) / math.sin(d)
+    v = math.sin(t * d) / math.sin(d)
+    x = u * math.cos(p1) * math.cos(l1) + v * math.cos(p2) * math.cos(l2)
+    y = u * math.cos(p1) * math.sin(l1) + v * math.cos(p2) * math.sin(l2)
+    z = u * math.sin(p1) + v * math.sin(p2)
+    lat = math.degrees(math.atan2(z, math.sqrt(x * x + y * y)))
+    lon = math.degrees(math.atan2(y, x))
     return lat, lon
 
 
