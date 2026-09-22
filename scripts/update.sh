@@ -67,7 +67,7 @@ build_local() {
   fi
   # stdout du build / import ne doit jamais alimenter IMAGE (sinon InvalidImageName).
   as_root docker build -t "$img" "$ROOT"
-  as_root docker save "$img" | as_root k3s ctr images import -
+  as_root docker save "$img" | as_root k3s ctr -n k8s.io images import -
 }
 
 # Copie ggr-vacations-secrets → ggr-trafic-secrets si le nouveau secret n'existe pas encore.
@@ -261,7 +261,7 @@ build_preview_image() {
     exit 1
   fi
   as_root docker build -t "$img" "$src"
-  as_root docker save "$img" | as_root k3s ctr images import -
+  as_root docker save "$img" | as_root k3s ctr -n k8s.io images import -
 }
 
 deploy_preview() {

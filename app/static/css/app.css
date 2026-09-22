@@ -39,7 +39,21 @@ a:hover { text-decoration: underline; }
 .logo { font-weight: 600; letter-spacing: 0.04em; color: var(--foam); font-size: 1.35rem; }
 .ver { color: var(--brass); font-family: var(--mono); font-size: 0.85rem; }
 .tag { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.92rem; }
-.nav { display: flex; gap: 0.85rem; flex-wrap: wrap; justify-content: flex-end; }
+.nav { display: flex; gap: 0.85rem; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+.ggr-lang { display: inline-flex; gap: 0.25rem; margin-left: 0.4rem; }
+.ggr-lang a {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+.ggr-lang a.is-on { background: var(--brass); color: #061018; }
+.ggr-lang--globe { margin-left: 0.6rem; vertical-align: middle; }
+.ggr-speech { margin: 0.8rem 0 1rem; display: flex; flex-wrap: wrap; gap: 0.45rem 0.7rem; align-items: center; }
+.ggr-speech .hint { flex: 1 1 100%; margin: 0; }
+.ggr-speech audio { flex: 1 1 100%; width: 100%; height: 2.2rem; }
+.ggr-speech a.btn { text-decoration: none; }
 
 .qrg-bar {
   display: grid;
@@ -478,8 +492,11 @@ body.is-unavailable .ggr-auth--float {
   margin: 0;
   pointer-events: none;
 }
-.globe-brand .logo {
+.globe-brand .logo,
+.globe-brand .ggr-lang {
   pointer-events: auto;
+}
+.globe-brand .logo {
   font-size: 1rem;
   text-shadow: 0 1px 8px #02050a;
 }
@@ -915,13 +932,15 @@ body.kiwi-panel-off .kiwi-toggle__arr {
 .globe-skipper-tip__row strong { font-weight: 600; }
 .globe-mark--boat.is-buddy .globe-mark__icon { border-bottom-color: #e8c547; }
 .globe-mark--kiwi .globe-mark__icon,
-.globe-mark--buddy_kiwi .globe-mark__icon {
+.globe-mark--buddy_kiwi .globe-mark__icon,
+.globe-mark--beam_kiwi .globe-mark__icon {
   width: 8px;
   height: 8px;
   background: #3dba7a;
   border: 1px solid rgba(0, 0, 0, 0.55);
 }
 .globe-mark--buddy_kiwi .globe-mark__icon { background: #6ec9e0; }
+.globe-mark--beam_kiwi .globe-mark__icon { background: #d4a15c; }
 .globe-mark--trafic .globe-mark__icon,
 .globe-mark--vacation .globe-mark__icon {
   width: 8px;
@@ -958,6 +977,7 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   white-space: nowrap;
 }
 .globe-mark--buddy_kiwi .globe-mark__name { border-left: 3px solid #6ec9e0; }
+.globe-mark--beam_kiwi .globe-mark__name { border-left: 3px solid #d4a15c; }
 .globe-mark--kiwi .globe-mark__name,
 .globe-mark--mux_kiwi .globe-mark__name { border-left: 3px solid #3dba7a; }
 .globe-mark--mux_kiwi .globe-mark__icon {

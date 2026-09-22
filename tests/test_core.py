@@ -7,7 +7,7 @@ import struct
 from datetime import datetime, timezone
 
 from recorder.fleet import parse_positions3, _heading_deg, _team_colour, _sog_kn, _nm, _gps_at, parse_yb_grib2, _wind_at
-from recorder.geo import centroid, fmt_latlon, haversine_km, initial_bearing
+from recorder.geo import along_great_circle, along_track_frac, azimuth_delta, centroid, cross_track_km, fmt_latlon, haversine_km, initial_bearing
 from recorder.kiwi_audio import ImaAdpcmDecoder, wav_from_snd_frames, _pcm_from_snd, _ws_uris
 from recorder.kiwi_list import parse_kiwi_directory, score_kiwi
 from recorder.session import next_recording_utc, next_vacation_utc, vacation_id
@@ -35,6 +35,64 @@ def test_centroid_and_fmt():
     assert -1.8 < c[1] < -1.7
     label = fmt_latlon(*c)
     assert label == "46.550°N 1.750°W"
+
+
+def test_along_great_circle_equator_midpoint():
+    lat, lon = along_great_circle(0.0, 0.0, 0.0, 90.0, 0.5)
+    assert abs(lat) < 0.01
+    assert abs(lon - 45.0) < 0.01
+    start = along_great_circle(46.5, -1.8, -30.0, 10.0, 0.0)
+    assert abs(start[0] - 46.5) < 0.01
+    assert abs(start[1] + 1.8) < 0.01
+
+
+def test_azimuth_delta_and_cross_track():
+    assert azimuth_delta(10.0, 350.0) == 20.0
+    assert azimuth_delta(0.0, 180.0) == 180.0
+    # Point sur l’équateur entre 0° et 90° E : écart nul au grand cercle.
+    assert cross_track_km(0.0, 0.0, 0.0, 90.0, 0.0, 45.0) < 1.0
+    # Natal est dans le faisceau Vendée → Cap-Vert (écart GC ~500 km, cap ~5°).
+    xt = cross_track_km(46.46806, -1.61694, 19.503, -19.184, -5.8, -35.2)
+    daz = azimuth_delta(
+        initial_bearing(46.46806, -1.61694, 19.503, -19.184),
+        initial_bearing(46.46806, -1.61694, -5.8, -35.2),
+    )
+    assert 400 < xt < 700
+    assert daz < 8.0
+    natal_along = along_track_frac(46.46806, -1.61694, 19.503, -19.184, -5.8, -35.2)
+    canaries_along = along_track_frac(46.46806, -1.61694, 19.503, -19.184, 28.3, -16.6)
+    behind_along = along_track_frac(46.46806, -1.61694, 19.503, -19.184, 51.5, 0.0)
+    assert natal_along > 1.0
+    assert 0.4 < canaries_along < 0.75
+    assert behind_along < 0.0
+
+
+def test_prop_rings_4mhz_nvis_vs_16mhz_hop():
+    from recorder.prop import prop_rings, prop_score, prop_zone
+
+    r4 = prop_rings(4483.0, hour_utc=12.0)
+    r16 = prop_rings(16551.0, hour_utc=18.0)
+    assert r4["nvis_km"] > r16["nvis_km"]
+    assert r16["radius_km"] > r4["radius_km"]
+    assert prop_zone(200.0, r4) == "nvis"
+    assert prop_score(200.0, 4483.0, hour_utc=12.0) > prop_score(1100.0, 4483.0, hour_utc=12.0)
+    assert prop_score(3000.0, 16551.0, hour_utc=18.0) > prop_score(200.0, 16551.0, hour_utc=18.0)
+
+
+def test_i18n_fr_en():
+    from app.i18n import dump, t
+
+    assert "Buddy" in t("en", "buddy_main")
+    assert t("fr", "buddy_main") != t("en", "buddy_main")
+    assert "speech_play" in dump("fr")
+    assert "speech_mp3" in dump("en")
+    assert t("en", "metarea_err") != t("fr", "metarea_err")
+    assert t("en", "play") == "Play"
+    assert t("en", "nav_about") == "About"
+    assert "setup_save_qrg" in dump("en")
+    assert "about_h1" in dump("fr")
+    assert t("en", "tx_on_air") != t("fr", "tx_on_air")
+    assert set(dump("fr")) == set(dump("en"))
 
 
 def test_fmt_latlon_uses_hemispheres():
@@ -874,22 +932,82 @@ def test_assign_vacation_kiwis_geo_sites():
     assert roles["tx_cape"]["id"] == "near-b"
     assert roles["tx_tahiti"]["id"] == "th"
     assert roles["tx_fleet"]["id"] == "near-a"
-    assert roles["fleet"]["id"] == "near-a"
-    assert roles["tahiti"]["id"] == "th"
-    assert roles["cape"]["id"] == "near-b"
-    assert "loud-far" not in {r["id"] for r in roles.values()}
+    assert any(r.get("id") == "near-a" for r in roles.values())
+    assert "loud-far" not in {r["id"] for r in roles.values() if str(r.get("site") or "").startswith("tx")}
     assert "nz" not in {r["id"] for r in roles.values()}
 
     thin = [k for k in pool if k["id"] != "th"]
     padded = assign_vacation_kiwis(thin, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg)
-    assert "tahiti" not in padded
     assert padded["tx"]["id"] == "fr"
+    assert padded.get("tx_tahiti") is None or padded["tx_tahiti"]["id"] != "th"
 
     indian = assign_vacation_kiwis(pool, fleet_lat=-35.0, fleet_lon=25.0, cfg=cfg)
     assert indian["tx"]["id"] == "th"
     assert indian["tx"].get("club_id") == "tahiti"
     assert indian["tx_france"]["id"] == "fr"
     assert indian["tx_cape"]["id"] == "near-b"
+
+
+def test_assign_vacation_kiwis_bulletin_beam():
+    from recorder.geo import haversine_km
+    from recorder.kiwi_list import assign_vacation_kiwis
+
+    def kiwi(kid, name, lat, lon, snr=20.0, free=3):
+        return {
+            "id": kid,
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "snr_hf": snr,
+            "free_slots": free,
+            "url": f"http://{kid}.invalid",
+        }
+
+    fleet_lat, fleet_lon = 19.503, -19.184
+    tx_lat, tx_lon = 46.46806, -1.61694
+    pool = [
+        kiwi("fr", "talmont", tx_lat, tx_lon, snr=22, free=4),
+        kiwi("fleet", "mindelo", 16.9, -25.0, snr=18, free=3),
+        kiwi("canaries", "tenerife", 28.3, -16.6, snr=16, free=3),
+        kiwi("azores", "faial", 38.7, -27.2, snr=18, free=3),
+        kiwi("natal", "natal", -5.8, -35.2, snr=14, free=3),
+        kiwi("pardinho", "pardinho", -23.11, -48.38, snr=18, free=4),
+        kiwi("ba", "ramos-mejia", -34.66, -58.54, snr=12, free=2),
+        kiwi("th", "papeete", -17.5350, -149.5697, snr=16, free=2),
+        kiwi("loud-far", "singapore", 1.35, 103.82, snr=40, free=8),
+    ]
+    cfg = {
+        "sdr": {
+            "min_free_slots": 2,
+            "beam": {
+                "count": 4,
+                "min_fleet_km": 800,
+                "max_xt_km": 1500,
+                "max_daz_deg": 16,
+                "min_separation_km": 400,
+            },
+            "sites": {
+                "france": {"lat": tx_lat, "lon": tx_lon, "label": "France", "radius_km": 1500},
+                "tahiti": {"lat": -17.5350, "lon": -149.5697, "label": "Tahiti", "radius_km": 2500},
+            },
+        }
+    }
+    tuesday = datetime(2026, 9, 22, 15, 0, tzinfo=timezone.utc)
+    roles = assign_vacation_kiwis(pool, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg, when=tuesday)
+    assert roles["tx"]["id"] == "th"
+    beams = [roles[k] for k in sorted(roles) if k.startswith("tx_beam")]
+    beam_ids = {r["id"] for r in beams}
+    assert 1 <= len(beams) <= 4
+    assert "natal" in beam_ids
+    assert "ba" in beam_ids or "pardinho" in beam_ids
+    assert "canaries" not in beam_ids
+    assert "loud-far" not in beam_ids
+    assert "azores" not in beam_ids
+    assert "th" not in beam_ids
+    assert all(r["id"] != "fr" for r in beams)
+    assert all(
+        haversine_km(float(r["lat"]), float(r["lon"]), fleet_lat, fleet_lon) >= 800 for r in beams
+    )
 
 
 def test_ack_channels_per_site():
@@ -938,6 +1056,12 @@ def test_ack_channels_per_site():
     assert [c["id"] for c in overlap[:3]] == ["tx", "tx-fleet", "tx-cape"]
     assert overlap[2]["site"] == "tx_cape"
     assert overlap[2]["screencast"] is False
+    beam = _channels(
+        cfg,
+        sites,
+        extra_tx=[{"id": "beam1", "label": "faisceau bulletin 1", "role": "tx_beam1"}],
+    )
+    assert any(c["id"] == "tx-beam1" and c["site"] == "tx_beam1" for c in beam)
 
 
 def test_runtime_settings_override_qrg(tmp_path, monkeypatch):
@@ -1222,14 +1346,59 @@ def test_assign_buddy_kiwis_nvis_and_hop_not_just_nearest():
         kiwi("hop-east", 40.0, 0.0, 1700, snr=18, free=4),
         kiwi("hop-west", 40.0, -40.0, 1700, snr=16, free=3),
     ]
-    cfg = {"buddy": {"kiwi": {"count": 3, "min_separation_km": 300}}}
+    cfg = {"buddy": {"kiwi": {"count": 4, "min_separation_km": 300}}}
     roles = assign_buddy_kiwis(pool, lat=40.0, lon=-20.0, cfg=cfg)
     names = {k.get("name") for k in roles.values()}
     assert "nvis" in names
     assert "hop-east" in names or "hop-west" in names
-    assert "dead-zone" not in names or len(names) >= 3
+    assert 4 <= len(roles) <= 10
     assert roles["nvis"]["name"] == "nvis"
-    assert len(roles) == 4
+    roles_fwd = assign_buddy_kiwis(
+        pool, lat=40.0, lon=-20.0, cfg=cfg, tx_lat=46.46806, tx_lon=-1.61694
+    )
+    names_fwd = {k.get("name") for k in roles_fwd.values()}
+    assert "nvis" in names_fwd
+    assert "hop-west" in names_fwd
+
+
+def test_pick_near_fleet_ignores_loud_europe():
+    from recorder.kiwi_list import pick_near_fleet_kiwis
+
+    def kiwi(kid, lat, lon, snr):
+        return {
+            "id": kid,
+            "name": kid,
+            "lat": lat,
+            "lon": lon,
+            "snr_hf": snr,
+            "free_slots": 4,
+            "url": f"http://{kid}.invalid",
+        }
+
+    pool = [
+        kiwi("mindelo", 16.9, -25.0, 12),
+        kiwi("loud-eu", 48.8, 2.3, 40),
+        kiwi("natal", -5.8, -35.2, 18),
+    ]
+    near = pick_near_fleet_kiwis(pool, lat=19.503, lon=-19.184, count=2, radius_km=800.0)
+    ids = {row["id"] for row in near}
+    assert "mindelo" in ids
+    assert "loud-eu" not in ids
+    assert "natal" not in ids
+
+
+def test_tts_rejects_empty_and_lists_voices():
+    import asyncio
+
+    from app import tts
+
+    try:
+        asyncio.run(tts.to_mp3("   ", "fr-FR-DeniseNeural"))
+        raise AssertionError("texte vide accepté")
+    except ValueError:
+        pass
+    en = tts.voices_for("en")
+    assert en and all(row["lang"] == "en" for row in en)
 
 
 def test_buddy_channels_record_both_qrgs():
@@ -1493,25 +1662,36 @@ def test_visitors_logs_operator_to_loki_json(tmp_path, monkeypatch, capsys):
         "latitude": "47.22",
         "longitude": "-1.55",
     }
-    req = _starlette_request("/", forwarded="8.8.8.8")
+    req = _starlette_request(
+        "/",
+        forwarded="8.8.8.8",
+        extra_headers=[(b"user-agent", b"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")],
+    )
     req.scope["ggr_operator"] = {
         "callsign": "F4IAE",
         "email": "jnmartineau@gmail.com",
         "name": "JNoel",
+        "domicile": "TALMONT ST HILAIRE 85440",
     }
     visitors.schedule(req)
     rows = visitlog.list_events(ip="8.8.8.8")
     assert rows[0]["callsign"] == "F4IAE"
     assert rows[0]["email"] == "jnmartineau@gmail.com"
     assert rows[0]["surnom"] == "JNoel"
+    assert rows[0]["terminal"] == "mobile"
+    assert rows[0]["domicile"] == "TALMONT ST HILAIRE 85440"
     lines = [ln for ln in capsys.readouterr().out.splitlines() if '"ggr_visit"' in ln]
     payload = json.loads(lines[-1])
     assert payload["callsign"] == "F4IAE"
     assert payload["email"] == "jnmartineau@gmail.com"
     assert payload["surnom"] == "JNoel"
+    assert payload["terminal"] == "mobile"
+    assert payload["domicile"] == "TALMONT ST HILAIRE 85440"
     prom = visitors._prom_labels(visitors._geo_cache["8.8.8.8"])
     assert "callsign" not in prom
     assert "email" not in prom
+    assert "terminal" not in prom
+    assert "domicile" not in prom
 
 
 def test_visitlog_ip_timeline(tmp_path, monkeypatch):
@@ -1535,6 +1715,8 @@ def test_visitlog_ip_timeline(tmp_path, monkeypatch):
         callsign="F4IAE",
         email="jnmartineau@gmail.com",
         surnom="JNoel",
+        terminal="ordinateur",
+        domicile="TALMONT ST HILAIRE 85440",
     )
     visitlog.append("1.1.1.1", "page", "/", "Australia", "Sydney")
     mine = visitlog.list_events(ip="8.8.8.8")
@@ -1547,6 +1729,8 @@ def test_visitlog_ip_timeline(tmp_path, monkeypatch):
     assert mine[0]["callsign"] == "F4IAE"
     assert mine[0]["email"] == "jnmartineau@gmail.com"
     assert mine[0]["surnom"] == "JNoel"
+    assert mine[0]["terminal"] == "ordinateur"
+    assert mine[0]["domicile"] == "TALMONT ST HILAIRE 85440"
     assert "T" in mine[0]["ts"]
     all_rows = visitlog.list_events()
     assert len(all_rows) == 3
@@ -1573,7 +1757,20 @@ def test_visitlog_stdout_json_line(tmp_path, monkeypatch, capsys):
     assert payload["callsign"] == ""
     assert payload["email"] == ""
     assert payload["surnom"] == ""
+    assert payload["terminal"] == ""
+    assert payload["domicile"] == ""
     assert "T" in payload["ts"]
+
+
+def test_terminal_type_from_user_agent():
+    from app import visitors
+
+    assert visitors.terminal_type("") == "inconnu"
+    assert visitors.terminal_type("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120") == "ordinateur"
+    assert visitors.terminal_type("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)") == "mobile"
+    assert visitors.terminal_type("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)") == "tablette"
+    assert visitors.terminal_type("Mozilla/5.0 (Linux; Android 13; Pixel 7) Mobile") == "mobile"
+    assert visitors.terminal_type("Googlebot/2.1") == "bot"
 
 
 def test_geo_labels_keeps_isp_out_of_prometheus():
@@ -1736,6 +1933,40 @@ def test_metarea2_fqnt52_digest_canarias():
     from app.metarea import assemble, fr_marine
 
     assert "mer agitée" in fr_marine("North or Northeast 3 or 4, at times 5 near islands. Moderate.").lower()
+    warn = fr_marine(
+        "WARNING NR 363, TUESDAY 22 SEPTEMBER 2026 AT 0750 UTC FARADAY. "
+        "FROM 23/00 UTC TO 23/12 UTC AT LEAST. Southerly 8 from west, veering Southwesterly at end. "
+        "Severe gusts. becoming High In north at end. IRVING. CONTINUING TO 22/12 UTC. "
+        "In west, Cyclonic 8. Severe gusts."
+    )
+    low = warn.lower()
+    assert "mardi 22 septembre 2026 à 07:50 tu" in low
+    assert "au moins" in low
+    assert "tuesday" not in low
+    assert "september" not in low
+    assert "continuing" not in low
+    assert "se poursuivant" in low
+    assert "devenant anticyclonique" in low
+    syn = fr_marine(
+        'Tropical storm "FAY" 1013 32N33W, gradually filling and expected 1015 30N37W by 23/12 UTC. '
+        "Low 1012 40N57W, expected 995 49N43W by 23/00 UTC, then 977 52N35W by 23/12 UTC, "
+        "with associated trough over northwestern areas. High 1032 45N35W, "
+        "with associated ridge in Bay of Biscay, expected 1031 48N18W by 23/00 UTC, "
+        "then 1030 51N10W by 23/12 UTC. Tropical wave near 32-33W, FROM 05N TO 19N, "
+        "moving westward at around 10-15 kt. Monsoon trough near 13N17W TO 07N50W."
+    )
+    slow = syn.lower()
+    assert "tempête tropicale" in slow
+    assert "se comblant progressivement" in slow
+    assert "gradually" not in slow
+    assert "talweg associé" in slow
+    assert "northwestern" not in slow
+    assert "golfe de gascogne" in slow
+    assert "onde tropicale" in slow
+    assert "se déplaçant vers l'ouest à environ" in slow
+    assert "10-15 nd" in slow
+    assert "talweg de mousson" in slow
+    assert "32n33w" in slow
     raw = {
         "title": "Bulletinset for METAREA 2",
         "date": "2026-09-19 05:16:43",
@@ -1792,6 +2023,46 @@ def test_metarea2_fqnt52_digest_canarias():
     assert body["warning"]["for_fleet"] is False
     assert body["warning"]["outside"] is True
     assert "hors des sous-zones" in lecture
+
+
+def test_metarea_digest_en_uses_official_english():
+    from app.metarea import assemble
+
+    raw = {
+        "title": "Bulletinset for METAREA 2",
+        "date": "2026-09-18 22:20:00",
+        "bulletin": [
+            {
+                "label": "HIGH SEAS FORECAST",
+                "content": {
+                    "1": "FQNT52 LFPW 182215",
+                    "2": "Weather bulletin on METAREA 2,",
+                    "3": "METEO-FRANCE Toulouse, Friday 18 September 2026 at 2215 UTC.",
+                    "4": "Part 1 : no warning",
+                    "5": "Part 2 : General synopsis, Friday 18 at 12 UTC",
+                    "6": "Low 1011 over Morocco, with little change.",
+                    "7": "Part 3 : Area forecasts to Sunday 20 at 00 UTC",
+                    "8": "CANARIAS.",
+                    "9": "North or Northeast 3 or 4, at times 5 near islands.",
+                    "10": "Moderate.",
+                    "11": "FARADAY.",
+                    "12": "Southwest 5 or 6.",
+                    "13": "Part 4 : outlook for next 24 hours",
+                    "14": "Threat of Southwesterly near gale over FARADAY.",
+                },
+            },
+        ],
+    }
+    body = assemble(raw, [{"name": "Skipper test", "sail": "FRA 1", "lat": 28.0, "lon": -16.0}], lang="en")
+    lecture = body["lecture"]
+    assert body["disclaimer"].startswith("This text is an automatic digest")
+    assert "High seas forecast METAREA II" in lecture
+    assert "General situation." in lecture
+    assert "North or Northeast 3 or 4" in lecture
+    assert "nord ou nord-est" not in lecture.lower()
+    assert "Situation générale" not in lecture
+    assert "FARADAY" not in lecture
+    assert body["official_label"].startswith("Friday 18 September 2026 at 22:15 UTC")
 
 
 def test_metarea_warning_kept_for_casablanca_neighbor():

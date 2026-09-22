@@ -24,7 +24,7 @@
       "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
       "options": {
         "mode": "markdown",
-        "content": "Prometheus reste aux **agrégats** (pas d’IP). Ici **Loki** : chaque accès horodaté, avec **indicatif**, **surnom** et **e-mail** de l’opérateur connecté.\n\nVariables **URL** et **IP** (sous-chaîne, regex échappée). Ex. URL `2026-09-20T1159Z-buddy` → qui a ouvert le mixer / Lecture. Ex. IP `90.37.x` → toutes les URL. Clic IP ou URL dans le tableau pour croiser. Vide = tout."
+        "content": "Prometheus reste aux **agrégats** (pas d’IP). Ici **Loki** : chaque accès horodaté, avec **indicatif**, **surnom**, **e-mail**, **type de terminal** (User-Agent) et **domicile ANFR** (localité + CP, pas de rue) de l’opérateur connecté.\n\nVariables **URL** et **IP** (sous-chaîne, regex échappée). Ex. URL `2026-09-20T1159Z-buddy` → qui a ouvert le mixer / Lecture. Ex. IP `90.37.x` → toutes les URL. Clic IP ou URL dans le tableau pour croiser. Vide = tout."
       }
     },
     {
@@ -58,7 +58,7 @@
     },
     {
       "title": "Journal (ts · indicatif · IP · URL)",
-      "description": "Clic IP → ses URL. Clic URL → qui l’a appelée. Indicatif / surnom / e-mail = opérateur connecté.",
+      "description": "Clic IP → ses URL. Clic URL → qui l’a appelée. Indicatif / surnom / e-mail / terminal / domicile ANFR = opérateur connecté.",
       "type": "table",
       "gridPos": { "h": 14, "w": 24, "x": 0, "y": 10 },
       "datasource": { "type": "loki", "uid": "loki" },
@@ -91,21 +91,25 @@
               "callsign": 1,
               "surnom": 2,
               "email": 3,
-              "ip": 4,
-              "target": 5,
-              "kind": 6,
-              "city": 7,
-              "country": 8,
-              "region": 9,
-              "postal": 10,
-              "isp": 11,
-              "ptr": 12
+              "terminal": 4,
+              "domicile": 5,
+              "ip": 6,
+              "target": 7,
+              "kind": 8,
+              "city": 9,
+              "country": 10,
+              "region": 11,
+              "postal": 12,
+              "isp": 13,
+              "ptr": 14
             },
             "renameByName": {
               "Time": "TU",
               "callsign": "indicatif",
               "surnom": "surnom",
               "email": "e-mail",
+              "terminal": "terminal",
+              "domicile": "domicile ANFR",
               "ip": "IP",
               "target": "URL",
               "kind": "kind",

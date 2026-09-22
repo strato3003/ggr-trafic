@@ -1,5 +1,8 @@
 window.GgrMixer = (function () {
   let handle = null;
+  const t = function (key, vars) {
+    return window.GGR_t ? window.GGR_t(key, vars) : key;
+  };
 
   function unmount() {
     if (handle && typeof handle.destroy === "function") handle.destroy();
@@ -489,7 +492,7 @@ window.GgrMixer = (function () {
     audioLoadEl.hidden = false;
     if (starving && avg && avg < 100) audioLoadEl.textContent = "Buffer " + avg + " %";
     else if (avg) audioLoadEl.textContent = "Audio " + avg + " % · " + ready + "/" + live.length;
-    else audioLoadEl.textContent = "Chargement audio " + ready + "/" + live.length;
+    else audioLoadEl.textContent = t("audio_load") + " " + ready + "/" + live.length;
     audioLoadEl.title = "Fichiers WAV USB en cours de chargement dans le navigateur";
   }
 
@@ -625,8 +628,8 @@ window.GgrMixer = (function () {
 
   function setPlayUi(on) {
     playBtn.setAttribute("aria-pressed", on ? "true" : "false");
-    playBtn.setAttribute("aria-label", on ? "Pause" : "Lecture");
-    playBtn.title = on ? "Pause" : "Lecture";
+    playBtn.setAttribute("aria-label", on ? t("pause") : t("play"));
+    playBtn.title = on ? t("pause") : t("play");
   }
 
   function noteReplayPlay() {
@@ -799,8 +802,8 @@ window.GgrMixer = (function () {
       const on = !!(focusId && ch && ch.getAttribute("data-id") === focusId);
       btn.innerHTML = on ? ICO_COLLAPSE : ICO_EXPAND;
       btn.setAttribute("aria-pressed", on ? "true" : "false");
-      btn.setAttribute("aria-label", on ? "Replier" : "Plein écran");
-      btn.setAttribute("title", on ? "Replier" : "Plein écran");
+      btn.setAttribute("aria-label", on ? t("menu_collapse_short") : t("fullscreen"));
+      btn.setAttribute("title", on ? t("menu_collapse_short") : t("fullscreen"));
     });
   }
 
@@ -936,9 +939,17 @@ window.GgrMixer = (function () {
           esc(tr.id) +
           '">' +
           '<div class="mix__ch-ctrl">' +
-          '<label class="mix__fader"><span>Vol</span><input type="range" min="0" max="150" value="100" step="1" data-act="vol"></label>' +
-          '<button type="button" class="mix__mute" data-act="mute" aria-pressed="false">Mute</button>' +
-          '<button type="button" class="mix__zoom mix__ico-btn" data-act="zoom" aria-label="Plein écran" title="Plein écran">' +
+          '<label class="mix__fader"><span>' +
+          t("vol") +
+          '</span><input type="range" min="0" max="150" value="100" step="1" data-act="vol"></label>' +
+          '<button type="button" class="mix__mute" data-act="mute" aria-pressed="false">' +
+          t("mute") +
+          "</button>" +
+          '<button type="button" class="mix__zoom mix__ico-btn" data-act="zoom" aria-label="' +
+          t("fullscreen") +
+          '" title="' +
+          t("fullscreen") +
+          '">' +
           ICO_EXPAND +
           "</button>" +
           '<div class="mix__meta"><strong>' +
@@ -1166,7 +1177,7 @@ window.GgrMixer = (function () {
       return wavMono16(raw);
     } catch (err) {
       if (quiet) return null;
-      tr.place = (tr.place || tr.id) + " (échec waterfall)";
+      tr.place = (tr.place || tr.id) + " " + t("wf_fail");
       const meta =
         tr.canvas &&
         tr.canvas.closest(".mix__ch") &&
@@ -1303,7 +1314,7 @@ window.GgrMixer = (function () {
       });
     });
     if (!tracks.length) {
-      if (statusEl) statusEl.textContent = "Aucune voie sur ce trafic.";
+      if (statusEl) statusEl.textContent = t("no_tracks");
       playBtn.disabled = true;
       return;
     }
@@ -1314,7 +1325,7 @@ window.GgrMixer = (function () {
         drawTrack(tr);
       });
     });
-    if (statusEl) statusEl.textContent = "Waterfall USB…";
+    if (statusEl) statusEl.textContent = t("wf_loading");
     playBtn.disabled = true;
     await Promise.all(tracks.map((tr) => loadStoredWf(tr)));
     const painted = tracks.filter((tr) => tr.storedWf).length;
@@ -1328,15 +1339,11 @@ window.GgrMixer = (function () {
     if (painted || live) {
       playBtn.disabled = live === 0;
       if (statusEl)
-        statusEl.textContent =
-          live +
-          "/" +
-          tracks.length +
-          " voies audio · spectrogramme USB 0–2,7 kHz (temps →) · mute / volume.";
+        statusEl.textContent = t("mix_ready", { live: live, n: tracks.length });
       updateHead();
       return;
     }
-    if (statusEl) statusEl.textContent = "Aucune piste audio décodable (voies grisées).";
+    if (statusEl) statusEl.textContent = t("no_audio");
     playBtn.disabled = true;
   }
 

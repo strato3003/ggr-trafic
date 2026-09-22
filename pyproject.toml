@@ -1,6 +1,6 @@
 [project]
 name = "ggr-trafic"
-version = "1.1.12"
+version = "1.1.13"
 description = "Enregistrement du trafic HF F6KUF / flotte Golden Globe Race"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,6 +21,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "uvicorn[standard]>=0.32.0",
     "websockets>=14.0",
+    "edge-tts>=7.0.0",
 ]
 
 [project.optional-dependencies]

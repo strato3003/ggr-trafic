@@ -1,62 +1,66 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ lang | default('fr') }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }} {{ version }}{% block title %}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi69">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi73">
   {% block extra_head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}"{% if operator %} data-operator="{{ operator.callsign }}"{% endif %}>
   <header class="mast">
     <div class="mast__brand">
       <a href="/" class="logo">{{ app_name }} <span class="ver">{{ version }}</span></a>
-      <p class="tag">Bulletins météo HF · {{ club_callsign }} · flotte Golden Globe Race</p>
+      <p class="tag">{{ t('tag', club=club_callsign) }}</p>
     </div>
     <nav class="nav">
-      <a href="/#trafic">Trafic</a>
-      <a href="/#setup">Setup</a>
-      <a href="/#apropos">À propos</a>
+      <a href="/#trafic">{{ t('nav_trafic') }}</a>
+      <a href="/#setup">{{ t('nav_setup') }}</a>
+      <a href="/#apropos">{{ t('nav_about') }}</a>
+      <span class="ggr-lang" role="group" aria-label="Language">
+        <a href="/lang/fr" class="{% if lang == 'fr' %}is-on{% endif %}">{{ t('lang_fr') }}</a>
+        <a href="/lang/en" class="{% if lang == 'en' %}is-on{% endif %}">{{ t('lang_en') }}</a>
+      </span>
     </nav>
   </header>
 
-  <section class="qrg-bar" aria-label="Fréquences de trafic">
+  <section class="qrg-bar" aria-label="{{ t('tx', club=club_callsign) }}">
     <div class="qrg">
-      <span class="qrg__k">TX {{ club_callsign }}</span>
+      <span class="qrg__k">{{ t('tx', club=club_callsign) }}</span>
       <span class="qrg__v">{{ tx_mhz }} MHz USB</span>
       <span class="qrg__h">± {{ qrg_tolerance_khz }} kHz · {{ schedule_ident_short }} {{ time_utc }} TU</span>
     </div>
     <div class="qrg">
-      <span class="qrg__k">ACK 16 m</span>
+      <span class="qrg__k">{{ t('ack_16') }}</span>
       <span class="qrg__v">{{ ack1_mhz }} MHz USB</span>
     </div>
     <div class="qrg">
-      <span class="qrg__k">ACK 12 m</span>
+      <span class="qrg__k">{{ t('ack_12') }}</span>
       <span class="qrg__v">{{ ack2_mhz }} MHz USB</span>
     </div>
     <div class="qrg qrg--next">
-      <span class="qrg__k">Prochain bulletin</span>
+      <span class="qrg__k">{{ t('next_bulletin') }}</span>
       <span class="qrg__v js-countdown" id="countdown" data-iso="{{ bulletin_iso }}">{{ bulletin_label }} TU</span>
       {% include "_recording.html" %}
     </div>
   </section>
   <section class="qrg-bar qrg-bar--buddy" aria-label="Buddy call">
     <div class="qrg">
-      <span class="qrg__k">Buddy principale</span>
+      <span class="qrg__k">{{ t('buddy_main') }}</span>
       <span class="qrg__v">{{ '%.0f'|format(buddy_main_khz) }} kHz USB</span>
       <span class="qrg__h">{{ buddy_time_utc }} TU{% if not buddy_enabled %} · off{% endif %}</span>
     </div>
     <div class="qrg">
-      <span class="qrg__k">Buddy secours</span>
+      <span class="qrg__k">{{ t('buddy_alt') }}</span>
       <span class="qrg__v">{{ '%.0f'|format(buddy_alt_khz) }} kHz USB</span>
     </div>
     <div class="qrg">
-      <span class="qrg__k">Centroïde</span>
+      <span class="qrg__k">{{ t('centroid') }}</span>
       <span class="qrg__v qrg__v--small">{{ buddy_skippers_short }}</span>
-      <span class="qrg__h">skippers cochés</span>
+      <span class="qrg__h">{{ t('skippers_checked') }}</span>
     </div>
     <div class="qrg qrg--next">
-      <span class="qrg__k">Prochain buddy call</span>
+      <span class="qrg__k">{{ t('next_buddy') }}</span>
       <span class="qrg__v js-countdown" data-iso="{{ buddy_iso }}">{{ buddy_label }} TU</span>
     </div>
   </section>
@@ -66,9 +70,10 @@
   </main>
 
   <footer class="foot">
-    <p>{{ app_name }} {{ version }} — enregistrements KiwiSDR selon le centroïde des skippers suivis.</p>
+    <p>{{ t('footer', app=app_name, ver=version) }}</p>
   </footer>
-  <script src="/static/js/app.js?v={{ version }}-kiwi33"></script>
+  <script type="application/json" id="ggr-i18n">{{ i18n_json | default({}) | tojson }}</script>
+  <script src="/static/js/app.js?v={{ version }}-kiwi34"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

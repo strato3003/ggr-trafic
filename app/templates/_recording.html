@@ -3,6 +3,6 @@
       data-next="{{ next_recording_iso or '' }}"
       role="status">
   <span class="live__dot" aria-hidden="true"></span>
-  <span class="js-rec-label">{% if recording_state.active %}{{ recording_state.label or 'Enregistrement' }} en cours{% else %}Prochain enregistrement{% endif %}</span>
+  <span class="js-rec-label">{% if recording_state.active %}{{ t('rec_now', label=recording_state.label or t('rec_label')) }}{% else %}{{ t('rec_next') }}{% endif %}</span>
   <span class="js-rec-clock">{% if recording_state.active %}{{ recording_state.remaining_hms }}{% else %}—{% endif %}</span>
 </span>

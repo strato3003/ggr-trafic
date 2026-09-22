@@ -195,8 +195,28 @@ def _journal_coords(labels: dict[str, str]) -> tuple[str, str]:
     return lat, lon
 
 
+def terminal_type(ua: str) -> str:
+    """ordinateur / mobile / tablette / bot / inconnu — jamais en label Prometheus."""
+    raw = (ua or "").strip()
+    if not raw:
+        return "inconnu"
+    low = raw.lower()
+    if re.search(r"bot|crawler|spider|slurp|preview|facebookexternal|whatsapp|telegram", low):
+        return "bot"
+    if "ipad" in low or "tablet" in low or "playbook" in low:
+        return "tablette"
+    if "android" in low and "mobile" not in low:
+        return "tablette"
+    if any(
+        token in low
+        for token in ("iphone", "ipod", "android", "webos", "blackberry", "iemobile", "opera mini", "mobile")
+    ):
+        return "mobile"
+    return "ordinateur"
+
+
 def operator_fields(request: Request | None) -> dict[str, str]:
-    """Indicatif / e-mail / surnom pour Loki (jamais en label Prometheus)."""
+    """Indicatif / e-mail / surnom / domicile ANFR pour Loki (jamais en label Prometheus)."""
     blob: Any = None
     if request is not None:
         blob = request.scope.get("ggr_operator")
@@ -205,12 +225,22 @@ def operator_fields(request: Request | None) -> dict[str, str]:
 
             blob = auth_google.session_operator(request)
     if not isinstance(blob, dict):
-        return {"callsign": "", "email": "", "surnom": ""}
+        return {"callsign": "", "email": "", "surnom": "", "domicile": ""}
     return {
         "callsign": _lab(str(blob.get("callsign") or ""), fallback="", limit=16),
         "email": _lab(str(blob.get("email") or ""), fallback="", limit=120),
         "surnom": _lab(str(blob.get("name") or blob.get("surnom") or ""), fallback="", limit=40),
+        "domicile": _lab(str(blob.get("domicile") or ""), fallback="", limit=80),
     }
+
+
+def visit_context(request: Request | None) -> dict[str, str]:
+    fields = operator_fields(request)
+    ua = ""
+    if request is not None:
+        ua = request.headers.get("user-agent") or ""
+    fields["terminal"] = terminal_type(ua)
+    return fields
 
 
 def _count(ip: str, labels: dict[str, str], path: str, operator: dict[str, str] | None = None) -> None:
@@ -236,6 +266,8 @@ def _count(ip: str, labels: dict[str, str], path: str, operator: dict[str, str] 
         callsign=op.get("callsign") or "",
         email=op.get("email") or "",
         surnom=op.get("surnom") or "",
+        terminal=op.get("terminal") or "",
+        domicile=op.get("domicile") or "",
     )
 
 
@@ -268,6 +300,8 @@ def _count_replay(ip: str, labels: dict[str, str], replay: str, operator: dict[s
         callsign=op.get("callsign") or "",
         email=op.get("email") or "",
         surnom=op.get("surnom") or "",
+        terminal=op.get("terminal") or "",
+        domicile=op.get("domicile") or "",
     )
 
 
@@ -283,7 +317,7 @@ def schedule_replay(request: Request, trafic_id: str) -> None:
     rid = replay_label(trafic_id)
     if not rid or rid == "inconnu":
         return
-    op = operator_fields(request)
+    op = visit_context(request)
     cached = _geo_cache.get(ip)
     if cached is not None:
         _count_replay(ip, cached, rid, op)
@@ -324,7 +358,7 @@ def schedule(request: Request) -> None:
     if not ip:
         return
     path = request.url.path
-    op = operator_fields(request)
+    op = visit_context(request)
     cached = _geo_cache.get(ip)
     if cached is not None:
         _count(ip, cached, path, op)
@@ -352,7 +386,7 @@ def schedule_nav(request: Request, path: str) -> None:
     ip = client_ip(request)
     if not ip:
         return
-    op = operator_fields(request)
+    op = visit_context(request)
     cached = _geo_cache.get(ip)
     if cached is not None:
         _count(ip, cached, labeled, op)

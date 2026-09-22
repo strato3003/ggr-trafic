@@ -6,9 +6,9 @@
   <p class="ggr-auth__who">
     <strong>{{ operator.callsign }}</strong>
     <span>{{ operator.name }}</span>
-    <a href="/auth/logout">Déconnexion</a>
+    <a href="/auth/logout">{{ t('logout') }}</a>
   </p>
   {% elif google_sso %}
-  <a class="ggr-auth__btn" href="/auth/google">Se connecter avec Google</a>
+  <a class="ggr-auth__btn" href="/auth/google">{{ t('login_google') }}</a>
   {% endif %}
 </div>

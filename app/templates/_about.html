@@ -1,49 +1,32 @@
 <article class="prose kiwi-about">
-  <h1>À propos — {{ app_name }} {{ version }}</h1>
+  <h1>{{ t('about_h1', app=app_name, ver=version) }}</h1>
   <p>
-    <strong>{{ app_name }}</strong> archive les bulletins météo HF entre le radio-club
-    <strong>{{ club_callsign }}</strong> et les bateaux de la flotte Golden Globe Race.
-    Le club émet un bulletin météo à <strong>{{ time_utc }} TU</strong> sur
-    <strong>{{ tx_mhz }} MHz USB</strong> (QRG nominale <strong>14.135 MHz</strong>).
-    L’émetteur suit la flotte, dans cet ordre :
-    d’abord <strong>Guy F4DAI / F6KUF</strong> (cette semaine
-    <strong>Philippe F4HWM / F6KUF</strong> depuis Talmont-Saint-Hilaire),
-    <strong>{{ schedule_days_label }}</strong> ;
-    puis <strong>Cap Town</strong> autour du cap de Bonne-Espérance ;
-    enfin <strong>Michel FO5QB / F6KUF</strong> (Tahiti), <strong>tous les jours</strong> à la même heure.
-    Écoute actuelle :
-    <strong>{{ bulletin_tx_label | default('F6KUF') }}</strong>{% if bulletin_tx_overlap %}
-    — recouvrement Guy (Philippe) / Cap Town / Michel{% endif %}.
-    Des KiwiSDR enregistrent cette QRG près de chaque émetteur encore audible, et près des skippers (centroïde, plus les extrêmes si la flotte s’élargit).
-    Les accusés de réception sont écoutés sur
-    <strong>{{ ack1_mhz }} MHz USB</strong> et
-    <strong>{{ ack2_mhz }} MHz USB</strong> (QRG ± {{ qrg_tolerance_khz }} kHz).
-    Tous les jours à <strong>{{ buddy_time_utc }} TU</strong>, un <strong>buddy call</strong> est
-    écouté sur <strong>{{ '%.0f'|format(buddy_main_khz) }} kHz USB</strong> (principale) et
-    <strong>{{ '%.0f'|format(buddy_alt_khz) }} kHz USB</strong> (secours), depuis
-    <strong>4 KiwiSDR</strong> choisis pour la propagation (NVIS et saut 1 hop) vers le centroïde
-    des skippers suivis ({{ buddy_skippers_short }}).
-    Le bulletin et les ACK sont enregistrés en parallèle. Les QRG se règlent dans
-    <a href="#setup">Setup</a>.
+    {{ t('about_p_lead', app=app_name, club=club_callsign, time=time_utc, tx=tx_mhz) }}
+    {{ t('about_p_tx', days=schedule_days_label) }}
+    {{ t('about_p_listen', tx_label=bulletin_tx_label | default('F6KUF')) }}{% if bulletin_tx_overlap %}{{ t('about_p_overlap') }}{% endif %}
+    {{ t('about_p_kiwis') }}
+    {{ t('about_p_ack', ack1=ack1_mhz, ack2=ack2_mhz, tol=qrg_tolerance_khz) }}
+    {{ t('about_p_buddy', buddy=buddy_time_utc, main=('%.0f'|format(buddy_main_khz)), alt=('%.0f'|format(buddy_alt_khz)), skippers=buddy_skippers_short) }}
+    {{ t('about_p_range') }}
   </p>
-  <h2>Fonctionnement</h2>
+  <h2>{{ t('about_h2_how') }}</h2>
   <ul>
-    <li>Centroïde des skippers suivis via le tracker Yellowbrick GGR 2026.</li>
-    <li>Carte 2D ou globe 3D (commutateur) : flotte, Kiwi, QTH d’émission. Calque <strong>METAREA</strong> (limites OMM / OHI) et calque <strong>sous-zones</strong> (découpages haute mer des METAREA occupées par la flotte). L’onglet METAREA suit tout seul le bulletin WWMIWS de la zone où sont les bateaux — avis haute mer, et bulletin côtier (Las Palmas, Tarifa, Corsen…) seulement si la flotte est dans la zone de service. Le texte proposé à l’antenne est un <strong>condensé automatique</strong> : l’OM doit le vérifier sur le bulletin officiel. Le panneau droit se replie comme un KiwiSDR.</li>
-    <li>Bulletin 14.135 MHz, selon la flotte : d’abord Guy F4DAI / F6KUF (cette semaine Philippe F4HWM, Talmont-Saint-Hilaire) lundi et jeudi 18:00 TU ; puis Cap Town ; enfin Michel FO5QB tous les jours 18:00 TU depuis Tahiti. Kiwi près de chaque QTH encore audible et près des skippers cochés, VFO calé sur 14.135000 MHz.</li>
-    <li>Screencast de l’interface SDR (waterfall / VFO) muxé avec l’audio USB 12 kHz.</li>
-    <li>Replay multipistes : volume, mute et timeline TU.</li>
+    <li>{{ t('about_li_yb') }}</li>
+    <li>{{ t('about_li_map') }}</li>
+    <li>{{ t('about_li_tx') }}</li>
+    <li>{{ t('about_li_cast') }}</li>
+    <li>{{ t('about_li_replay') }}</li>
   </ul>
-  <h2>Crédits</h2>
+  <h2>{{ t('about_h2_credits') }}</h2>
   <ul>
-    <li>Radio-club F6KUF — émission du bulletin météo.</li>
-    <li>Skippers et organisation Golden Globe Race — tracker Yellowbrick.</li>
-    <li>Opérateurs KiwiSDR — récepteurs HF publics.</li>
-    <li>Fonds de carte du globe : © <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a>.</li>
-    <li>Limites METAREA : Organisation hydrographique internationale (Iridium SafetyCast), découpées sur l’océan (côtes Natural Earth). Teintes d’après la carte OMM <em>Limits of METAREAS</em>, mai 2021.</li>
-    <li>Bulletins haute mer : WWMIWS / EGC, METAREA détectée d’après la position de toute la flotte (II aujourd’hui, puis VII, VIII-S, X, XIV, XV sur la route du GGR). Sous-zones intérieures encodées pour la METAREA II (FQNT52 LFPW, Météo-France). Avis WONT50 retenus s’ils touchent une sous-zone occupée ou voisine ; sinon mention qu’un avis existe hors zone. Bulletins côtiers de la page WWMIWS (Las Palmas, Tarifa, et plus tard FQZA30, etc.) seulement si c’est pertinent, sans doublon de zone ni de texte d’un bulletin à l’autre. Condensé automatique : à recouper avec l’officiel avant lecture.</li>
-    <li>Liste des récepteurs : rx.linkfanel.net (agrégation kiwisdr.com).</li>
+    <li>{{ t('about_cr_club') }}</li>
+    <li>{{ t('about_cr_ggr') }}</li>
+    <li>{{ t('about_cr_kiwi') }}</li>
+    <li>{{ t('about_cr_osm') }}</li>
+    <li>{{ t('about_cr_metarea') }}</li>
+    <li>{{ t('about_cr_wwmiws') }}</li>
+    <li>{{ t('about_cr_list') }}</li>
   </ul>
-  <p>Licence MIT — code source du dépôt <code>ggr-trafic</code>.</p>
-  <p>Développé par JNoel F4IAE.</p>
+  <p>{{ t('about_license') }}</p>
+  <p>{{ t('about_author') }}</p>
 </article>

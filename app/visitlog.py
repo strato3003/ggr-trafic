@@ -58,13 +58,27 @@ def _conn() -> sqlite3.Connection:
           callsign TEXT,
           email TEXT,
           surnom TEXT,
+          terminal TEXT,
+          domicile TEXT,
           kind TEXT NOT NULL,
           target TEXT NOT NULL
         )
         """
     )
     have = {row[1] for row in conn.execute("PRAGMA table_info(events)")}
-    for col in ("region", "postal", "isp", "latitude", "longitude", "ptr", "callsign", "email", "surnom"):
+    for col in (
+        "region",
+        "postal",
+        "isp",
+        "latitude",
+        "longitude",
+        "ptr",
+        "callsign",
+        "email",
+        "surnom",
+        "terminal",
+        "domicile",
+    ):
         if col not in have:
             conn.execute(f"ALTER TABLE events ADD COLUMN {col} TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_events_ip_ts ON events(ip, ts)")
@@ -91,6 +105,8 @@ def append(
     callsign: str = "",
     email: str = "",
     surnom: str = "",
+    terminal: str = "",
+    domicile: str = "",
 ) -> None:
     ip = (ip or "").strip()
     kind = (kind or "").strip()
@@ -109,6 +125,8 @@ def append(
     callsign = (callsign or "")[:16]
     email = (email or "")[:120]
     surnom = (surnom or "")[:40]
+    terminal = (terminal or "")[:16]
+    domicile = (domicile or "")[:80]
     try:
         with _lock:
             conn = _conn()
@@ -116,8 +134,8 @@ def append(
                 """
                 INSERT INTO events (
                   ts, ip, country, city, region, postal, isp, latitude, longitude, ptr,
-                  callsign, email, surnom, kind, target
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                  callsign, email, surnom, terminal, domicile, kind, target
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     ts,
@@ -133,6 +151,8 @@ def append(
                     callsign,
                     email,
                     surnom,
+                    terminal,
+                    domicile,
                     kind,
                     target,
                 ),
@@ -156,6 +176,8 @@ def append(
                 "callsign": callsign,
                 "email": email,
                 "surnom": surnom,
+                "terminal": terminal,
+                "domicile": domicile,
             }
         )
     except Exception:
@@ -179,7 +201,7 @@ def list_events(
     n = max(1, min(int(limit or 200), 500))
     ip_f = (ip or "").strip()
     tgt = (target or "").strip()[:120]
-    cols = "ts, ip, country, city, region, postal, isp, latitude, longitude, ptr, callsign, email, surnom, kind, target"
+    cols = "ts, ip, country, city, region, postal, isp, latitude, longitude, ptr, callsign, email, surnom, terminal, domicile, kind, target"
     with _lock:
         conn = _conn()
         if ip_f and tgt:

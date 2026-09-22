@@ -11,6 +11,47 @@
     return;
   }
 
+  const I18N = (() => {
+    const node = document.getElementById("ggr-i18n");
+    try {
+      return JSON.parse((node && node.textContent) || "{}") || {};
+    } catch {
+      return {};
+    }
+  })();
+  const t = (key, vars) => {
+    let s = I18N[key] || key;
+    if (vars) {
+      Object.keys(vars).forEach((k) => {
+        s = s.split("{" + k + "}").join(String(vars[k]));
+      });
+    }
+    return s;
+  };
+  function siteLabel(s) {
+    const raw = String(s || "");
+    const map = {
+      "écoute flotte": "site_fleet",
+      flotte: "site_fleet",
+      "flotte (bulletin)": "site_fleet_bull",
+      "proche / NVIS": "prop_nvis",
+      "saut 1 hop": "prop_hop",
+      "zone morte": "prop_skip",
+      "saut long": "prop_far",
+      diversité: "site_div",
+    };
+    if (map[raw]) return t(map[raw]);
+    const beam = raw.match(/^(?:portée TX bulletin|faisceau)\s*(.*)$/i);
+    if (beam) return (t("site_beam") + " " + (beam[1] || "")).trim();
+    return raw;
+  }
+  function zoneLabel(z) {
+    if (!z) return "";
+    const k = "prop_" + z;
+    const s = t(k);
+    return s === k ? z : s;
+  }
+
   window.GgrWfCache = window.GgrWfCache || {};
   (function prefetchWaterfalls() {
     const cache = window.GgrWfCache;
@@ -95,8 +136,8 @@
     document.body.classList.toggle("kiwi-panel-off", !on);
     if (kiwiToggle) {
       kiwiToggle.setAttribute("aria-expanded", on ? "true" : "false");
-      kiwiToggle.setAttribute("aria-label", on ? "Replier le menu général" : "Ouvrir le menu général");
-      kiwiToggle.setAttribute("title", on ? "Replier" : "Menu général");
+      kiwiToggle.setAttribute("aria-label", on ? t("menu_collapse") : t("menu_open"));
+      kiwiToggle.setAttribute("title", on ? t("menu_collapse_short") : t("menu"));
     }
     try {
       localStorage.setItem("ggr-kiwi-panel", on ? "on" : "off");
@@ -444,7 +485,13 @@
         rows.push({
           ...k,
           lng: k.lon,
-          kind: k._mux ? "mux_kiwi" : k._kind === "buddy_kiwi" ? "buddy_kiwi" : "kiwi",
+          kind: k._mux
+            ? "mux_kiwi"
+            : k._kind === "buddy_kiwi"
+              ? "buddy_kiwi"
+              : k._kind === "beam_kiwi"
+                ? "beam_kiwi"
+                : "kiwi",
         });
       });
     }
@@ -458,7 +505,7 @@
     }
     const c = fleetCenter();
     if (c) {
-      rows.push({ lat: c.lat, lon: c.lon, lng: c.lon, kind: "centroid", name: "Centroïde" });
+      rows.push({ lat: c.lat, lon: c.lon, lng: c.lon, kind: "centroid", name: t("centroid_name") });
     }
     trafics.forEach((v) => {
       rows.push({
@@ -469,7 +516,7 @@
       });
     });
     listedTxSites().forEach((s, i) => {
-      rows.push({ ...s, lng: s.lon, kind: "tx", _idx: i, name: s.label || "Émission" });
+      rows.push({ ...s, lng: s.lon, kind: "tx", _idx: i, name: s.label || t("tx_name") });
     });
     kiwiKmPoints().forEach((p) => rows.push(p));
     txKmPoints().forEach((p) => rows.push(p));
@@ -499,24 +546,24 @@
       ? `<span class="globe-skipper-tip__swatch" style="background:${esc(d.colour)}"></span>`
       : "";
     return (
-      `<header>${col}<div><p class="globe-skipper-tip__kicker">Skipper</p><h3>${esc(d.name || "—")}</h3></div></header>` +
+      `<header>${col}<div><p class="globe-skipper-tip__kicker">${esc(t("skipper"))}</p><h3>${esc(d.name || "—")}</h3></div></header>` +
       `<div class="globe-skipper-tip__grid">` +
-      row("Voile", d.sail) +
-      row("Rang", d.rank != null ? String(d.rank) : "") +
-      row("Statut", d.status) +
-      row("Pavillon", [d.flag, d.country].filter(Boolean).join(" · ")) +
-      row("Bateau", d.model) +
-      row("Propriétaire", d.owner) +
-      row("Position", fmtLatLon(d.lat, d.lon)) +
-      row("Cap", deg(d.heading)) +
-      row("SOG", kn(d.sog_kn)) +
-      row("VMG", kn(d.vmg_kn)) +
-      row("DTF", nm(d.dtf_nm)) +
-      row("24 h", nm(d.d24_nm)) +
-      row("DMG", nm(d.dmg_nm)) +
-      row("GPS", d.gps_at) +
-      row("Arrivée est.", d.finish_at) +
-      row("Vent", vent) +
+      row(t("fld_sail"), d.sail) +
+      row(t("fld_rank"), d.rank != null ? String(d.rank) : "") +
+      row(t("fld_status"), d.status) +
+      row(t("fld_flag"), [d.flag, d.country].filter(Boolean).join(" · ")) +
+      row(t("fld_boat"), d.model) +
+      row(t("fld_owner"), d.owner) +
+      row(t("fld_pos"), fmtLatLon(d.lat, d.lon)) +
+      row(t("fld_hdg"), deg(d.heading)) +
+      row(t("fld_sog"), kn(d.sog_kn)) +
+      row(t("fld_vmg"), kn(d.vmg_kn)) +
+      row(t("fld_dtf"), nm(d.dtf_nm)) +
+      row(t("fld_24h"), nm(d.d24_nm)) +
+      row(t("fld_dmg"), nm(d.dmg_nm)) +
+      row(t("fld_gps"), d.gps_at) +
+      row(t("fld_eta"), d.finish_at) +
+      row(t("fld_wind"), vent) +
       `</div>`
     );
   }
@@ -626,15 +673,15 @@
       icon.style.boxShadow = "0 0 8px #3dba7a";
     }
     wrap.appendChild(icon);
-    if ((d.kind === "boat" && d.inBuddy) || d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "mux_kiwi" || d.kind === "tx") {
+    if ((d.kind === "boat" && d.inBuddy) || d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi" || d.kind === "tx") {
       const name = document.createElement("span");
       name.className = "globe-mark__name";
       name.style.cssText = "position:absolute;left:14px;top:50%;transform:translateY(-50%);white-space:nowrap;";
-      name.textContent = d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "mux_kiwi" ? sdrLabel(d) : d.name || "";
+      name.textContent = d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi" ? sdrLabel(d) : d.name || "";
       wrap.appendChild(name);
     }
     if (d.kind !== "boat") {
-      wrap.title = d.kind === "kiwi" || d.kind === "buddy_kiwi" ? sdrLabel(d) : d.name || d.label || d.kind;
+      wrap.title = d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" ? sdrLabel(d) : d.name || d.label || d.kind;
     }
     const pick = (ev) => {
       ev.stopPropagation();
@@ -708,8 +755,9 @@
       seen.add(key);
       out.push({ ...k, _kind: kind });
     };
+    (data.beam_kiwis || []).forEach((k) => add(k, "beam_kiwi"));
     (data.buddy_kiwis || []).forEach((k) => add(k, "buddy_kiwi"));
-    (data.kiwis || []).forEach((k) => add(k, "kiwi"));
+    (data.kiwis || []).forEach((k) => add(k, "fleet_kiwi"));
     return out;
   }
 
@@ -770,6 +818,7 @@
     const want = String(name || "").trim().toLowerCase();
     if (!want) return null;
     const pool = []
+      .concat(data.beam_kiwis || [])
       .concat(data.buddy_kiwis || [])
       .concat(data.kiwis || [])
       .concat(kiwisAll);
@@ -873,8 +922,14 @@
     const rows = [];
     const pulse = !!muxOpen;
     activeSdrs().forEach((k) => {
-      const nvis = k.prop_zone === "nvis" || k._kind === "kiwi" || k._mux;
-      const color = pulse ? "#7dffb0" : nvis ? "#3dba7a" : "#6ec9e0";
+      const nvis = k.prop_zone === "nvis" || k._kind === "fleet_kiwi" || k._mux;
+      const color = pulse
+        ? "#7dffb0"
+        : k._kind === "beam_kiwi"
+          ? "#d4a15c"
+          : nvis
+            ? "#3dba7a"
+            : "#6ec9e0";
       geodesicDashed(center.lat, center.lon, k.lat, k.lon, color, { pulse: pulse }).forEach((p) => rows.push(p));
     });
     return rows;
@@ -957,9 +1012,9 @@
       txPlaceBtn.classList.toggle("is-placing", placingTx);
       txPlaceBtn.textContent = placingTx
         ? mapMode === "2d"
-          ? "Cliquer la carte… (annuler)"
-          : "Cliquer le globe… (annuler)"
-        : "Poser un QTH sur le globe";
+          ? t("tx_click_map")
+          : t("tx_click_globe")
+        : t("place_qth");
     }
   }
 
@@ -967,7 +1022,7 @@
     if (!txListEl) return;
     const rows = listedTxSites();
     if (!rows.length) {
-      txListEl.innerHTML = "<li class=\"meta\">Aucun QTH. Poser un point sur le globe (max " + TX_MAX + ").</li>";
+      txListEl.innerHTML = "<li class=\"meta\">" + esc(t("tx_none", { n: TX_MAX })) + "</li>";
       return;
     }
     txListEl.innerHTML = rows
@@ -975,20 +1030,24 @@
         const aim = txAim(s);
         const stats = aim
           ? Math.round(aim.km) + " km · az. " + fmtAz(aim.az)
-          : "centroïde indisponible";
+          : t("centroid_unavail");
         return (
           "<li>" +
           "<input type=\"text\" maxlength=\"64\" data-tx-label=\"" +
           i +
           "\" value=\"" +
           esc(s.label || "") +
-          "\" aria-label=\"Nom du QTH\">" +
+          "\" aria-label=\"" +
+          esc(t("tx_qth_name")) +
+          "\">" +
           "<span class=\"tx-list__aim\">" +
           esc(stats) +
           "</span>" +
           "<button type=\"button\" class=\"btn\" data-tx-del=\"" +
           i +
-          "\">Retirer</button>" +
+          "\">" +
+          esc(t("tx_remove")) +
+          "</button>" +
           "</li>"
         );
       })
@@ -1072,7 +1131,7 @@
       .map((v) => {
         let when = (v.air_at || v.started_at || "").replace("T", " ").slice(0, 16);
         if (when) when += " TU";
-        const tag = v.is_buddy ? "Buddy call" : v.is_test ? "Test" : "Bulletin météo";
+        const tag = v.is_buddy ? "Buddy call" : v.is_test ? t("vac_test") : t("vac_bulletin");
         const n = audioSdrs(v);
         const title = v.title && v.title !== v.id ? " · " + esc(v.title) : "";
         return (
@@ -1097,7 +1156,7 @@
 
   function renderVacList() {
     const all = data.trafics || data.vacations || [];
-    fillVacList(vacsEl, all, "Aucun trafic enregistré.");
+    fillVacList(vacsEl, all, t("vac_empty"));
   }
 
   function mixerTracks(v) {
@@ -1187,23 +1246,23 @@
       const wind = kn(d.wind_kn);
       const vent = wind && deg(d.wind_deg) ? wind + " @ " + deg(d.wind_deg) : wind;
       showSel(
-        `<p class="badge">Skipper</p><h3>${esc(d.name)}</h3>` +
+        `<p class="badge">${esc(t("skipper"))}</p><h3>${esc(d.name)}</h3>` +
           (d.owner || d.model || d.sail
-            ? `<p class="meta">${esc([d.owner, d.model, d.sail ? "voile " + d.sail : ""].filter(Boolean).join(" · "))}</p>`
+            ? `<p class="meta">${esc([d.owner, d.model, d.sail ? t("sail_word", { sail: d.sail }) : ""].filter(Boolean).join(" · "))}</p>`
             : "") +
           (d.country ? `<p class="meta">${esc(d.country)}</p>` : "") +
-          yb("GPS", d.gps_at) +
-          yb("Vitesse", spd) +
-          yb("Vent", vent) +
-          yb("DTF", nm(d.dtf_nm)) +
-          yb("24 h", nm(d.d24_nm)) +
-          yb("DMG", nm(d.dmg_nm)) +
-          yb("VMG", kn(d.vmg_kn)) +
-          yb("Rang", d.rank != null ? String(d.rank) : null) +
-          yb("Arrivée est.", d.finish_at) +
-          (d.status && d.status !== "RACING" ? yb("Statut", d.status) : "") +
+          yb(t("fld_gps"), d.gps_at) +
+          yb(t("speed"), spd) +
+          yb(t("wind"), vent) +
+          yb(t("fld_dtf"), nm(d.dtf_nm)) +
+          yb(t("fld_24h"), nm(d.d24_nm)) +
+          yb(t("fld_dmg"), nm(d.dmg_nm)) +
+          yb(t("fld_vmg"), kn(d.vmg_kn)) +
+          yb(t("fld_rank"), d.rank != null ? String(d.rank) : null) +
+          yb(t("fld_eta"), d.finish_at) +
+          (d.status && d.status !== "RACING" ? yb(t("fld_status"), d.status) : "") +
           `<p class="settings__actions"><button type="button" class="btn" id="globe-toggle-skip">` +
-          `${on ? "Retirer du centroïde" : "Ajouter au centroïde"}</button></p>`
+          `${on ? t("skip_remove") : t("skip_add")}</button></p>`
       );
       const btn = document.getElementById("globe-toggle-skip");
       if (btn) {
@@ -1218,15 +1277,23 @@
       lookAt(d.lat, d.lon, 1.4, 800);
       return;
     }
-    if (d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "mux_kiwi" || d.kind === "kiwi_all") {
-      const zone = d.prop_zone ? ` · zone ${esc(d.prop_zone)}` : "";
+    if (d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi" || d.kind === "kiwi_all") {
+      const zone = d.prop_zone ? ` · ${esc(t("zone"))} ${esc(zoneLabel(d.prop_zone))}` : "";
       const km = d.site_km != null ? d.site_km : d.distance_km;
+      const badge =
+        d.kind === "buddy_kiwi"
+          ? t("badge_buddy")
+          : d.kind === "beam_kiwi"
+            ? t("badge_beam")
+            : d._mux
+              ? t("mux_kiwi")
+              : t("badge_kiwi");
       showSel(
-        `<p class="badge">${d.kind === "buddy_kiwi" ? "Kiwi buddy call" : d._mux ? "Kiwi du mux" : "KiwiSDR"}</p>` +
+        `<p class="badge">${badge}</p>` +
           `<h3>${esc(d.name)}</h3>` +
-          `<p class="meta">${esc(d.loc || "")}${d.site_label ? " · " + esc(d.site_label) : ""}</p>` +
-          `<p>${km != null ? km + " km" : ""} · SNR HF ${esc(d.snr_hf)} · ${esc(d.free_slots)}/${esc(d.users_max)} places${zone}</p>` +
-          (d.url ? `<p><a href="${esc(d.url)}" rel="noreferrer">Ouvrir le KiwiSDR</a></p>` : "")
+          `<p class="meta">${esc(d.loc || "")}${d.site_label ? " · " + esc(siteLabel(d.site_label)) : ""}</p>` +
+          `<p>${km != null ? km + " km" : ""} · SNR HF ${esc(d.snr_hf)} · ${esc(d.free_slots)}/${esc(d.users_max)} ${esc(t("kiwi_slots"))}${zone}</p>` +
+          (d.url ? `<p><a href="${esc(d.url)}" rel="noreferrer">${esc(t("open_kiwi"))}</a></p>` : "")
       );
       lookAt(d.lat, d.lng || d.lon, 1.5, 800);
       return;
@@ -1241,12 +1308,12 @@
         ? d.lat.toFixed(4) + ", " + d.lon.toFixed(4)
         : "";
       showSel(
-        `<p class="badge">Émission bulletin</p><h3>${esc(d.name || d.label || "QTH")}</h3>` +
+        `<p class="badge">${esc(t("tx_on_air"))}</p><h3>${esc(d.name || d.label || "QTH")}</h3>` +
           `<p class="meta">${esc(d.loc || pos)}</p>` +
           (aim
-            ? `<p>Distance centroïde : <strong>${Math.round(aim.km)} km</strong></p>` +
-              `<p>Azimut antenne (vrai nord) : <strong>${esc(fmtAz(aim.az))}</strong></p>`
-            : "<p class=\"hint\">Centroïde indisponible.</p>")
+            ? `<p>${esc(t("dist_centroid"))} : <strong>${Math.round(aim.km)} km</strong></p>` +
+              `<p>${esc(t("az_antenna"))} : <strong>${esc(fmtAz(aim.az))}</strong></p>`
+            : "<p class=\"hint\">" + esc(t("centroid_unavail_p")) + "</p>")
       );
       lookAt(d.lat, d.lon, 1.6, 800);
       return;
@@ -1279,13 +1346,13 @@
 
   function placeTxAt(lat, lng) {
     if (listedTxSites().length >= TX_MAX) {
-      sayTx("Cinq QTH d’émission au maximum.", false);
+      sayTx(t("tx_max"), false);
       setPlacingTx(false);
       return;
     }
     txSites = listedTxSites().concat([
       {
-        label: "Émission " + (listedTxSites().length + 1),
+        label: t("tx_label_n", { n: listedTxSites().length + 1 }),
         lat: Math.round(lat * 1e5) / 1e5,
         lon: Math.round(lng * 1e5) / 1e5,
       },
@@ -1293,7 +1360,7 @@
     setPlacingTx(false);
     renderTxList();
     refreshGlobe();
-    sayTx("QTH posé. Sauver pour mémoriser.", true);
+    sayTx(t("tx_placed"), true);
     showTab("setup");
   }
 
@@ -2278,11 +2345,11 @@
     saveBtn.addEventListener("click", async () => {
       const tok = token();
       if (!tok) {
-        sayBuddy("Jeton manquant : coller le jeton dans Setup.", false);
+        sayBuddy(t("need_token"), false);
         return;
       }
       saveBtn.disabled = true;
-      sayBuddy("Sauvegarde…", true);
+      sayBuddy(t("saving"), true);
       try {
         const cur = await fetch("/api/settings").then((r) => r.json());
         const res = await fetch("/api/settings", {
@@ -2307,10 +2374,10 @@
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
-          sayBuddy(body.detail || `Erreur ${res.status}`, false);
+          sayBuddy(body.detail || t("err_http", { status: res.status }), false);
           return;
         }
-        sayBuddy("Centroïde enregistré. Rechargement des Kiwi…", true);
+        sayBuddy(t("centroid_saved"), true);
         window.location.reload();
       } catch (err) {
         sayBuddy(String(err), false);
@@ -2344,15 +2411,15 @@
     txPlaceBtn.addEventListener("click", () => {
       if (placingTx) {
         setPlacingTx(false);
-        sayTx("Pose annulée.", true);
+        sayTx(t("tx_cancel"), true);
         return;
       }
       if (listedTxSites().length >= TX_MAX) {
-        sayTx("Cinq QTH d’émission au maximum.", false);
+        sayTx(t("tx_max"), false);
         return;
       }
       setPlacingTx(true);
-      sayTx("Cliquer la carte ou le globe pour poser un QTH.", true);
+      sayTx(t("tx_click"), true);
     });
   }
 
@@ -2360,11 +2427,11 @@
     txSaveBtn.addEventListener("click", async () => {
       const tok = token();
       if (!tok) {
-        sayTx("Jeton manquant : coller le jeton dans Setup.", false);
+        sayTx(t("need_token"), false);
         return;
       }
       txSaveBtn.disabled = true;
-      sayTx("Sauvegarde…", true);
+      sayTx(t("saving"), true);
       try {
         const cur = await fetch("/api/settings").then((r) => r.json());
         const res = await fetch("/api/settings", {
@@ -2386,10 +2453,10 @@
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
-          sayTx(body.detail || `Erreur ${res.status}`, false);
+          sayTx(body.detail || t("err_http", { status: res.status }), false);
           return;
         }
-        sayTx("QTH d’émission enregistrés.", true);
+        sayTx(t("tx_saved"), true);
       } catch (err) {
         sayTx(String(err), false);
       } finally {
@@ -2406,14 +2473,25 @@
     btn.addEventListener("click", () => applyMapMode(btn.getAttribute("data-map-mode")));
   });
   function lectureClass(text, inCoast) {
-    const t = String(text || "").trim();
-    if (/^bulletin haute mer/i.test(t)) return { cls: "lecture--head", coast: false };
-    if (/^avis de coup de vent/i.test(t) || /^avis\./i.test(t)) return { cls: "lecture--warn", coast: inCoast };
-    if (/hors des sous-zones/i.test(t)) return { cls: "lecture--warn-out", coast: false };
-    if (/^situation générale/i.test(t)) return { cls: "lecture--syn", coast: false };
-    if (/^tendance\b/i.test(t)) return { cls: "lecture--out", coast: false };
-    if (/^bulletin côtier/i.test(t)) return { cls: "lecture--coast", coast: true };
-    if (/^pas de prévision/i.test(t)) return { cls: "lecture--empty", coast: false };
+    const raw = String(text || "").trim();
+    if (/^bulletin haute mer/i.test(raw) || /^high seas (forecast|bulletin)/i.test(raw))
+      return { cls: "lecture--head", coast: false };
+    if (
+      /^avis de coup de vent/i.test(raw) ||
+      /^avis\./i.test(raw) ||
+      /^gale warning/i.test(raw) ||
+      /^warning\./i.test(raw)
+    )
+      return { cls: "lecture--warn", coast: inCoast };
+    if (/hors des sous-zones/i.test(raw) || /outside the fleet sub-zones/i.test(raw))
+      return { cls: "lecture--warn-out", coast: false };
+    if (/^situation générale/i.test(raw) || /^general situation/i.test(raw))
+      return { cls: "lecture--syn", coast: false };
+    if (/^tendance\b/i.test(raw) || /^outlook\b/i.test(raw)) return { cls: "lecture--out", coast: false };
+    if (/^bulletin côtier/i.test(raw) || /^coastal forecast/i.test(raw))
+      return { cls: "lecture--coast", coast: true };
+    if (/^pas de prévision/i.test(raw) || /^no zone forecast/i.test(raw))
+      return { cls: "lecture--empty", coast: false };
     if (inCoast) return { cls: "lecture--coast-zone", coast: true };
     return { cls: "lecture--zone", coast: false };
   }
@@ -2429,67 +2507,195 @@
       .join("");
   }
 
+  let metareaSpeechText = "";
+
   function renderMetareaTab(snap) {
+    const body = document.getElementById("ggr-metarea-body") || document.getElementById("ggr-metarea-page");
     const host = document.getElementById("ggr-metarea-page");
-    if (!host) return;
+    if (!body) return;
     if (!snap || !snap.ok) {
-      host.innerHTML =
-        "<h1>METAREA — haute mer</h1><p class=\"err\">" +
-        esc((snap && (snap.error || snap.lecture)) || "Bulletin WWMIWS indisponible.") +
+      metareaSpeechText = "";
+      body.innerHTML =
+        "<p class=\"err\">" +
+        esc((snap && (snap.error || snap.lecture)) || t("metarea_err")) +
         "</p>";
       return;
     }
     const roman = snap.metarea || "—";
     const links = snap.links || {};
     const lis = [];
-    if (links.metarea) lis.push('<li><a href="' + esc(links.metarea) + '" rel="noreferrer">WWMIWS METAREA ' + esc(roman) + "</a></li>");
-    if (links.forecast) lis.push('<li><a href="' + esc(links.forecast) + '" rel="noreferrer">Bulletin haute mer officiel</a></li>');
-    if (links.warning) lis.push('<li><a href="' + esc(links.warning) + '" rel="noreferrer">Avis officiels</a></li>');
-    if (links.json) lis.push('<li><a href="' + esc(links.json) + '" rel="noreferrer">JSON officiel</a></li>');
+    if (links.metarea) {
+      lis.push(
+        '<li><a href="' +
+          esc(links.metarea) +
+          '" rel="noreferrer">' +
+          esc(t("metarea_link_wwmiws", { roman: roman })) +
+          "</a></li>"
+      );
+    }
+    if (links.forecast) {
+      lis.push(
+        '<li><a href="' +
+          esc(links.forecast) +
+          '" rel="noreferrer">' +
+          esc(t("metarea_link_forecast")) +
+          "</a></li>"
+      );
+    }
+    if (links.warning) {
+      lis.push(
+        '<li><a href="' +
+          esc(links.warning) +
+          '" rel="noreferrer">' +
+          esc(t("metarea_link_warning")) +
+          "</a></li>"
+      );
+    }
+    if (links.json) {
+      lis.push(
+        '<li><a href="' +
+          esc(links.json) +
+          '" rel="noreferrer">' +
+          esc(t("metarea_link_json")) +
+          "</a></li>"
+      );
+    }
     const coastalLis = (snap.coastal || []).map((c) => {
-      const label = (c.title || c.gts || "côtier").replace(/\s+$/, "");
-      if (c.url) return '<li><a href="' + esc(c.url) + '" rel="noreferrer">Bulletin côtier ' + esc(label) + "</a></li>";
-      return "<li>Bulletin côtier " + esc(label) + "</li>";
+      const label = (c.title || c.gts || t("coastal_short")).replace(/\s+$/, "");
+      if (c.url) {
+        return (
+          '<li><a href="' +
+          esc(c.url) +
+          '" rel="noreferrer">' +
+          esc(t("metarea_coastal", { label: label })) +
+          "</a></li>"
+        );
+      }
+      return "<li>" + esc(t("metarea_coastal", { label: label })) + "</li>";
     });
     const zones = (snap.fleet_zones || []).join(", ") || "—";
     const extra = (snap.extra_zones || []).join(", ");
     const sched = (snap.schedule_utc || []).join(" et ");
     const paras = lectureParagraphs(snap.paragraphs || []);
     const zoneMeta = snap.has_subzones
-      ? "<p class=\"meta\">Sous-zones de la flotte : <strong>" +
+      ? "<p class=\"meta\">" +
+        esc(t("metarea_subzones")) +
+        " : <strong>" +
         esc(zones) +
         "</strong>" +
-        (extra ? " · côtier proche : <strong>" + esc(extra) + "</strong>" : "") +
+        (extra ? " · " + esc(t("metarea_coastal_near")) + " : <strong>" + esc(extra) + "</strong>" : "") +
         "</p>"
-      : "<p class=\"meta\">Découpage intérieur non encodé pour cette METAREA : lecture du bulletin officiel complet.</p>";
+      : "<p class=\"meta\">" + esc(t("metarea_no_subzones")) + "</p>";
     const disclaimer =
       "<p class=\"ggr-metarea-om\" role=\"note\">" +
       esc(snap.disclaimer || "") +
       "</p>";
-    host.innerHTML =
-      "<h1>METAREA " +
-      esc(roman) +
-      " — haute mer</h1>" +
+    const title = host ? host.querySelector("h1") : null;
+    if (title) title.textContent = t("metarea_h1", { roman: roman });
+    body.innerHTML =
       disclaimer +
-      "<p class=\"meta\">Mise à disposition officielle : <strong>" +
+      "<p class=\"meta\">" +
+      esc(t("metarea_official")) +
+      " : <strong>" +
       esc(snap.official_label || "—") +
       "</strong>" +
-      (sched ? " (calculs SafetyNET " + esc(sched) + " TU)" : "") +
+      (sched ? " " + esc(t("metarea_safetynet", { sched: sched })) : "") +
       ".</p>" +
-      "<p class=\"meta\">Récupération WWMIWS : " +
+      "<p class=\"meta\">" +
+      esc(t("metarea_retrieved")) +
+      " : " +
       esc(snap.retrieved_label || snap.wwmiws_date || "—") +
       (snap.gts ? " · GTS " + esc(snap.gts) : "") +
       "</p>" +
       zoneMeta +
-      "<h2>Liens officiels</h2>" +
+      "<h2>" +
+      esc(t("metarea_links_h2")) +
+      "</h2>" +
       "<ul class=\"ggr-metarea-links\">" +
       lis.join("") +
       coastalLis.join("") +
       "</ul>" +
-      "<h2>Lecture pour l’OM</h2>" +
-      "<div class=\"ggr-metarea-lecture\" lang=\"fr\">" +
+      "<h2>" +
+      esc(t("metarea_lecture_h2")) +
+      "</h2>" +
+      "<div class=\"ggr-metarea-lecture\" lang=\"" +
+      (document.documentElement.lang || "fr") +
+      "\">" +
       paras +
       "</div>";
+    metareaSpeechText = (snap.paragraphs || []).join(". ");
+    bindBulletinSpeech();
+  }
+
+  function bindBulletinSpeech() {
+    const host = document.getElementById("ggr-metarea-page");
+    if (!host || host.dataset.speechBound === "1") return;
+    host.dataset.speechBound = "1";
+    const play = host.querySelector("#ggr-speech-play");
+    const stop = host.querySelector("#ggr-speech-stop");
+    const mp3 = host.querySelector("#ggr-speech-mp3");
+    const sel = host.querySelector("#ggr-speech-voice");
+    const audio = host.querySelector("#ggr-speech-audio");
+    const dl = host.querySelector("#ggr-speech-dl");
+    if (play) {
+      play.addEventListener("click", () => {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        if (audio) audio.pause();
+        const u = new SpeechSynthesisUtterance(metareaSpeechText);
+        u.lang = document.documentElement.lang === "en" ? "en-GB" : "fr-FR";
+        const want = sel && sel.value ? String(sel.value) : "";
+        const voices = window.speechSynthesis.getVoices() || [];
+        const hit =
+          voices.find((v) => want && (v.name || "").includes(want.split("-").pop() || "")) ||
+          voices.find((v) => (v.lang || "").toLowerCase().startsWith(u.lang.slice(0, 2)));
+        if (hit) u.voice = hit;
+        window.speechSynthesis.speak(u);
+      });
+    }
+    if (stop) {
+      stop.addEventListener("click", () => {
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
+      });
+    }
+    if (mp3) {
+      mp3.addEventListener("click", () => {
+        if (!metareaSpeechText) return;
+        mp3.disabled = true;
+        fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: metareaSpeechText, voice: sel ? sel.value : "" }),
+        })
+          .then((r) => {
+            if (!r.ok) throw new Error(String(r.status));
+            return r.blob();
+          })
+          .then((blob) => {
+            const url = URL.createObjectURL(blob);
+            if (dl) {
+              if (dl.dataset.url) URL.revokeObjectURL(dl.dataset.url);
+              dl.href = url;
+              dl.dataset.url = url;
+              dl.hidden = false;
+            }
+            if (audio) {
+              audio.src = url;
+              audio.play().catch(() => {});
+            }
+          })
+          .catch(() => {
+            mp3.disabled = false;
+          })
+          .finally(() => {
+            mp3.disabled = false;
+          });
+      });
+    }
   }
 
   function loadMetareaSnapshot() {
@@ -2504,7 +2710,7 @@
         setSubzones(subzonesOn);
       })
       .catch(() => {
-        renderMetareaTab({ ok: false, error: "Bulletin WWMIWS indisponible." });
+        renderMetareaTab({ ok: false, error: t("metarea_err") });
       });
   }
 
@@ -2515,8 +2721,8 @@
     if (mapOpt) mapOpt.hidden = !on;
     if (mapOptToggle) {
       mapOptToggle.setAttribute("aria-expanded", on ? "true" : "false");
-      mapOptToggle.setAttribute("aria-label", on ? "Replier les calques" : "Ouvrir les calques");
-      mapOptToggle.setAttribute("title", on ? "Replier" : "Calques");
+      mapOptToggle.setAttribute("aria-label", on ? t("layers_collapse") : t("layers_open"));
+      mapOptToggle.setAttribute("title", on ? t("menu_collapse_short") : t("layers"));
     }
   }
   if (mapOptToggle) {
@@ -2608,6 +2814,7 @@
     })
     .catch(() => {});
   loadMetareaSnapshot();
+  bindBulletinSpeech();
   window.setInterval(loadMetareaSnapshot, 10 * 60 * 1000);
   applyMapMode(mapMode, { boot: true });
 

@@ -141,7 +141,7 @@ def login_redirect(reason: str) -> RedirectResponse:
 
 
 _PUBLIC_EXACT = frozenset({"/health", "/metrics", "/login", "/login/otp", "/favicon.ico"})
-_PUBLIC_PREFIX = ("/static/", "/auth/")
+_PUBLIC_PREFIX = ("/static/", "/auth/", "/lang/")
 
 
 def is_public_path(path: str) -> bool:

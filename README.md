@@ -1,8 +1,8 @@
-# GGR Trafic 1.1.12
+# GGR Trafic 1.1.13
 
 Archives du **trafic HF** entre le radio-club **F6KUF** et les bateaux de la flotte **Golden Globe Race**.
 
-Le **lundi et le jeudi** à **18:00 TU**, F6KUF émet un bulletin météo sur **14.135 MHz USB** (VFO calé sur 14.135000 ; le test radio manuel peut encore chasser ± 5 kHz) et écoute les accusés de réception sur **16.551 MHz USB** et **12.418 MHz USB** (± 5 kHz). Cette semaine : **Philippe F4HWM / F6KUF** depuis **Talmont-Saint-Hilaire**. **Michel FO5QB / F6KUF** (Tahiti) émet **tous les jours** à **18:00 TU** sur la même QRG. Après le **cap de Bonne-Espérance** (34°21′26″S 18°28′24″E), l’émission 14.135 MHz suivie en priorité est celle de Michel, jusqu’au cap Horn. Tous les jours à **12:00 TU**, un **buddy call** est écouté sur **4483 kHz USB** (principale) et **6516 kHz USB** (secours). L’application choisit les [KiwiSDR](http://kiwisdr.com/) selon la position : **bulletin 14.135 MHz** sur un récepteur près de l’émetteur **et** un près de la flotte ; **ACK** en parallèle près des bateaux, **en France** et **vers Tahiti** ; **buddy call** sur plusieurs récepteurs en NVIS et en saut 1 hop vers le centroïde des skippers suivis (défaut : Damien Guillou, Etienne Messikommer, Louis Kerdelhue). Audio USB + **screencast** de l’interface SDR pour le replay.
+Le **lundi et le jeudi** à **18:00 TU**, F6KUF émet un bulletin météo sur **14.135 MHz USB** (VFO calé sur 14.135000 ; le test radio manuel peut encore chasser ± 5 kHz) et écoute les accusés de réception sur **16.551 MHz USB** et **12.418 MHz USB** (± 5 kHz). Cette semaine : **Philippe F4HWM / F6KUF** depuis **Talmont-Saint-Hilaire**. **Michel FO5QB / F6KUF** (Tahiti) émet **tous les jours** à **18:00 TU** sur la même QRG. Après le **cap de Bonne-Espérance** (34°21′26″S 18°28′24″E), l’émission 14.135 MHz suivie en priorité est celle de Michel, jusqu’au cap Horn. Tous les jours à **12:00 TU**, un **buddy call** est écouté sur **4483 kHz USB** (principale) et **6516 kHz USB** (secours). L’application choisit les [KiwiSDR](http://kiwisdr.com/) selon la position : **bulletin 14.135 MHz** d’abord comme si l’on était sur le bateau (Kiwi le plus proche du centroïde) et près de l’émetteur, plus jusqu’à 4 Kiwi de **portée 20 m** (jusqu’où ça porte) ; **ACK 12.418 / 16.551 MHz** et **buddy 4483 / 6516 kHz** sur **4 à 10 Kiwi omni** répartis autour du centroïde (NVIS / 1 saut selon la QRG, F10.7 et Kp NOAA s’ils sont dispo). Skippers du centroïde (défaut) : Damien Guillou, Etienne Messikommer, Louis Kerdelhue. Audio USB + **screencast** de l’interface SDR pour le replay. L’interface est **FR/EN**. Le condensé METAREA se lit à voix haute (carte son du navigateur → entrée DATA du TRX) et se télécharge en MP3.
 
 Les trois QRG, la tolérance, l’avance et la durée se règlent dans l’UI (**Réglages**). Un **record immédiat** permet de tester le suivi ± 5 kHz sans attendre 18:00 TU.
 
@@ -109,7 +109,7 @@ python -m app.operators list
 python -m app.operators add Nom,email,indicatif
 python -m app.operators update F4IAE --email nouveau@example.com
 python -m app.operators delete F4IAE
-python -m app.operators seed   # JNoel F4IAE, Guy F4DAI, PhilippeHWM F4HWM, Jean-Yves F1FDA
+python -m app.operators seed   # 15 OM ANFR (F4IAE, F4DAI, F4HWM, F1FDA, …)
 ```
 
 En prod :
@@ -153,7 +153,7 @@ Le Grafana applicatif [https://dashboard.k3s.lpb.ovh](https://dashboard.k3s.lpb.
 Un Grafana **k3s** séparé : [https://monitoring.k3s.lpb.ovh](https://monitoring.k3s.lpb.ovh).
 
 - **Prometheus** : agrégats (pages, replays, nœud) — **sans IP**.
-- **Loki** : chaque accès horodaté. Dashboard [GGR visites](https://monitoring.k3s.lpb.ovh/d/ggr-visites) : filtrer une **URL** (ex. dernier buddy `2026-09-20T1159Z-buddy`) pour voir qui, ou une **IP** pour voir les URL. Clic dans le tableau pour croiser. Rétention 14 jours.
+- **Loki** : chaque accès horodaté (indicatif, surnom, e-mail, type de terminal, domicile ANFR = localité + CP). Dashboard [GGR visites](https://monitoring.k3s.lpb.ovh/d/ggr-visites) : filtrer une **URL** (ex. dernier buddy `2026-09-20T1159Z-buddy`) pour voir qui, ou une **IP** pour voir les URL. Clic dans le tableau pour croiser. Rétention 14 jours.
 
 Sur le VPS, hors 12:00 / 18:00 TU :
 

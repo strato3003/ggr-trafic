@@ -19,10 +19,22 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import auth_email, auth_google, globe_tiles, metarea, operators, store
+from app import auth_email, auth_google, globe_tiles, i18n, metarea, operators, store, tts
 from recorder.config import ack_label, display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
-from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_label, bulletin_tx_qths, fetch_ranked_kiwis, kiwi_directory, map_kiwis, read_directory_cache
+from recorder.kiwi_list import (
+    assign_buddy_kiwis,
+    bulletin_beam_qth,
+    bulletin_tx_label,
+    bulletin_tx_qths,
+    fetch_ranked_kiwis,
+    kiwi_directory,
+    kiwi_key,
+    map_kiwis,
+    pick_near_fleet_kiwis,
+    read_directory_cache,
+    select_bulletin_beam_kiwis,
+)
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
 from recorder.session import (
     finalize_pending_sessions,
@@ -224,9 +236,14 @@ def _ctx(request: Request, **extra):
     club = cfg.get("club") or {}
     schedule = cfg.get("schedule") or {}
     qrg = qrg_context(cfg)
+    lang = i18n.lang_of(request)
     return {
         "app_name": (cfg.get("web") or {}).get("title") or "GGR Trafic",
         "version": version(cfg),
+        "lang": lang,
+        "t": lambda key, **kwargs: i18n.t(lang, key, **kwargs),
+        "i18n_json": i18n.dump(lang),
+        "tts_voices": tts.voices_for(lang),
         "club": club,
         "club_callsign": club.get("callsign") or "F6KUF",
         "radio": cfg.get("radio") or {},
@@ -547,11 +564,39 @@ async def _globe_page(request: Request):
     try:
         fleet = await fetch_fleet(cfg, with_wx=True)
         aim = buddy_aim(fleet, cfg)
+        kiwis = []
+        beam_kiwis = []
+        beam_qth = None
         try:
-            kiwis = await fetch_ranked_kiwis(cfg, fleet["lat"], fleet["lon"], limit=8)
+            ranked = await fetch_ranked_kiwis(cfg, fleet["lat"], fleet["lon"], limit=0, min_free=1)
+            beam_qth = bulletin_beam_qth(
+                cfg,
+                float(aim["lat"]),
+                float(aim["lon"]),
+                boats=aim.get("skippers") or [],
+            )
+            beam_kiwis = select_bulletin_beam_kiwis(
+                ranked,
+                tx_lat=float(beam_qth["lat"]),
+                tx_lon=float(beam_qth["lon"]),
+                fleet_lat=float(aim["lat"]),
+                fleet_lon=float(aim["lon"]),
+                cfg=cfg,
+            )
+            for i, kiwi in enumerate(beam_kiwis, start=1):
+                kiwi["site"] = f"tx_beam{i}"
+                kiwi["site_label"] = f"portée TX bulletin {i}"
+            used = {kiwi_key(k) for k in beam_kiwis}
+            kiwis = pick_near_fleet_kiwis(
+                ranked,
+                lat=float(aim["lat"]),
+                lon=float(aim["lon"]),
+                count=2,
+                radius_km=800.0,
+                exclude=used,
+            )
         except Exception:
             log.exception("Liste KiwiSDR indisponible")
-            kiwis = []
         buddy_kiwis = []
         try:
             qrg = qrg_context(cfg)
@@ -565,7 +610,16 @@ async def _globe_page(request: Request):
                 cover_hz=cover,
                 score_mode="buddy",
             )
-            roles = assign_buddy_kiwis(pool, lat=float(aim["lat"]), lon=float(aim["lon"]), cfg=cfg)
+            tx_lat = float(beam_qth["lat"]) if beam_qth else None
+            tx_lon = float(beam_qth["lon"]) if beam_qth else None
+            roles = assign_buddy_kiwis(
+                pool,
+                lat=float(aim["lat"]),
+                lon=float(aim["lon"]),
+                cfg=cfg,
+                tx_lat=tx_lat,
+                tx_lon=tx_lon,
+            )
             buddy_kiwis = list(roles.values())
         except Exception:
             log.exception("KiwiSDR buddy indisponibles")
@@ -589,6 +643,7 @@ async def _globe_page(request: Request):
         kiwis=kiwis,
         buddy_aim=aim,
         buddy_kiwis=buddy_kiwis,
+        beam_kiwis=beam_kiwis,
         globe_trafics=[store.globe_vacation(v) for v in store.list_vacations(cfg)],
         tx_sites=tx_sites_aim(cfg, fleet.get("lat"), fleet.get("lon")),
         boats=fleet.get("boats") or [],
@@ -629,8 +684,44 @@ async def osm_land_tile(z: int, x: int, y: int):
     )
 
 
+@app.get("/lang/{code}")
+async def set_lang(code: str, request: Request):
+    lang = i18n.normalize_lang(code)
+    nxt = request.query_params.get("next") or "/"
+    if not nxt.startswith("/") or nxt.startswith("//"):
+        nxt = "/"
+    resp = RedirectResponse(nxt, status_code=302)
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",")[0].strip()
+    resp.set_cookie(
+        i18n.COOKIE,
+        lang,
+        max_age=86400 * 400,
+        path="/",
+        samesite="lax",
+        secure=proto == "https",
+    )
+    return resp
+
+
+@app.post("/api/tts")
+async def api_tts(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "JSON invalide")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "JSON invalide")
+    try:
+        mp3 = await tts.to_mp3(str(body.get("text") or ""), str(body.get("voice") or ""))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(501, str(exc))
+    return Response(mp3, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/metarea")
-async def api_metarea():
+async def api_metarea(request: Request):
     """Bulletin haute mer WWMIWS filtré sur les METAREA occupées par la flotte GGR."""
     cfg = load_config()
     try:
@@ -638,7 +729,7 @@ async def api_metarea():
     except Exception:
         log.exception("Flotte pour METAREA")
         fleet = {"boats": []}
-    body = await metarea.snapshot(fleet.get("boats") or [])
+    body = await metarea.snapshot(fleet.get("boats") or [], lang=i18n.lang_of(request))
     return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
 

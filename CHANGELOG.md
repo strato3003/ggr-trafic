@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 1.1.13 — 2026-09-22
+
+- Interface **FR/EN** complète (boutons, À propos, Setup, mixage, calques, METAREA).
+- Bulletin METAREA : lecture et disclaimer en anglais officiel WWMIWS sous EN (pas une retraduction).
+- MP3 METAREA : voix neurale edge-tts (Denise/Henri FR, Sonia/Ryan EN) ; plus d’espeak.
+- KiwiSDR bulletin : faisceau France → flotte → Atlantique Sud (`min_along` 0,75) + omni ACK/buddy vers l’avant.
+- SSO Google + connexion e-mail (lien / OTP) ; liste blanche ANFR ; Loki avec indicatif / e-mail / surnom.
+
 ## 1.1.12 — 2026-09-21
 
 - UI et enregistreur sur deux pods : Chromium ne sature plus le site pendant un bulletin / buddy.
