@@ -10,14 +10,38 @@
   <main class="ggr-login">
     <p class="ggr-login__brand">{{ app_name }} <span class="ver">{{ version }}</span></p>
     <h1>Connexion opérateur</h1>
-    <p class="ggr-login__lead">Accès réservé aux indicatifs autorisés (e-mail Google lié à l’indicatif).</p>
+    <p class="ggr-login__lead">Accès réservé aux indicatifs autorisés (e-mail lié à l’indicatif).</p>
     {% if auth_error %}
     <p class="ggr-auth__err" role="alert">{{ auth_error }}</p>
     {% endif %}
+    {% if auth_notice %}
+    <p class="ggr-auth__ok" role="status">{{ auth_notice }}</p>
+    {% endif %}
+    <form class="ggr-login__form" method="post" action="/login" autocomplete="username">
+      <input type="hidden" name="nonce" value="{{ login_nonce }}">
+      <label>
+        E-mail
+        <input type="email" name="email" required maxlength="120"
+               value="{{ pending_email }}" placeholder="prenom@example.com"
+               autocomplete="username">
+      </label>
+      <button type="submit" class="ggr-auth__btn ggr-login__btn">Recevoir un lien de connexion</button>
+    </form>
+    {% if pending_email or auth_notice %}
+    <form class="ggr-login__form ggr-login__form--otp" method="post" action="/login/otp" autocomplete="one-time-code">
+      <input type="hidden" name="nonce" value="{{ login_nonce }}">
+      <input type="hidden" name="email" value="{{ pending_email }}">
+      <label>
+        Code à 6 chiffres
+        <input type="text" name="code" inputmode="numeric" pattern="[0-9 ]{6,8}"
+               maxlength="8" required placeholder="000000" autocomplete="one-time-code">
+      </label>
+      <button type="submit" class="ggr-auth__btn ggr-login__btn">Valider le code</button>
+    </form>
+    {% endif %}
     {% if google_sso %}
+    <p class="ggr-login__or">ou</p>
     <a class="ggr-auth__btn ggr-login__btn" href="/auth/google">Se connecter avec Google</a>
-    {% else %}
-    <p class="ggr-auth__err" role="alert">{{ auth_error or "Connexion Google indisponible (client SSO non configuré)." }}</p>
     {% endif %}
   </main>
 </body>

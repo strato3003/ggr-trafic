@@ -88,14 +88,19 @@ curl -X POST -H "X-Admin-Token: …" \
 
 Les QRG survivent au redéploiement (fichier `/data/settings.json` sur le PVC). Le ConfigMap k3s reste le défaut.
 
-## Connexion Google (liste blanche)
+## Connexion opérateur (liste blanche)
 
-Le globe et le replay ne sont visibles **qu’après** connexion Google (e-mail vérifié **et** présent dans la liste blanche). Un e-mail hors liste affiche : *Cet e-mail n'est pas autorisé à accéder à l'application.* `/health` et `/metrics` restent publics pour kubelet / Prometheus.
+Le globe et le replay ne sont visibles **qu’après** connexion. L’e-mail doit figurer dans la liste blanche (associé à l’indicatif). Un e-mail hors liste affiche : *E-mail non autorisé.* `/health` et `/metrics` restent publics pour kubelet / Prometheus.
 
-1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → identifiant OAuth **application Web**.
-2. Origines JS : `https://ggr-trafic-test.k3s.lpb.ovh` (recette) et `https://ggr-trafic.k3s.lpb.ovh` (prod plus tard). Local : `http://127.0.0.1:8080`.
-3. URI de redirection : `https://ggr-trafic-test.k3s.lpb.ovh/auth/google/callback` (prod : `https://ggr-trafic.k3s.lpb.ovh/auth/google/callback` ; local : `http://127.0.0.1:8080/auth/google/callback`).
-4. Poser les secrets k3s (`google-client-id`, `google-client-secret`, `session-secret`) puis redéployer l’UI.
+Parcours :
+
+1. Saisir l’e-mail sur `/login`.
+2. Un **lien magique** et un **code à 6 chiffres** partent par SMTP (valables 15 min, usage unique).
+3. Le clic ou le code crée un cookie `ggr_session` (HTTP-only, Secure, SameSite=Lax, 30 jours).
+
+Anti-abus : 1 envoi / 60 s par IP et par e-mail ; jetons stockés **hachés** (HMAC-SHA256) ; 5 essais OTP max.
+
+Secrets k3s (`smtp-host`, `smtp-port`, `smtp-user`, `smtp-password`, `smtp-from`, `session-secret`). Google reste un bouton optionnel si `google-client-id` / `google-client-secret` sont posés.
 
 Liste de référence (`/data/operators.json` sur le PVC) :
 

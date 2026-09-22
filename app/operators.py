@@ -1,4 +1,4 @@
-"""Liste blanche opérateurs : e-mail SSO ↔ indicatif (fichier JSON sur le PVC)."""
+"""Liste blanche opérateurs : e-mail ↔ indicatif (fichier JSON sur le PVC)."""
 
 from __future__ import annotations
 
@@ -258,7 +258,7 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(
         prog="python -m app.operators",
-        description="Gérer les opérateurs autorisés (e-mail Google ↔ indicatif).",
+        description="Gérer les opérateurs autorisés (e-mail ↔ indicatif).",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list", help="Lister nom, e-mail, indicatif")

@@ -14,16 +14,22 @@ from app import operators
 
 log = logging.getLogger(__name__)
 
-DENIED = "Cet e-mail n'est pas autorisé à accéder à l'application."
+DENIED = "E-mail non autorisé"
 UNVERIFIED = "L'adresse Google n'est pas vérifiée."
 CANCELLED = "Connexion Google annulée."
 SSO_OFF = "Connexion Google indisponible (client SSO non configuré)."
+SENT = "Un e-mail de connexion a été envoyé. Il expire dans 15 minutes."
 
 AUTH_MESSAGES = {
     "denied": DENIED,
     "unverified": UNVERIFIED,
     "cancelled": CANCELLED,
     "sso": SSO_OFF,
+    "wait": "Veuillez patienter avant une nouvelle demande.",
+    "mail": "Envoi d'e-mail indisponible.",
+    "expired": "Lien ou code expiré. Demandez-en un nouveau.",
+    "used": "Lien ou code déjà utilisé.",
+    "invalid": "Lien ou code invalide.",
 }
 
 
@@ -63,7 +69,26 @@ def public_base(request: Request) -> str:
 
 
 def auth_error_message(request: Request) -> str | None:
-    return AUTH_MESSAGES.get(str(request.query_params.get("auth") or ""))
+    key = str(request.query_params.get("auth") or "")
+    if key in {"sent", "ok"}:
+        return None
+    return AUTH_MESSAGES.get(key)
+
+
+def auth_notice_message(request: Request) -> str | None:
+    if str(request.query_params.get("auth") or "") == "sent":
+        return SENT
+    return None
+
+
+def set_session_operator(request: Request, op: dict[str, Any]) -> None:
+    request.session["operator"] = {
+        "email": op["email"],
+        "callsign": op["callsign"],
+        "name": op["name"],
+    }
+    request.session.pop("login_email", None)
+    request.session.pop("login_nonce", None)
 
 
 def operator_from_mapping(session: Any) -> dict[str, Any] | None:
@@ -115,7 +140,7 @@ def login_redirect(reason: str) -> RedirectResponse:
     return RedirectResponse(f"/login?{qs}", status_code=302)
 
 
-_PUBLIC_EXACT = frozenset({"/health", "/metrics", "/login", "/favicon.ico"})
+_PUBLIC_EXACT = frozenset({"/health", "/metrics", "/login", "/login/otp", "/favicon.ico"})
 _PUBLIC_PREFIX = ("/static/", "/auth/")
 
 

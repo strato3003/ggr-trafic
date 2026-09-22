@@ -51,15 +51,14 @@ def test_google_whitelist_cases(tmp_path, monkeypatch):
     with pytest.raises(auth_google.AuthDenied) as unknown:
         auth_google.accept_google_user({"email": "inconnu@gmail.com", "email_verified": True})
     assert unknown.value.reason == "denied"
-    assert auth_google.AUTH_MESSAGES["denied"] == (
-        "Cet e-mail n'est pas autorisé à accéder à l'application."
-    )
+    assert auth_google.AUTH_MESSAGES["denied"] == "E-mail non autorisé"
 
 
 def test_public_paths_and_login_redirect(tmp_path, monkeypatch):
     monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
     assert auth_google.is_public_path("/health")
-    assert auth_google.is_public_path("/login")
+    assert auth_google.is_public_path("/login/otp")
+    assert auth_google.is_public_path("/auth/email/abc")
     assert auth_google.is_public_path("/auth/google")
     assert auth_google.is_public_path("/static/css/app.css")
     assert not auth_google.is_public_path("/")

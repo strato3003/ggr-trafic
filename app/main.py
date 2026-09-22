@@ -3,21 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Form, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import auth_google, globe_tiles, metarea, operators, store
+from app import auth_email, auth_google, globe_tiles, metarea, operators, store
 from recorder.config import ack_label, display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import assign_buddy_kiwis, bulletin_tx_label, bulletin_tx_qths, fetch_ranked_kiwis, kiwi_directory, map_kiwis, read_directory_cache
@@ -241,8 +243,12 @@ def _ctx(request: Request, **extra):
         "next_recording_iso": next_recording_utc(cfg).isoformat(),
         "admin_configured": _admin_configured(cfg),
         "google_sso": auth_google.google_configured(),
+        "smtp_ok": auth_email.smtp_configured(),
         "operator": auth_google.session_operator(request),
         "auth_error": auth_google.auth_error_message(request),
+        "auth_notice": auth_google.auth_notice_message(request),
+        "pending_email": "",
+        "login_nonce": "",
         **qrg,
         **extra,
     }
@@ -326,12 +332,24 @@ async def auth_google_callback(request: Request):
         op = auth_google.accept_google_user(userinfo)
     except auth_google.AuthDenied as exc:
         return auth_google.login_redirect(exc.reason)
-    request.session["operator"] = {
-        "email": op["email"],
-        "callsign": op["callsign"],
-        "name": op["name"],
-    }
+    auth_google.set_session_operator(request, op)
     return RedirectResponse("/", status_code=302)
+
+
+def _login_nonce(request: Request) -> str:
+    nonce = str(request.session.get("login_nonce") or "")
+    if not nonce:
+        nonce = secrets.token_urlsafe(16)
+        request.session["login_nonce"] = nonce
+    return nonce
+
+
+def _valid_login_nonce(request: Request, nonce: str) -> bool:
+    expected = str(request.session.get("login_nonce") or "")
+    given = str(nonce or "")
+    if not expected or not given:
+        return False
+    return hmac.compare_digest(expected, given)
 
 
 @app.get("/auth/logout")
@@ -348,7 +366,65 @@ async def auth_logout(request: Request):
 async def login_page(request: Request):
     if auth_google.session_operator(request):
         return RedirectResponse("/", status_code=302)
-    return render(request, "login.html")
+    nonce = _login_nonce(request)
+    pending = str(request.session.get("login_email") or "")
+    return render(request, "login.html", login_nonce=nonce, pending_email=pending)
+
+
+@app.post("/login")
+async def login_request_email(
+    request: Request,
+    email: str = Form(""),
+    nonce: str = Form(""),
+):
+    if auth_google.session_operator(request):
+        return RedirectResponse("/", status_code=303)
+    if not _valid_login_nonce(request, nonce):
+        return auth_google.login_redirect("wait")
+    try:
+        pending = await asyncio.to_thread(
+            auth_email.request_login,
+            email,
+            auth_email.client_ip(request),
+            auth_google.public_base(request),
+        )
+    except auth_email.AuthEmailError as exc:
+        request.session["login_nonce"] = secrets.token_urlsafe(16)
+        return auth_google.login_redirect(exc.reason)
+    request.session["login_email"] = pending
+    request.session["login_nonce"] = secrets.token_urlsafe(16)
+    return RedirectResponse("/login?auth=sent", status_code=303)
+
+
+@app.post("/login/otp")
+async def login_otp(
+    request: Request,
+    code: str = Form(""),
+    email: str = Form(""),
+    nonce: str = Form(""),
+):
+    if auth_google.session_operator(request):
+        return RedirectResponse("/", status_code=303)
+    if not _valid_login_nonce(request, nonce):
+        return auth_google.login_redirect("wait")
+    addr = (email or request.session.get("login_email") or "").strip()
+    try:
+        op = await asyncio.to_thread(auth_email.consume_otp, addr, code)
+    except auth_email.AuthEmailError as exc:
+        request.session["login_nonce"] = secrets.token_urlsafe(16)
+        return auth_google.login_redirect(exc.reason)
+    auth_google.set_session_operator(request, op)
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/auth/email/{token}")
+async def auth_email_callback(request: Request, token: str):
+    try:
+        op = await asyncio.to_thread(auth_email.consume_token, token)
+    except auth_email.AuthEmailError as exc:
+        return auth_google.login_redirect(exc.reason)
+    auth_google.set_session_operator(request, op)
+    return RedirectResponse("/", status_code=302)
 
 
 @app.get("/api/me")
@@ -358,6 +434,7 @@ async def api_me(request: Request):
         "ok": True,
         "authenticated": op is not None,
         "sso": auth_google.google_configured(),
+        "email_login": auth_email.smtp_configured(),
         "operator": op,
     }
 

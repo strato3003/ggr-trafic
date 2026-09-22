@@ -7,18 +7,18 @@
     <p class="hint">Connecté : <strong>{{ operator.callsign }}</strong> ({{ operator.name }} · {{ operator.email }}).
       Jeton optionnel, conservé pour les scripts <code>curl</code>.</p>
     {% elif google_sso %}
-    <p class="hint">Connectez-vous avec Google (liste blanche e-mail ↔ indicatif) pour sauver et enregistrer.
+    <p class="hint">Connectez-vous (e-mail de la liste blanche, ou Google) pour sauver et enregistrer.
       Le jeton admin reste un secours.</p>
     {% endif %}
     <label>
       Jeton administrateur
       <input name="admin_token" type="password" autocomplete="off"
-             placeholder="coller le jeton ici (optionnel si SSO)">
+             placeholder="coller le jeton ici (optionnel si connecté)">
     </label>
     {% if not admin_configured and not google_sso %}
-    <p class="err">Aucun jeton ni SSO n’est configuré sur le serveur.</p>
+    <p class="err">Aucun jeton ni connexion n’est configuré sur le serveur.</p>
     {% elif not admin_configured %}
-    <p class="hint">Pas de jeton serveur : utilisez « Se connecter avec Google ».</p>
+    <p class="hint">Pas de jeton serveur : connectez-vous avec l’e-mail de la liste blanche.</p>
     {% endif %}
   </fieldset>
 
