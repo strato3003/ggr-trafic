@@ -187,10 +187,10 @@ class RequireLoginMiddleware:
             await self.app(scope, receive, send)
             return
         path = scope.get("path") or "/"
-        if is_public_path(path):
-            await self.app(scope, receive, send)
-            return
-        if operator_from_mapping(scope.get("session")):
+        op = operator_from_mapping(scope.get("session"))
+        if op:
+            scope["ggr_operator"] = op
+        if is_public_path(path) or op:
             await self.app(scope, receive, send)
             return
         if path.startswith("/api/") or path.startswith("/media/"):

@@ -31,6 +31,9 @@ data:
             - matcherRegex: '"target":"([^"]+)"'
               name: URL
               url: "/d/ggr-visites?orgId=1&${__url_time_range}&var-url=${__value.raw}&var-ip="
+            - matcherRegex: '"callsign":"([^"]+)"'
+              name: Indicatif
+              url: "/d/ggr-visites?orgId=1&${__url_time_range}&var-ip=&var-url="
 ---
 apiVersion: v1
 kind: ConfigMap

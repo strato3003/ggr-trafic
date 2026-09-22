@@ -24,7 +24,7 @@
       "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
       "options": {
         "mode": "markdown",
-        "content": "Prometheus reste aux **agrégats** (pas d’IP). Ici **Loki** : chaque accès horodaté.\n\nVariables **URL** et **IP** (sous-chaîne, regex échappée). Ex. URL `2026-09-20T1159Z-buddy` → qui a ouvert le mixer / Lecture. Ex. IP `90.37.x` → toutes les URL. Clic IP ou URL dans le tableau pour croiser. Vide = tout."
+        "content": "Prometheus reste aux **agrégats** (pas d’IP). Ici **Loki** : chaque accès horodaté, avec **indicatif**, **surnom** et **e-mail** de l’opérateur connecté.\n\nVariables **URL** et **IP** (sous-chaîne, regex échappée). Ex. URL `2026-09-20T1159Z-buddy` → qui a ouvert le mixer / Lecture. Ex. IP `90.37.x` → toutes les URL. Clic IP ou URL dans le tableau pour croiser. Vide = tout."
       }
     },
     {
@@ -57,8 +57,8 @@
       ]
     },
     {
-      "title": "Journal (ts · IP · URL)",
-      "description": "Clic IP → ses URL. Clic URL → qui l’a appelée.",
+      "title": "Journal (ts · indicatif · IP · URL)",
+      "description": "Clic IP → ses URL. Clic URL → qui l’a appelée. Indicatif / surnom / e-mail = opérateur connecté.",
       "type": "table",
       "gridPos": { "h": 14, "w": 24, "x": 0, "y": 10 },
       "datasource": { "type": "loki", "uid": "loki" },
@@ -88,18 +88,24 @@
             },
             "indexByName": {
               "Time": 0,
-              "ip": 1,
-              "target": 2,
-              "kind": 3,
-              "city": 4,
-              "country": 5,
-              "region": 6,
-              "postal": 7,
-              "isp": 8,
-              "ptr": 9
+              "callsign": 1,
+              "surnom": 2,
+              "email": 3,
+              "ip": 4,
+              "target": 5,
+              "kind": 6,
+              "city": 7,
+              "country": 8,
+              "region": 9,
+              "postal": 10,
+              "isp": 11,
+              "ptr": 12
             },
             "renameByName": {
               "Time": "TU",
+              "callsign": "indicatif",
+              "surnom": "surnom",
+              "email": "e-mail",
               "ip": "IP",
               "target": "URL",
               "kind": "kind",

@@ -1481,6 +1481,39 @@ def test_visitors_records_trafic_path(tmp_path, monkeypatch):
     )
 
 
+def test_visitors_logs_operator_to_loki_json(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from app import visitlog, visitors
+
+    visitlog.reset_for_tests()
+    visitors.reset_for_tests()
+    visitors._geo_cache["8.8.8.8"] = {
+        "country": "France",
+        "city": "Nantes",
+        "latitude": "47.22",
+        "longitude": "-1.55",
+    }
+    req = _starlette_request("/", forwarded="8.8.8.8")
+    req.scope["ggr_operator"] = {
+        "callsign": "F4IAE",
+        "email": "jnmartineau@gmail.com",
+        "name": "JNoel",
+    }
+    visitors.schedule(req)
+    rows = visitlog.list_events(ip="8.8.8.8")
+    assert rows[0]["callsign"] == "F4IAE"
+    assert rows[0]["email"] == "jnmartineau@gmail.com"
+    assert rows[0]["surnom"] == "JNoel"
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if '"ggr_visit"' in ln]
+    payload = json.loads(lines[-1])
+    assert payload["callsign"] == "F4IAE"
+    assert payload["email"] == "jnmartineau@gmail.com"
+    assert payload["surnom"] == "JNoel"
+    prom = visitors._prom_labels(visitors._geo_cache["8.8.8.8"])
+    assert "callsign" not in prom
+    assert "email" not in prom
+
+
 def test_visitlog_ip_timeline(tmp_path, monkeypatch):
     monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
     from app import visitlog
@@ -1499,6 +1532,9 @@ def test_visitlog_ip_timeline(tmp_path, monkeypatch):
         latitude="47.3250",
         longitude="-1.7380",
         ptr="anantes-651-1-2-3.w90-37.abo.wanadoo.fr",
+        callsign="F4IAE",
+        email="jnmartineau@gmail.com",
+        surnom="JNoel",
     )
     visitlog.append("1.1.1.1", "page", "/", "Australia", "Sydney")
     mine = visitlog.list_events(ip="8.8.8.8")
@@ -1508,6 +1544,9 @@ def test_visitlog_ip_timeline(tmp_path, monkeypatch):
     assert mine[0]["postal"] == "44360"
     assert mine[0]["isp"] == "Orange"
     assert mine[0]["ptr"].startswith("anantes-")
+    assert mine[0]["callsign"] == "F4IAE"
+    assert mine[0]["email"] == "jnmartineau@gmail.com"
+    assert mine[0]["surnom"] == "JNoel"
     assert "T" in mine[0]["ts"]
     all_rows = visitlog.list_events()
     assert len(all_rows) == 3
@@ -1531,6 +1570,9 @@ def test_visitlog_stdout_json_line(tmp_path, monkeypatch, capsys):
     assert payload["ip"] == "9.9.9.9"
     assert payload["target"] == "/#metarea"
     assert payload["kind"] == "page"
+    assert payload["callsign"] == ""
+    assert payload["email"] == ""
+    assert payload["surnom"] == ""
     assert "T" in payload["ts"]
 
 
