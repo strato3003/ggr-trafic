@@ -30,9 +30,11 @@ window.GgrMixer = (function () {
     }
   }
   if (!Array.isArray(spec)) spec = [];
-  spec = spec.slice(0, 6);
+  spec = spec.slice(0, 12);
 
   const vacId = opts.vacId || root.getAttribute("data-vid") || "";
+  const wantFocus = opts.focus != null ? String(opts.focus) : "";
+  const wantZoom = !!(opts.zoom || wantFocus);
   const startMs = (function parseStart() {
     const iso = opts.started || root.getAttribute("data-started") || "";
     if (iso) {
@@ -1287,6 +1289,27 @@ window.GgrMixer = (function () {
     setExtract(tr, 100, true);
   }
 
+  function resolveFocusId(want) {
+    const raw = String(want || "").trim();
+    if (!raw && !wantZoom) return null;
+    if (raw) {
+      const byId = tracks.find((tr) => tr.id === raw && !tr.dead);
+      if (byId) return byId.id;
+      const idx = Number(raw);
+      if (Number.isInteger(idx) && idx >= 0 && idx < tracks.length && !tracks[idx].dead) {
+        return tracks[idx].id;
+      }
+    }
+    const live = tracks.find((tr) => !tr.dead && tr.src);
+    return live ? live.id : null;
+  }
+
+  function applyDeepFocus() {
+    if (!wantZoom && !wantFocus) return;
+    const id = resolveFocusId(wantFocus);
+    if (id) setFocus(id);
+  }
+
   async function load() {
     root.hidden = false;
     spec.forEach((row, i) => {
@@ -1341,10 +1364,12 @@ window.GgrMixer = (function () {
       if (statusEl)
         statusEl.textContent = t("mix_ready", { live: live, n: tracks.length });
       updateHead();
+      applyDeepFocus();
       return;
     }
     if (statusEl) statusEl.textContent = t("no_audio");
     playBtn.disabled = true;
+    applyDeepFocus();
   }
 
   function destroy() {
@@ -1386,7 +1411,10 @@ window.GgrMixer = (function () {
     const root = document.getElementById("mix");
     const dataEl = document.getElementById("ggr-mix-data");
     if (!root || !dataEl || root.getAttribute("data-ggr-mix") === "host") return;
-    mount({ root: root });
+    const q = new URLSearchParams(location.search);
+    const zoom = q.get("zoom") === "1" || q.get("zoom") === "true" || q.has("ch");
+    const focus = q.get("ch") || q.get("focus") || (zoom ? "0" : "");
+    mount({ root: root, zoom: zoom, focus: focus });
   }
 
   if (document.readyState === "loading") {

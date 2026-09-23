@@ -1,5 +1,5 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "1.1.13"
+version: "1.1.14"
 
 club:
   callsign: F6KUF
@@ -68,6 +68,14 @@ buddy:
     freq_khz: 6516.0
     label: "Buddy call 6516 kHz (secours)"
     zoom: 12
+  # QRG d’écoute supplémentaires (réparties sur les Kiwi selon places libres).
+  extras:
+    - freq_khz: 8294.0
+      label: "Buddy call 8294 kHz"
+      zoom: 12
+    - freq_khz: 12353.0
+      label: "Buddy call 12353 kHz"
+      zoom: 12
   centroid:
     # Noms Yellowbrick RaceSetup (ggr2026). Le centroïde (bulletin et buddy)
     # est uniquement celui de ces skippers, jamais le reste de la flotte.

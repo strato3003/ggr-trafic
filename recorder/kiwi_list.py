@@ -880,7 +880,17 @@ def _buddy_freqs_khz(cfg: dict[str, Any]) -> list[float]:
     buddy = cfg.get("buddy") or {}
     main = float((buddy.get("main") or {}).get("freq_khz") or 4483.0)
     alt = float((buddy.get("alternate") or {}).get("freq_khz") or 6516.0)
-    return [main, alt]
+    out = [main, alt]
+    for raw in buddy.get("extras") or []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            khz = float(raw.get("freq_khz"))
+        except (TypeError, ValueError):
+            continue
+        if 1000.0 <= khz <= 30000.0:
+            out.append(khz)
+    return out
 
 
 def _omni_want(cfg: dict[str, Any], section: tuple[str, str]) -> tuple[int, float]:
@@ -1072,7 +1082,7 @@ def assign_buddy_kiwis(
     tx_lat: float | None = None,
     tx_lon: float | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Buddy 4483 / 6516 : 4–10 Kiwi omni autour du centroïde (NVIS + sauts)."""
+    """Buddy 4483 / 6516 / 8294 / 12353 : 4–10 Kiwi omni autour du centroïde (NVIS + sauts)."""
     return assign_omni_fleet_kiwis(
         pool,
         lat=lat,

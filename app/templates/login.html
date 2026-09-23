@@ -24,6 +24,7 @@
     {% endif %}
     <form class="ggr-login__form" method="post" action="/login" autocomplete="username">
       <input type="hidden" name="nonce" value="{{ login_nonce }}">
+      <input type="hidden" name="next" value="{{ auth_next | default('/') }}">
       <label>
         {{ t('email') }}
         <input type="email" name="email" required maxlength="120"
@@ -36,6 +37,7 @@
     <form class="ggr-login__form ggr-login__form--otp" method="post" action="/login/otp" autocomplete="one-time-code">
       <input type="hidden" name="nonce" value="{{ login_nonce }}">
       <input type="hidden" name="email" value="{{ pending_email }}">
+      <input type="hidden" name="next" value="{{ auth_next | default('/') }}">
       <label>
         {{ t('otp') }}
         <input type="text" name="code" inputmode="numeric" pattern="[0-9 ]{6,8}"
@@ -46,7 +48,7 @@
     {% endif %}
     {% if google_sso %}
     <p class="ggr-login__or">{{ t('login_or') }}</p>
-    <a class="ggr-auth__btn ggr-login__btn" href="/auth/google">{{ t('login_google') }}</a>
+    <a class="ggr-auth__btn ggr-login__btn" href="/auth/google?next={{ (auth_next | default('/')) | urlencode }}">{{ t('login_google') }}</a>
     {% endif %}
   </main>
 </body>

@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.14 — 2026-09-23
+
+- URL profonde : `/?trafic=<id>&zoom=1` ou `/trafic/<id>?zoom=1` (piste via `&ch=`) ; retour après login si besoin.
+- Buddy call : écoute **8294** et **12353 kHz** en plus de 4483 / 6516 (répartition sur les places libres des Kiwi).
+
 ## 1.1.13 — 2026-09-22
 
 - Interface **FR/EN** complète (boutons, À propos, Setup, mixage, calques, METAREA).

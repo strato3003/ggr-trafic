@@ -123,7 +123,7 @@
 
   <fieldset id="buddy-call">
     <legend>{{ t('setup_buddy_legend', time=buddy_time_utc) }}</legend>
-    <p class="hint">{{ t('setup_buddy_hint', main=('%.0f'|format(buddy_main_khz)), alt=('%.0f'|format(buddy_alt_khz))) }}</p>
+    <p class="hint">{{ t('setup_buddy_hint', qrgs=buddy_qrgs_label) }}</p>
     <input type="hidden" name="buddy_kiwi_count" value="4">
     <label class="settings__check">
       <input name="buddy_enabled" type="checkbox" {% if buddy_enabled %}checked{% endif %}>
@@ -138,6 +138,16 @@
       {{ t('setup_buddy_alt') }}
       <input name="buddy_alt_khz" type="number" step="0.0001" min="1000" max="30000" required
              value="{{ '%.4f'|format(buddy_alt_khz) }}">
+    </label>
+    <label>
+      {{ t('setup_buddy_extra1') }}
+      <input name="buddy_extra1_khz" type="number" step="0.0001" min="1000" max="30000" required
+             value="{{ '%.4f'|format(buddy_extra1_khz) }}">
+    </label>
+    <label>
+      {{ t('setup_buddy_extra2') }}
+      <input name="buddy_extra2_khz" type="number" step="0.0001" min="1000" max="30000" required
+             value="{{ '%.4f'|format(buddy_extra2_khz) }}">
     </label>
     <label>
       {{ t('setup_utc') }}

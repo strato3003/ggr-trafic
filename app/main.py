@@ -323,11 +323,49 @@ async def health():
     return {"ok": True, "version": version(CFG)}
 
 
+def _auth_next(request: Request, fallback: str | None = None) -> str:
+    """next depuis query, form, ou session."""
+    q = request.query_params.get("next")
+    if q:
+        return auth_google.safe_next(q)
+    try:
+        sess = request.session.get("auth_next")
+    except AssertionError:
+        sess = None
+    if sess:
+        return auth_google.safe_next(str(sess))
+    return auth_google.safe_next(fallback)
+
+
+def _remember_auth_next(request: Request, value: str | None = None) -> str:
+    nxt = auth_google.safe_next(value or request.query_params.get("next"))
+    try:
+        if nxt != "/":
+            request.session["auth_next"] = nxt
+        else:
+            request.session.pop("auth_next", None)
+    except AssertionError:
+        pass
+    return nxt
+
+
+def _consume_auth_next(request: Request) -> str:
+    try:
+        nxt = auth_google.safe_next(request.session.pop("auth_next", None))
+    except AssertionError:
+        nxt = "/"
+    q = request.query_params.get("next")
+    if q:
+        nxt = auth_google.safe_next(q)
+    return nxt
+
+
 @app.get("/auth/google")
 async def auth_google_start(request: Request):
     client = auth_google.google_client()
     if client is None:
-        return auth_google.login_redirect("sso")
+        return auth_google.login_redirect("sso", request.query_params.get("next"))
+    _remember_auth_next(request)
     redirect_uri = auth_google.public_base(request) + "/auth/google/callback"
     return await client.google.authorize_redirect(request, redirect_uri)
 
@@ -350,7 +388,7 @@ async def auth_google_callback(request: Request):
     except auth_google.AuthDenied as exc:
         return auth_google.login_redirect(exc.reason)
     auth_google.set_session_operator(request, op)
-    return RedirectResponse("/", status_code=302)
+    return RedirectResponse(_consume_auth_next(request), status_code=302)
 
 
 def _login_nonce(request: Request) -> str:
@@ -381,11 +419,12 @@ async def auth_logout(request: Request):
 
 @app.api_route("/login", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def login_page(request: Request):
+    nxt = _remember_auth_next(request)
     if auth_google.session_operator(request):
-        return RedirectResponse("/", status_code=302)
+        return RedirectResponse(nxt, status_code=302)
     nonce = _login_nonce(request)
     pending = str(request.session.get("login_email") or "")
-    return render(request, "login.html", login_nonce=nonce, pending_email=pending)
+    return render(request, "login.html", login_nonce=nonce, pending_email=pending, auth_next=nxt)
 
 
 @app.post("/login")
@@ -393,11 +432,13 @@ async def login_request_email(
     request: Request,
     email: str = Form(""),
     nonce: str = Form(""),
+    next: str = Form(""),
 ):
+    nxt = _remember_auth_next(request, next or request.query_params.get("next"))
     if auth_google.session_operator(request):
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(nxt, status_code=303)
     if not _valid_login_nonce(request, nonce):
-        return auth_google.login_redirect("wait")
+        return auth_google.login_redirect("wait", nxt)
     try:
         pending = await asyncio.to_thread(
             auth_email.request_login,
@@ -407,10 +448,12 @@ async def login_request_email(
         )
     except auth_email.AuthEmailError as exc:
         request.session["login_nonce"] = secrets.token_urlsafe(16)
-        return auth_google.login_redirect(exc.reason)
+        return auth_google.login_redirect(exc.reason, nxt)
     request.session["login_email"] = pending
     request.session["login_nonce"] = secrets.token_urlsafe(16)
-    return RedirectResponse("/login?auth=sent", status_code=303)
+    from urllib.parse import urlencode
+
+    return RedirectResponse("/login?" + urlencode({"auth": "sent", "next": nxt}), status_code=303)
 
 
 @app.post("/login/otp")
@@ -419,19 +462,21 @@ async def login_otp(
     code: str = Form(""),
     email: str = Form(""),
     nonce: str = Form(""),
+    next: str = Form(""),
 ):
+    nxt = _remember_auth_next(request, next or request.query_params.get("next"))
     if auth_google.session_operator(request):
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(nxt, status_code=303)
     if not _valid_login_nonce(request, nonce):
-        return auth_google.login_redirect("wait")
+        return auth_google.login_redirect("wait", nxt)
     addr = (email or request.session.get("login_email") or "").strip()
     try:
         op = await asyncio.to_thread(auth_email.consume_otp, addr, code)
     except auth_email.AuthEmailError as exc:
         request.session["login_nonce"] = secrets.token_urlsafe(16)
-        return auth_google.login_redirect(exc.reason)
+        return auth_google.login_redirect(exc.reason, nxt)
     auth_google.set_session_operator(request, op)
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(_consume_auth_next(request) if nxt == "/" else nxt, status_code=303)
 
 
 @app.get("/auth/email/{token}")
@@ -441,7 +486,7 @@ async def auth_email_callback(request: Request, token: str):
     except auth_email.AuthEmailError as exc:
         return auth_google.login_redirect(exc.reason)
     auth_google.set_session_operator(request, op)
-    return RedirectResponse("/", status_code=302)
+    return RedirectResponse(_consume_auth_next(request), status_code=302)
 
 
 @app.get("/api/me")
@@ -600,7 +645,12 @@ async def _globe_page(request: Request):
         buddy_kiwis = []
         try:
             qrg = qrg_context(cfg)
-            cover = [int(round(qrg["buddy_main_khz"] * 1000)), int(round(qrg["buddy_alt_khz"] * 1000))]
+            cover = [
+                int(round(float(qrg["buddy_main_khz"]) * 1000)),
+                int(round(float(qrg["buddy_alt_khz"]) * 1000)),
+                int(round(float(qrg.get("buddy_extra1_khz") or 8294.0) * 1000)),
+                int(round(float(qrg.get("buddy_extra2_khz") or 12353.0) * 1000)),
+            ]
             pool = await fetch_ranked_kiwis(
                 cfg,
                 float(aim["lat"]),
@@ -903,7 +953,12 @@ async def api_settings_put(
         },
         "schedule": {"lead_minutes": lead, "duration_minutes": duration},
     }
-    if "buddy_main_khz" in body or "buddy_skippers" in body:
+    if (
+        "buddy_main_khz" in body
+        or "buddy_skippers" in body
+        or "buddy_extra1_khz" in body
+        or "buddy_extra2_khz" in body
+    ):
         buddy_cfg = dict(cfg.get("buddy") or {})
         main = dict(buddy_cfg.get("main") or {})
         alt = dict(buddy_cfg.get("alternate") or {})
@@ -915,6 +970,34 @@ async def api_settings_put(
         if "buddy_alt_khz" in body:
             alt["freq_khz"] = _khz_field(body, "buddy_alt_khz", "QRG buddy 6516")
             alt["label"] = f"Buddy call {fmt_khz(alt['freq_khz'])} kHz (secours)"
+        extras_out: list[dict] = []
+        for key, default, label in (
+            ("buddy_extra1_khz", 8294.0, "QRG buddy 8294"),
+            ("buddy_extra2_khz", 12353.0, "QRG buddy 12353"),
+        ):
+            if key in body:
+                khz = _khz_field(body, key, label)
+            else:
+                prev = buddy_cfg.get("extras") or []
+                idx = 0 if key.endswith("1_khz") else 1
+                try:
+                    khz = float((prev[idx] or {}).get("freq_khz") or default)
+                except (TypeError, ValueError, IndexError):
+                    khz = default
+            extras_out.append(
+                {
+                    "freq_khz": khz,
+                    "label": f"Buddy call {fmt_khz(khz)} kHz",
+                    "zoom": 12,
+                }
+            )
+        if (
+            "buddy_extra1_khz" in body
+            or "buddy_extra2_khz" in body
+            or "buddy_main_khz" in body
+            or "buddy_alt_khz" in body
+        ):
+            buddy_cfg["extras"] = extras_out
         if "buddy_time_utc" in body:
             from recorder.config import _hhmm
 

@@ -72,6 +72,8 @@
       buddy_enabled: !!(enabledEl && enabledEl.checked),
       buddy_main_khz: Number(form.elements.namedItem("buddy_main_khz").value),
       buddy_alt_khz: Number(form.elements.namedItem("buddy_alt_khz").value),
+      buddy_extra1_khz: Number(form.elements.namedItem("buddy_extra1_khz").value),
+      buddy_extra2_khz: Number(form.elements.namedItem("buddy_extra2_khz").value),
       buddy_time_utc: form.elements.namedItem("buddy_time_utc").value,
       buddy_lead: Number(form.elements.namedItem("buddy_lead").value),
       buddy_duration_minutes: Number(form.elements.namedItem("buddy_duration_minutes").value),
@@ -134,8 +136,7 @@
           tx: data.tx_mhz,
           ack1: data.ack1_mhz,
           ack2: data.ack2_mhz,
-          main: data.buddy_main_khz,
-          alt: data.buddy_alt_khz,
+          qrgs: data.buddy_qrgs_label || [data.buddy_main_khz, data.buddy_alt_khz, data.buddy_extra1_khz, data.buddy_extra2_khz].filter(Boolean).join(" / "),
           time: data.buddy_time_utc,
           n: (data.tx_sites || []).length,
         }),
@@ -227,8 +228,7 @@
         say(
           "buddy",
           t("buddy_ok", {
-            main: data.buddy_main_khz,
-            alt: data.buddy_alt_khz,
+            qrgs: data.buddy_qrgs_label || [data.buddy_main_khz, data.buddy_alt_khz, data.buddy_extra1_khz, data.buddy_extra2_khz].filter(Boolean).join(" / "),
             time: data.buddy_time_utc,
             state: data.buddy_enabled ? t("buddy_on") : t("buddy_off"),
             skippers: (data.buddy_skippers || []).join(", ") || t("no_skipper"),
