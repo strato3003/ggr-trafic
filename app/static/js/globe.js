@@ -225,6 +225,7 @@
   const deepQ = new URLSearchParams(location.search);
   const deepZoom = deepQ.get("zoom") === "1" || deepQ.get("zoom") === "true" || deepQ.has("ch");
   const deepFocus = deepQ.get("ch") || deepQ.get("focus") || (deepZoom ? "0" : "");
+  const deepT = deepQ.get("t") || deepQ.get("at") || "";
   setPanelOpen(!!traficQBoot);
 
   if (kiwiToggle) {
@@ -1181,6 +1182,7 @@
     const q = new URLSearchParams(location.search);
     const zoom = deepZoom || q.get("zoom") === "1" || q.get("zoom") === "true" || q.has("ch");
     const focus = deepFocus || q.get("ch") || q.get("focus") || (zoom ? "0" : "");
+    const deepTime = deepT || q.get("t") || q.get("at") || "";
     window.GgrMixer.mount({
       root: mixRoot,
       tracks: tracks,
@@ -1188,6 +1190,7 @@
       started: v.started_at,
       zoom: zoom,
       focus: focus,
+      t: deepTime,
       onFocus: function (trackId) {
         muxFocusId = trackId || null;
         document.body.classList.toggle("kiwi-mix-focus", !!trackId);

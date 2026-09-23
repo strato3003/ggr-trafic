@@ -659,39 +659,89 @@ def _buddy_bands(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+# Plafond de récepteurs par Kiwi pour le buddy (anti « same IP » / slots).
+# Historiquement 2 QRG (4483+6516) sans souci ; au-delà (8294/12353) on répartit.
+_BUDDY_MAX_PER_KIWI = 2
+# < 7 MHz → NVIS / proche flotte ; ≥ 7 MHz → saut (8 / 12 MHz marine).
+_BUDDY_NEAR_KHZ = 7000.0
+
+
+def _buddy_band_range(freq_khz: float) -> str:
+    return "near" if float(freq_khz) < _BUDDY_NEAR_KHZ else "far"
+
+
+def _buddy_kiwi_pref(kiwi: dict[str, Any], want: str) -> tuple[int, float]:
+    """Ordre de préférence : near → NVIS/proche ; far → hop/loin."""
+    zone = str(kiwi.get("prop_zone") or "")
+    try:
+        km = float(kiwi.get("site_km") if kiwi.get("site_km") is not None else kiwi.get("distance_km") or 9_999.0)
+    except (TypeError, ValueError):
+        km = 9_999.0
+    if want == "near":
+        z = 0 if zone == "nvis" else (1 if zone == "skip" else 2)
+        return (z, km)
+    z = 0 if zone in ("hop", "far") else (1 if zone == "skip" else 2)
+    return (z, -km)
+
+
 def _buddy_channels(cfg: dict[str, Any], roles: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Jusqu’à 2 QRG / Kiwi, selon la prop : 4/6 MHz proches, 8/12 MHz en saut.
+
+    Beaucoup d’opérateurs refusent trop de connexions depuis la même IP
+    (ex. G3SDR). Deux voies max par SDR ; les QRG sont collées à la zone
+    (NVIS pour 4483/6516, hop pour 8294/12353).
+    """
     bands = _buddy_bands(cfg)
-    if not bands:
+    if not bands or not roles:
         return []
+    capacity: dict[str, int] = {}
+    for site, kiwi in roles.items():
+        free = int(kiwi.get("free_slots") or 0)
+        capacity[site] = max(1, min(free if free > 0 else 1, _BUDDY_MAX_PER_KIWI))
+
+    def take_site(want: str) -> str | None:
+        ordered = sorted(roles.items(), key=lambda kv: _buddy_kiwi_pref(kv[1], want))
+        for site, _kiwi in ordered:
+            if capacity.get(site, 0) > 0:
+                return site
+        return None
+
+    near = [b for b in bands if _buddy_band_range(b["freq_khz"]) == "near"]
+    far = [b for b in bands if _buddy_band_range(b["freq_khz"]) == "far"]
+    # Proches d’abord (screencast sur la 1ʳᵉ voie NVIS), puis sauts.
+    plan = [(b, "near") for b in near] + [(b, "far") for b in far]
     rows: list[dict[str, Any]] = []
     first = True
-    cursor = 0
-    for site, kiwi in roles.items():
+    for band, want in plan:
+        site = take_site(want)
+        if site is None:
+            log.warning("Buddy : plus de place Kiwi pour %s kHz (%s)", band["freq_khz"], want)
+            continue
+        kiwi = roles[site]
         slabel = kiwi.get("site_label") or site
-        free = int(kiwi.get("free_slots") or 0)
-        n = max(1, min(free if free > 0 else 1, len(bands)))
-        for _ in range(n):
-            band = bands[cursor % len(bands)]
-            cursor += 1
-            rows.append(
-                {
-                    "id": f"{site}-{band['slug']}",
-                    "kind": band["kind"],
-                    "site": site,
-                    "site_label": slabel,
-                    "freq_khz": band["freq_khz"],
-                    "label": f"{band['label']} · {slabel}",
-                    "zoom": band["zoom"],
-                    "screencast": first,
-                }
-            )
-            first = False
-        if free < 2 and len(bands) > 1:
-            log.info(
-                "Kiwi %s : %s place(s) — répartition des QRG buddy sur plusieurs SDR",
-                kiwi.get("name"),
-                free or 1,
-            )
+        capacity[site] -= 1
+        rows.append(
+            {
+                "id": f"{site}-{band['slug']}",
+                "kind": band["kind"],
+                "site": site,
+                "site_label": slabel,
+                "freq_khz": band["freq_khz"],
+                "label": f"{band['label']} · {slabel}",
+                "zoom": band["zoom"],
+                "screencast": first,
+                "prop_want": want,
+            }
+        )
+        first = False
+        log.info(
+            "Buddy %s kHz → %s (%.0f km, zone %s, want=%s)",
+            fmt_khz(band["freq_khz"]),
+            kiwi.get("name"),
+            float(kiwi.get("site_km") or 0),
+            kiwi.get("prop_zone"),
+            want,
+        )
     return rows
 
 

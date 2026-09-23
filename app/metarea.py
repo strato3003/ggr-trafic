@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent
 SUBZONES_PATH = ROOT / "static" / "geo" / "metarea2-subzones.json"
 METAREAS_PATH = ROOT / "static" / "geo" / "metareas.json"
 WWMIWS = "https://wwmiws.wmo.int/index.php/metareas"
-UA = "GGR-Trafic/1.1.14 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
+UA = "GGR-Trafic/1.1.16 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
 CACHE_TTL_S = 20 * 60
 # Grilles intérieures officielles (rectangles + océan). Les autres METAREA
 # basculent seules via le polygone OHI + le bulletinset WWMIWS du même n°.
@@ -139,6 +139,79 @@ _MOIS = {
 # Phrases longues d’abord — vocabulaire bulletin marine MF / UK, pour lecture HF.
 # Pas de mots isolés (to/of/in/at) : ils cassent les positions 40N23W.
 _FR_RAW: list[tuple[str, str]] = [
+    (r"\bmoving east slowly\b", "se déplaçant lentement vers l'est"),
+    (r"\bmoving west slowly\b", "se déplaçant lentement vers l'ouest"),
+    (r"\bmoving slowly\b", "se déplaçant lentement"),
+    (r"\bRidge extending northeastwards\b", "dorsale s'étendant vers le nord-est"),
+    (r"\bRidge extending\b", "dorsale s'étendant"),
+    (r"\bextending northeastwards\b", "s'étendant vers le nord-est"),
+    (r"\bextending southeastwards\b", "s'étendant vers le sud-est"),
+    (r"\bextending northwestwards\b", "s'étendant vers le nord-ouest"),
+    (r"\bextending southwestwards\b", "s'étendant vers le sud-ouest"),
+    (r"\bnortheastwards\b", "vers le nord-est"),
+    (r"\bsoutheastwards\b", "vers le sud-est"),
+    (r"\bnorthwestwards\b", "vers le nord-ouest"),
+    (r"\bsouthwestwards\b", "vers le sud-ouest"),
+    (r"\beastwards\b", "vers l'est"),
+    (r"\bwestwards\b", "vers l'ouest"),
+    (r"\bnorthwards\b", "vers le nord"),
+    (r"\bsouthwards\b", "vers le sud"),
+    (r"\bA cold front\b", "Un front froid"),
+    (r"\bcold front\b", "front froid"),
+    (r"\bwarm front\b", "front chaud"),
+    (r"\boccluded front\b", "front occlus"),
+    (r"\bis moving east\b", "se déplace vers l'est"),
+    (r"\bis moving west\b", "se déplace vers l'ouest"),
+    (r"\bis moving\b", "se déplace"),
+    (r"\bPressure falling\b", "Pression en baisse"),
+    (r"\bPressure rising\b", "Pression en hausse"),
+    (r"\bpressure falling\b", "pression en baisse"),
+    (r"\bpressure rising\b", "pression en hausse"),
+    (r"\bVisibility:\s*Moderate or poor\b", "Visibilité : moyenne ou médiocre"),
+    (r"\bVisibility:\s*Poor or very poor\b", "Visibilité : médiocre ou mauvaise"),
+    (r"\bVisibility:\s*Good becoming moderate\b", "Visibilité : bonne devenant moyenne"),
+    (r"\bVisibility:\s*Good\b", "Visibilité : bonne"),
+    (r"\bVisibility:\s*Moderate\b", "Visibilité : moyenne"),
+    (r"\bVisibility:\s*Poor\b", "Visibilité : médiocre"),
+    (r"\bVisibility:\s*", "Visibilité : "),
+    (r"\bOutlook:\s*Similar\b", "Tendance : similaire"),
+    (r"\bOutlook:\s*", "Tendance : "),
+    (r"\bWind:\s*", "Vent : "),
+    (r"\bSea:\s*", "Mer : "),
+    (r"\bSwell:\s*", "Houle : "),
+    (r"\bModerate or poor\b", "moyenne ou médiocre"),
+    (r"\bGood becoming moderate\b", "bonne devenant moyenne"),
+    (r"\bin rain or showers\b", "sous la pluie ou les averses"),
+    (r"\bin rain\b", "sous la pluie"),
+    (r"\bin showers\b", "sous les averses"),
+    (r"\bOccasional rain\b", "Pluie occasionnelle"),
+    (r"\boccasional rain\b", "pluie occasionnelle"),
+    (r"\bFog patches\b", "Bancs de brouillard"),
+    (r"\bfog patches\b", "bancs de brouillard"),
+    (r"\boccasionally\b", "parfois"),
+    (r"\boccasional\b", "occasionnel"),
+    (r"\bSimilar\b", "Similaire"),
+    (r"\bsimilar\b", "similaire"),
+    (r"\bslowly\b", "lentement"),
+    (r"\bShowers\b", "Averses"),
+    (r"\bshowers\b", "averses"),
+    (r"\brain\b", "pluie"),
+    (r"\bfog\b", "brouillard"),
+    (r"\bpoor\b", "médiocre"),
+    (r"\bwith associated ridge towards\b", "avec dorsale associée vers"),
+    (r"\bassociated ridge towards\b", "dorsale associée vers"),
+    (r"\bassociated ridge\b", "dorsale associée"),
+    (r"\bRidge\b", "Dorsale"),
+    (r"\bridge\b", "dorsale"),
+    (r"\bassociated Dorsale\b", "dorsale associée"),
+    (r"\bbecoming west\b", "devenant d'ouest"),
+    (r"\bbecoming east\b", "devenant d'est"),
+    (r"\bbecoming north\b", "devenant de nord"),
+    (r"\bbecoming south\b", "devenant de sud"),
+    (r"\bwest (\d)\b", r"ouest \1"),
+    (r"\beast (\d)\b", r"est \1"),
+    (r"\bnorth (\d)\b", r"nord \1"),
+    (r"\bsouth (\d)\b", r"sud \1"),
     (r"\bAT LEAST\b", "au moins"),
     (r"\bwith associated ridge in Bay of Biscay\b", "avec dorsale associée dans le golfe de Gascogne"),
     (r"\bin Bay of Biscay\b", "dans le golfe de Gascogne"),
@@ -146,8 +219,20 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bgradually filling\b", "se comblant progressivement"),
     (r"\bslowly filling\b", "se comblant lentement"),
     (r"\bgradually deepening\b", "se creusant progressivement"),
+    (r"\bslowly deepening\b", "se creusant lentement"),
+    (r"\bStationary\b", "Stationnaire"),
+    (r"\bstationary\b", "stationnaire"),
+    (r"\bFilling\b", "Se comblant"),
+    (r"\bfilling\b", "se comblant"),
+    (r"\bDeepening\b", "Se creusant"),
+    (r"\bdeepening\b", "se creusant"),
     (r"\bTropical depression\b", "dépression tropicale"),
     (r"\bTropical storm\b", "tempête tropicale"),
+    (r"\bis now a post-tropical remnant Low pressure of\b", "est maintenant le vestige d'une dépression post-tropicale de"),
+    (r"\bis now a post-tropical remnant Low\b", "est maintenant le vestige d'une dépression post-tropicale"),
+    (r"\bpost-tropical remnant Low pressure of\b", "vestige d'une dépression post-tropicale de"),
+    (r"\bpost-tropical remnant Low\b", "vestige d'une dépression post-tropicale"),
+    (r"\bpost-tropical remnant\b", "vestige d'une dépression post-tropicale"),
     (r"\bPost-tropical\b", "post-tropicale"),
     (r"\bHurricane\b", "ouragan"),
     (r"\bTropical wave near\b", "onde tropicale près de"),
@@ -157,6 +242,7 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bwith associated trough\b", "avec talweg associé"),
     (r"\bassociated trough over\b", "talweg associé sur"),
     (r"\bassociated trough\b", "talweg associé"),
+    (r"\bAssociated trough\b", "Talweg associé"),
     (r"\bwith associated ridge in\b", "avec dorsale associée dans"),
     (r"\bwith associated ridge over\b", "avec dorsale associée sur"),
     (r"\bnorthwestern areas\b", "les régions du nord-ouest"),
@@ -191,8 +277,18 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bAssociated ridge\b", "dorsale associée"),
     (r"\bComplex low\b", "Dépression complexe"),
     (r"\bNew low expected\b", "Nouvelle dépression prévue"),
+    (r"\bNew High\b", "Nouvel anticyclone"),
+    (r"\bNew Low\b", "Nouvelle dépression"),
     (r"\bThundery low\b", "Dépression orageuse"),
     (r"\bMonsoon trough near\b", "Talweg de mousson près de"),
+    (r"\bMonsoon trough from\b", "Talweg de mousson de"),
+    (r"\bMonsoon trough\b", "Talweg de mousson"),
+    (r"\bis now a\b", "est maintenant un"),
+    (r"\bremnant Low\b", "dépression résiduelle"),
+    (r"\bremnant\b", "vestige"),
+    (r"\bpressure of\b", "pression de"),
+    (r"\bcentered near\b", "centrée près de"),
+    (r"\bwinds of\b", "vents de"),
     (r"\bThe ITCZ extends from\b", "La ZCIT s'étend de"),
     (r"\band continues to\b", "et se poursuit vers"),
     (r"\bjust southwest\b", "juste au sud-ouest de"),
@@ -200,7 +296,14 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bmoving towards\b", "se dirigeant vers"),
     (r"\bmoving west near\b", "se déplaçant vers l'ouest près de"),
     (r"\bmoving west\b", "se déplaçant vers l'ouest"),
+    (r"\bmoving\b", "se déplaçant"),
+    (r"\bweakening\b", "s'affaiblissant"),
+    (r"\bstrengthening\b", "se renforçant"),
     (r"\bdeepening on place\b", "se creusant sur place"),
+    (r"\bassociated\b", "associé"),
+    (r"\btowards\b", "vers"),
+    (r"\bover north of France\b", "sur le nord de la France"),
+    (r"\bnorth of France\b", "nord de la France"),
     (r"\bover Morocco\b", "sur le Maroc"),
     (r"\bover France\b", "sur la France"),
     (r"\bthe British isles\b", "îles Britanniques"),
@@ -562,16 +665,63 @@ def _fr_datetimes(text: str) -> str:
     return s
 
 
+def expand_positions(text: str, *, lang: str = "fr") -> str:
+    """52N35W → « 52 Nord, 35 Ouest » (FR) / « 52 North, 35 West » (EN) pour lecture HF."""
+    s = str(text or "")
+    if not s:
+        return ""
+    en = str(lang or "").startswith("en")
+    ns = {"N": "North", "S": "South"} if en else {"N": "Nord", "S": "Sud"}
+    ew = {"E": "East", "W": "West"} if en else {"E": "Est", "W": "Ouest"}
+    conj = " to " if en else " à "
+
+    def _num(raw: str) -> str:
+        t = str(raw)
+        if "." in t:
+            return t
+        return str(int(t))
+
+    def _full(m: re.Match[str]) -> str:
+        return (
+            f"{_num(m.group(1))} {ns[m.group(2).upper()]}, "
+            f"{_num(m.group(3))} {ew[m.group(4).upper()]}"
+        )
+
+    def _lon_range(m: re.Match[str]) -> str:
+        return f"{_num(m.group(1))}{conj}{_num(m.group(2))} {ew[m.group(3).upper()]}"
+
+    def _lat(m: re.Match[str]) -> str:
+        return f"{_num(m.group(1))} {ns[m.group(2).upper()]}"
+
+    def _lon(m: re.Match[str]) -> str:
+        return f"{_num(m.group(1))} {ew[m.group(2).upper()]}"
+
+    # Positions complètes d’abord (sinon 52N de 52N35W partirait seul).
+    # Décimales : 30.5N37.0W (le \b lon seul matcherait sinon le « 0W » de « .0W »).
+    s = re.sub(
+        r"\b(\d{1,2}(?:\.\d+)?)([NnSs])\s*(\d{1,3}(?:\.\d+)?)([EeWw])\b",
+        _full,
+        s,
+    )
+    s = re.sub(r"\b(\d{1,2}(?:\.\d+)?)\s*-\s*(\d{1,3}(?:\.\d+)?)([EeWw])\b", _lon_range, s)
+    s = re.sub(r"\b(\d{1,2}(?:\.\d+)?)([NnSs])\b(?!\d)", _lat, s)
+    s = re.sub(r"(?<![\d.])(\d{1,3}(?:\.\d+)?)([EeWw])\b", _lon, s)
+    return s
+
+
 def fr_marine(text: str) -> str:
     """Anglais EGC → français bulletin, lisible à l’antenne."""
     s = " ".join(str(text or "").split())
     if not s:
         return ""
+    # 24/12UTC / 25/ 00UTC → espace avant UTC pour le lexique.
+    s = re.sub(r"(\d{1,2}/)\s*(\d{2})\s*UTC\b", r"\1\2 UTC", s, flags=re.I)
     s = _fr_datetimes(s)
     for pat, repl in _FR_PHRASES:
         s = pat.sub(repl, s)
     s = re.sub(r"\s+or\s+", " ou ", s, flags=re.I)
     s = re.sub(r"(?<![/\d])(\d{3,4})\s*TU\b", lambda m: _fr_clock(m.group(1)) + " TU", s)
+    s = expand_positions(s, lang="fr")
     s = re.sub(r"\s+", " ", s).strip()
     s = re.sub(r"\s+([,.;:])", r"\1", s)
     bits = re.split(r"(?<=[.!?])\s+", s)
@@ -1082,6 +1232,10 @@ def build_digest(
                 lecture.append(("Gale warning. " if en else "Avis de coup de vent. ") + gale_txt)
         for block in czones:
             lecture.append(_block_line(block, lang))
+
+    # EN : positions pour la voix (FR déjà développé dans fr_marine).
+    if en:
+        lecture = [expand_positions(p, lang="en") for p in lecture]
 
     return {
         "fleet_zones": fleet_zones,

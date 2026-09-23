@@ -35,6 +35,12 @@ window.GgrMixer = (function () {
   const vacId = opts.vacId || root.getAttribute("data-vid") || "";
   const wantFocus = opts.focus != null ? String(opts.focus) : "";
   const wantZoom = !!(opts.zoom || wantFocus);
+  const wantTRaw =
+    opts.t != null && String(opts.t) !== ""
+      ? String(opts.t)
+      : new URLSearchParams(location.search).get("t") ||
+        new URLSearchParams(location.search).get("at") ||
+        "";
   const startMs = (function parseStart() {
     const iso = opts.started || root.getAttribute("data-started") || "";
     if (iso) {
@@ -58,6 +64,7 @@ window.GgrMixer = (function () {
   const loopLab = document.getElementById("mix-loop-lab");
   const loopHint = document.getElementById("mix-loop-hint");
   const unzoomBtn = document.getElementById("mix-unzoom");
+  const copyBtn = document.getElementById("mix-copy-link");
   const onFocus = typeof opts.onFocus === "function" ? opts.onFocus : null;
   if (!deskEl || !playBtn || !seekEl) return null;
   setPlayUi(false);
@@ -96,14 +103,72 @@ window.GgrMixer = (function () {
     '<svg class="mix__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>';
   const ICO_LOOP =
     '<svg class="mix__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>';
+  const ICO_LINK =
+    '<svg class="mix__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3.9 12a5 5 0 0 1 5-5h4v2h-4a3 3 0 1 0 0 6h4v2h-4a5 5 0 0 1-5-5zm7-1h6v2h-6v-2zm4.1-4h4a5 5 0 0 1 0 10h-4v-2h4a3 3 0 1 0 0-6h-4V7z"/></svg>';
   if (loopBtn && !loopBtn.querySelector("svg")) loopBtn.insertAdjacentHTML("afterbegin", ICO_LOOP);
   if (unzoomBtn && !unzoomBtn.querySelector("svg")) unzoomBtn.insertAdjacentHTML("afterbegin", ICO_COLLAPSE);
+  if (copyBtn && !copyBtn.querySelector("svg")) copyBtn.insertAdjacentHTML("afterbegin", ICO_LINK);
 
   function esc(s) {
     return String(s || "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function parseDeepTime(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return NaN;
+    if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+    const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (!m || !Number.isFinite(startMs)) return NaN;
+    const d = new Date(startMs);
+    d.setUTCHours(Number(m[1]), Number(m[2]), m[3] != null ? Number(m[3]) : 0, 0);
+    return (d.getTime() - startMs) / 1000;
+  }
+
+  function shareUrl() {
+    if (!vacId) return location.href;
+    const u = new URL("/trafic/" + encodeURIComponent(vacId), location.origin);
+    if (focusId) {
+      u.searchParams.set("zoom", "1");
+      u.searchParams.set("ch", String(focusId));
+    }
+    const sec = Math.floor(nowT());
+    if (sec > 0) u.searchParams.set("t", String(sec));
+    return u.toString();
+  }
+
+  function flashStatus(msg) {
+    if (!statusEl || !msg) return;
+    const prev = statusEl.textContent;
+    statusEl.textContent = msg;
+    window.setTimeout(() => {
+      if (statusEl && statusEl.textContent === msg) statusEl.textContent = prev || "";
+    }, 2200);
+  }
+
+  async function copyShareLink() {
+    const url = shareUrl();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = url;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      }
+      flashStatus(t("link_copied"));
+      if (copyBtn) copyBtn.title = t("link_copied");
+    } catch {
+      flashStatus(url);
+    }
   }
 
   function fmtTu(offsetSec) {
@@ -322,9 +387,10 @@ window.GgrMixer = (function () {
   }
 
   function clampLoopTime(t) {
-    const span = timeSpan();
     let x = Math.max(0, Number.isFinite(t) ? t : 0);
-    if (span) x = Math.min(span, x);
+    // Ne pas tronquer sur timeSpan()=1 tant que duration est encore inconnue
+    // (sinon un deep-link ?t=900 se retrouve à 1 s).
+    if (duration > 0) x = Math.min(duration, x);
     const lp = loopOn ? loopBounds() : null;
     if (!lp) return x;
     if (x < lp.a) return lp.a;
@@ -699,9 +765,11 @@ window.GgrMixer = (function () {
   }
 
   function previewSeek(t) {
-    t0 = clampLoopTime(Math.max(0, Math.min(duration || t, t)));
+    const raw = Math.max(0, Number.isFinite(t) ? t : 0);
+    t0 = clampLoopTime(duration > 0 ? Math.min(duration, raw) : raw);
+    if (duration > 0) seekEl.max = String(duration);
+    else if (t0 > (Number(seekEl.max) || 0)) seekEl.max = String(Math.max(t0, 1));
     seekEl.value = String(t0);
-    if (duration) seekEl.max = String(duration);
     if (playing) {
       playGen += 1;
       playing = false;
@@ -878,8 +946,10 @@ window.GgrMixer = (function () {
 
   function bindCanvasSeek(canvas, tr) {
     if (!canvas) return;
+    canvas.title = t("seek_right_click");
     canvas.addEventListener("pointerdown", (ev) => {
       if (!duration) return;
+      if (ev.button === 2) return;
       resumeAfterDrag = playing;
       dragging = true;
       canvas.setPointerCapture(ev.pointerId);
@@ -898,6 +968,14 @@ window.GgrMixer = (function () {
       dragging = false;
       resumeAfterDrag = false;
     });
+    canvas.addEventListener("contextmenu", (ev) => {
+      if (!duration) return;
+      ev.preventDefault();
+      const was = playing;
+      if (was) pauseAt(nowT());
+      previewSeek(pointerTime(ev, canvas));
+      if (was) startSources(t0);
+    });
   }
 
   seekEl.addEventListener("pointerdown", () => {
@@ -915,6 +993,23 @@ window.GgrMixer = (function () {
     if (resumeAfterDrag) startSources(t0);
     resumeAfterDrag = false;
   }, sig);
+  seekEl.addEventListener(
+    "contextmenu",
+    (ev) => {
+      if (!duration) return;
+      ev.preventDefault();
+      const was = playing;
+      if (was) pauseAt(nowT());
+      previewSeek(pointerTime(ev, seekEl));
+      if (was) startSources(t0);
+    },
+    sig
+  );
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      void copyShareLink();
+    }, sig);
+  }
 
   function applyGain(tr) {
     const silent = !!(tr.muted || (focusId && tr.id !== focusId));
@@ -1071,12 +1166,14 @@ window.GgrMixer = (function () {
 
   function noteDuration(sec) {
     if (!Number.isFinite(sec) || sec <= 0) return;
+    const was = duration;
     duration = Math.max(duration, sec);
     seekEl.min = "0";
     seekEl.max = String(duration);
     seekEl.step = "0.05";
     playBtn.disabled = false;
     if (loopOn) ensureLoopRange();
+    if (deepTimePending && duration > was) applyDeepTime();
     updateHead();
     updateLoopUi();
   }
@@ -1101,7 +1198,8 @@ window.GgrMixer = (function () {
     }
     const url = media(tr.src);
     tr.el = new Audio(url);
-    tr.el.preload = "none";
+    // metadata : permet noteDuration / deep-link ?t= sans attendre Play
+    tr.el.preload = deepTimePending ? "metadata" : "none";
     tr.el.controls = false;
     tr.el.hidden = true;
     tr.el.setAttribute("aria-hidden", "true");
@@ -1310,6 +1408,19 @@ window.GgrMixer = (function () {
     if (id) setFocus(id);
   }
 
+  let deepTimePending = !!String(wantTRaw || "").trim();
+
+  function applyDeepTime() {
+    const sec = parseDeepTime(wantTRaw);
+    if (!Number.isFinite(sec) || sec < 0) {
+      deepTimePending = false;
+      return;
+    }
+    const t = duration > 0 ? Math.min(duration, sec) : sec;
+    previewSeek(t);
+    if (duration > 0) deepTimePending = false;
+  }
+
   async function load() {
     root.hidden = false;
     spec.forEach((row, i) => {
@@ -1353,7 +1464,20 @@ window.GgrMixer = (function () {
     await Promise.all(tracks.map((tr) => loadStoredWf(tr)));
     const painted = tracks.filter((tr) => tr.storedWf).length;
     tracks.forEach(attachAudio);
-    void Promise.all(tracks.map((tr) => waitDuration(tr, 20000)));
+    if (deepTimePending) {
+      tracks.forEach((tr) => {
+        if (tr.el) {
+          try {
+            tr.el.load();
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+    }
+    void Promise.all(tracks.map((tr) => waitDuration(tr, deepTimePending ? 12000 : 20000))).then(() => {
+      if (deepTimePending) applyDeepTime();
+    });
     tracks.forEach((tr) => {
       if (tr.storedWf || tr.dead) return;
       fetchWav(tr).then((wav) => paintSpec(tr, wav));
@@ -1365,11 +1489,13 @@ window.GgrMixer = (function () {
         statusEl.textContent = t("mix_ready", { live: live, n: tracks.length });
       updateHead();
       applyDeepFocus();
+      applyDeepTime();
       return;
     }
     if (statusEl) statusEl.textContent = t("no_audio");
     playBtn.disabled = true;
     applyDeepFocus();
+    applyDeepTime();
   }
 
   function destroy() {
@@ -1414,7 +1540,8 @@ window.GgrMixer = (function () {
     const q = new URLSearchParams(location.search);
     const zoom = q.get("zoom") === "1" || q.get("zoom") === "true" || q.has("ch");
     const focus = q.get("ch") || q.get("focus") || (zoom ? "0" : "");
-    mount({ root: root, zoom: zoom, focus: focus });
+    const deepT = q.get("t") || q.get("at") || "";
+    mount({ root: root, zoom: zoom, focus: focus, t: deepT });
   }
 
   if (document.readyState === "loading") {
