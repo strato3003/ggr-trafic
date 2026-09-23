@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.1.15 — 2026-09-23
+
+- Buddy : max 2 QRG par Kiwi ; 4/6 MHz sur NVIS (proche), 8/12 MHz sur saut ; détection « same IP » au screencast.
+- Trafic : bouton copier le lien (`/trafic/<id>?zoom=1&ch=&t=`) ; clic droit sur waterfall / barre TU pour se placer.
+- METAREA FR : lexique enrichi ; positions `52N35W` lues « 52 Nord, 35 Ouest » (TTS inclus).
+
 ## 1.1.14 — 2026-09-23
 
 - URL profonde : `/?trafic=<id>&zoom=1` ou `/trafic/<id>?zoom=1` (piste via `&ch=`) ; retour après login si besoin.

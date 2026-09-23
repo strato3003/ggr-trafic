@@ -1411,18 +1411,30 @@ def test_buddy_channels_record_both_qrgs():
         }
     }
     roles = {
-        "nvis": {"name": "kiwi-nvis", "site_label": "proche / NVIS", "free_slots": 3},
-        "hop": {"name": "kiwi-hop", "site_label": "saut 1 hop", "free_slots": 1},
+        "nvis": {
+            "name": "kiwi-nvis",
+            "site_label": "proche / NVIS",
+            "free_slots": 3,
+            "prop_zone": "nvis",
+            "site_km": 400,
+        },
+        "hop": {
+            "name": "kiwi-hop",
+            "site_label": "saut 1 hop",
+            "free_slots": 1,
+            "prop_zone": "hop",
+            "site_km": 2200,
+        },
     }
     rows = _buddy_channels(cfg, roles)
-    assert [c["id"] for c in rows] == ["nvis-main", "nvis-alt", "hop-main"]
-    assert [c["freq_khz"] for c in rows] == [4483.0, 6516.0, 4483.0]
+    # 4/6 MHz → NVIS (2 places) ; hop inutilisé faute de bande « far ».
+    assert [c["id"] for c in rows] == ["nvis-main", "nvis-alt"]
+    assert [c["freq_khz"] for c in rows] == [4483.0, 6516.0]
     assert rows[0]["screencast"] is True
     assert rows[1]["screencast"] is False
-    assert rows[2]["screencast"] is False
 
 
-def test_buddy_channels_round_robin_extras():
+def test_buddy_channels_near_far_prop():
     from recorder.session import _buddy_channels
 
     cfg = {
@@ -1436,12 +1448,40 @@ def test_buddy_channels_round_robin_extras():
         }
     }
     roles = {
-        "nvis": {"name": "kiwi-nvis", "site_label": "proche / NVIS", "free_slots": 3},
-        "hop": {"name": "kiwi-hop", "site_label": "saut 1 hop", "free_slots": 1},
+        "nvis": {
+            "name": "kiwi-nvis",
+            "site_label": "proche / NVIS",
+            "free_slots": 2,
+            "prop_zone": "nvis",
+            "site_km": 500,
+        },
+        "hop": {
+            "name": "kiwi-hop",
+            "site_label": "saut 1 hop",
+            "free_slots": 2,
+            "prop_zone": "hop",
+            "site_km": 2500,
+        },
+        "far": {
+            "name": "kiwi-far",
+            "site_label": "saut long",
+            "free_slots": 1,
+            "prop_zone": "far",
+            "site_km": 3800,
+        },
     }
     rows = _buddy_channels(cfg, roles)
-    assert [c["id"] for c in rows] == ["nvis-main", "nvis-alt", "nvis-x0", "hop-x1"]
-    assert [c["freq_khz"] for c in rows] == [4483.0, 6516.0, 8294.0, 12353.0]
+    by_freq = {c["freq_khz"]: c for c in rows}
+    assert by_freq[4483.0]["site"] == "nvis"
+    assert by_freq[6516.0]["site"] == "nvis"
+    assert by_freq[8294.0]["site"] in ("hop", "far")
+    assert by_freq[12353.0]["site"] in ("hop", "far")
+    assert by_freq[4483.0]["prop_want"] == "near"
+    assert by_freq[8294.0]["prop_want"] == "far"
+    # max 2 / Kiwi
+    from collections import Counter
+
+    assert max(Counter(c["site"] for c in rows).values()) <= 2
 
 
 def test_buddy_context_extras_defaults():
@@ -1982,6 +2022,28 @@ def test_metarea_at_follows_iho_for_ggr_route():
     assert metarea_at(46.50, -1.79) is None
 
 
+def test_metarea_expand_positions_speech():
+    from app.metarea import expand_positions, fr_marine
+
+    assert expand_positions("977 52N35W by 23/12", lang="fr") == "977 52 Nord, 35 Ouest by 23/12"
+    assert expand_positions("977 52N35W by 23/12", lang="en") == "977 52 North, 35 West by 23/12"
+    assert "52 Nord, 35 Ouest" in fr_marine("Low 977 52N35W moving northeast.")
+    fr = fr_marine(
+        "Wind: Northwest 4 or 5, occasionally 6 in west. "
+        "Visibility: Moderate or poor in rain or showers. Outlook: Similar. "
+        "Ridge extending northeastwards. Stationary. Filling. Deepening."
+    )
+    low = fr.lower()
+    assert "vent :" in low or "nord-ouest" in low
+    assert "occasionally" not in low
+    assert "visibility" not in low
+    assert "outlook" not in low
+    assert "northeastwards" not in low
+    assert "stationary" not in low
+    assert "filling" not in low or "comblant" in low
+    assert "deepening" not in low or "creusant" in low
+
+
 def test_metarea2_fqnt52_digest_canarias():
     from app.metarea import assemble, fr_marine
 
@@ -2019,7 +2081,10 @@ def test_metarea2_fqnt52_digest_canarias():
     assert "se déplaçant vers l'ouest à environ" in slow
     assert "10-15 nd" in slow
     assert "talweg de mousson" in slow
-    assert "32n33w" in slow
+    assert "32 nord" in slow and "33 ouest" in slow
+    assert "52 nord" in slow and "35 ouest" in slow
+    assert "32n33w" not in slow
+    assert "52n35w" not in slow
     raw = {
         "title": "Bulletinset for METAREA 2",
         "date": "2026-09-19 05:16:43",

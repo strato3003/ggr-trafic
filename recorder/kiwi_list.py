@@ -1082,13 +1082,22 @@ def assign_buddy_kiwis(
     tx_lat: float | None = None,
     tx_lon: float | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Buddy 4483 / 6516 / 8294 / 12353 : 4–10 Kiwi omni autour du centroïde (NVIS + sauts)."""
+    """Buddy 4483 / 6516 / 8294 / 12353 : Kiwi omni, ≤2 QRG / SDR (anti multi-IP)."""
+    freqs = _buddy_freqs_khz(cfg)
+    # Au plus 2 voies par Kiwi → au moins ceil(n_qrg/2) SDR distincts.
+    buddy_kiwi = dict(((cfg.get("buddy") or {}).get("kiwi") or {}))
+    need = max(int(buddy_kiwi.get("count") or 0), (len(freqs) + 1) // 2, _OMNI_MIN)
+    patched = dict(cfg)
+    patched["buddy"] = {
+        **(cfg.get("buddy") or {}),
+        "kiwi": {**buddy_kiwi, "count": min(_OMNI_MAX, need)},
+    }
     return assign_omni_fleet_kiwis(
         pool,
         lat=lat,
         lon=lon,
-        freqs_khz=_buddy_freqs_khz(cfg),
-        cfg=cfg,
+        freqs_khz=freqs,
+        cfg=patched,
         hour_utc=12.0,
         section=("buddy", "kiwi"),
         tx_lat=tx_lat,

@@ -1473,6 +1473,8 @@ body.kiwi-mix-focus .mix__seek {
   border-radius: 4px;
 }
 .mix__ico-btn:hover { background: #1a2f40; }
+.mix__copy-link { flex-shrink: 0; }
+.mix__wf, .mix__wave, .mix__seek input { cursor: crosshair; }
 .mix__ico {
   width: 1.15rem;
   height: 1.15rem;

@@ -222,6 +222,17 @@ async def record_screencast(
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=90_000)
             await asyncio.sleep(5)
+            try:
+                body = (await page.inner_text("body")) or ""
+            except Exception:
+                body = ""
+            low = body.lower()
+            if "multiple connections from the same ip" in low or "same ip address not allowed" in low:
+                msg = "Kiwi refuse plusieurs connexions depuis la même IP"
+                info["error"] = msg
+                info["ok"] = False
+                log.warning("Screencast Kiwi %s : %s", kiwi.get("name"), msg)
+                raise RuntimeError(msg)
             if overlay:
                 html = json.dumps(_overlay_html(overlay))
                 await page.evaluate(f"window.__GGR_OVERLAY_HTML = {html};")

@@ -27,9 +27,10 @@
       <button type="button" class="mix__ico-btn mix__loop-btn" id="mix-loop" hidden aria-pressed="false" aria-label="{{ t('loop') }}" title="{{ t('loop') }}"></button>
       <span class="mix__loop-lab" id="mix-loop-lab" hidden></span>
       <button type="button" class="mix__ico-btn mix__zoom-off" id="mix-unzoom" hidden aria-label="{{ t('collapse_track') }}" title="{{ t('menu_collapse_short') }}"></button>
-      <label class="mix__seek">
+      <button type="button" class="mix__ico-btn mix__copy-link" id="mix-copy-link" aria-label="{{ t('copy_link') }}" title="{{ t('copy_link_hint') }}"></button>
+      <label class="mix__seek" title="{{ t('seek_right_click') }}">
         {{ t('time_utc') }}
-        <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0">
+        <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0" title="{{ t('seek_right_click') }}">
       </label>
     </div>
     <div class="mix__body" id="ggr-mix">
@@ -45,5 +46,5 @@
 </article>
 {% endblock %}
 {% block extra_js %}
-<script src="/static/js/mixer.js?v={{ version }}-kiwi68"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi69"></script>
 {% endblock %}
