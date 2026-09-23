@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.16 — 2026-09-23
+
+- METAREA FR : lexique synoptique complété (moving, weakening, New High, Monsoon trough, vestige Fay, UTC collé, coords décimales).
+- Trafic : deep-link `?t=` positionne correctement le mixeur (plus de clamp à 1 s avant métadonnées audio).
+
 ## 1.1.15 — 2026-09-23
 
 - Buddy : max 2 QRG par Kiwi ; 4/6 MHz sur NVIS (proche), 8/12 MHz sur saut ; détection « same IP » au screencast.

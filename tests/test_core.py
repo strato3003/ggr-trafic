@@ -2027,6 +2027,7 @@ def test_metarea_expand_positions_speech():
 
     assert expand_positions("977 52N35W by 23/12", lang="fr") == "977 52 Nord, 35 Ouest by 23/12"
     assert expand_positions("977 52N35W by 23/12", lang="en") == "977 52 North, 35 West by 23/12"
+    assert expand_positions("30.5N37.0W", lang="fr") == "30.5 Nord, 37.0 Ouest"
     assert "52 Nord, 35 Ouest" in fr_marine("Low 977 52N35W moving northeast.")
     fr = fr_marine(
         "Wind: Northwest 4 or 5, occasionally 6 in west. "
@@ -2042,6 +2043,28 @@ def test_metarea_expand_positions_speech():
     assert "stationary" not in low
     assert "filling" not in low or "comblant" in low
     assert "deepening" not in low or "creusant" in low
+    syn2 = fr_marine(
+        "High 1029 50N11W, moving 1026 over north of France by 24/12 UTC, then weakening. "
+        "New High expected 1032 42N44W by 25/00 UTC with associated ridge towards Bay of Biscay. "
+        "Thundery low 1009 10N16W expected 1008 12N19W by 24/12UTC then 13N21W by 25/ 00UTC. "
+        "Monsoon trough from 11N15W to 9N44W. "
+        "Tropical depression Fay is now a post-tropical remnant Low pressure of 1013 "
+        "centered near 30.5N37.0W with winds of 20-30 kt."
+    )
+    s2 = syn2.lower()
+    assert "moving" not in s2
+    assert "weakening" not in s2
+    assert "s'affaiblissant" in s2 or "affaiblissant" in s2
+    assert "nouvel anticyclone" in s2
+    assert "associated" not in s2
+    assert "dorsale associée" in s2 or "dorsale" in s2
+    assert "towards" not in s2
+    assert "12utc" not in s2.replace(" ", "")
+    assert "talweg de mousson" in s2
+    assert "vestige" in s2 or "post-tropical" not in s2
+    assert "winds of" not in s2
+    assert "30.5 nord, 37.0 ouest" in s2
+    assert "nd" in s2
 
 
 def test_metarea2_fqnt52_digest_canarias():

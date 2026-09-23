@@ -1,6 +1,6 @@
 [project]
 name = "ggr-trafic"
-version = "1.1.15"
+version = "1.1.16"
 description = "Enregistrement du trafic HF F6KUF / flotte Golden Globe Race"
 readme = "README.md"
 requires-python = ">=3.12"

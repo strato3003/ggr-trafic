@@ -387,9 +387,10 @@ window.GgrMixer = (function () {
   }
 
   function clampLoopTime(t) {
-    const span = timeSpan();
     let x = Math.max(0, Number.isFinite(t) ? t : 0);
-    if (span) x = Math.min(span, x);
+    // Ne pas tronquer sur timeSpan()=1 tant que duration est encore inconnue
+    // (sinon un deep-link ?t=900 se retrouve à 1 s).
+    if (duration > 0) x = Math.min(duration, x);
     const lp = loopOn ? loopBounds() : null;
     if (!lp) return x;
     if (x < lp.a) return lp.a;
@@ -764,9 +765,11 @@ window.GgrMixer = (function () {
   }
 
   function previewSeek(t) {
-    t0 = clampLoopTime(Math.max(0, Math.min(duration || t, t)));
+    const raw = Math.max(0, Number.isFinite(t) ? t : 0);
+    t0 = clampLoopTime(duration > 0 ? Math.min(duration, raw) : raw);
+    if (duration > 0) seekEl.max = String(duration);
+    else if (t0 > (Number(seekEl.max) || 0)) seekEl.max = String(Math.max(t0, 1));
     seekEl.value = String(t0);
-    if (duration) seekEl.max = String(duration);
     if (playing) {
       playGen += 1;
       playing = false;
@@ -1163,12 +1166,14 @@ window.GgrMixer = (function () {
 
   function noteDuration(sec) {
     if (!Number.isFinite(sec) || sec <= 0) return;
+    const was = duration;
     duration = Math.max(duration, sec);
     seekEl.min = "0";
     seekEl.max = String(duration);
     seekEl.step = "0.05";
     playBtn.disabled = false;
     if (loopOn) ensureLoopRange();
+    if (deepTimePending && duration > was) applyDeepTime();
     updateHead();
     updateLoopUi();
   }
@@ -1193,7 +1198,8 @@ window.GgrMixer = (function () {
     }
     const url = media(tr.src);
     tr.el = new Audio(url);
-    tr.el.preload = "none";
+    // metadata : permet noteDuration / deep-link ?t= sans attendre Play
+    tr.el.preload = deepTimePending ? "metadata" : "none";
     tr.el.controls = false;
     tr.el.hidden = true;
     tr.el.setAttribute("aria-hidden", "true");
@@ -1402,11 +1408,17 @@ window.GgrMixer = (function () {
     if (id) setFocus(id);
   }
 
+  let deepTimePending = !!String(wantTRaw || "").trim();
+
   function applyDeepTime() {
     const sec = parseDeepTime(wantTRaw);
-    if (!Number.isFinite(sec) || sec < 0) return;
-    const t = duration ? Math.min(duration, sec) : sec;
+    if (!Number.isFinite(sec) || sec < 0) {
+      deepTimePending = false;
+      return;
+    }
+    const t = duration > 0 ? Math.min(duration, sec) : sec;
     previewSeek(t);
+    if (duration > 0) deepTimePending = false;
   }
 
   async function load() {
@@ -1452,7 +1464,20 @@ window.GgrMixer = (function () {
     await Promise.all(tracks.map((tr) => loadStoredWf(tr)));
     const painted = tracks.filter((tr) => tr.storedWf).length;
     tracks.forEach(attachAudio);
-    void Promise.all(tracks.map((tr) => waitDuration(tr, 20000)));
+    if (deepTimePending) {
+      tracks.forEach((tr) => {
+        if (tr.el) {
+          try {
+            tr.el.load();
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+    }
+    void Promise.all(tracks.map((tr) => waitDuration(tr, deepTimePending ? 12000 : 20000))).then(() => {
+      if (deepTimePending) applyDeepTime();
+    });
     tracks.forEach((tr) => {
       if (tr.storedWf || tr.dead) return;
       fetchWav(tr).then((wav) => paintSpec(tr, wav));

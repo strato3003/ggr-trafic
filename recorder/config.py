@@ -460,4 +460,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
             return pkg_version("ggr-vacations")
         except PackageNotFoundError:
             cfg = cfg or {}
-            return str(cfg.get("version") or "1.1.15")
+            return str(cfg.get("version") or "1.1.16")
