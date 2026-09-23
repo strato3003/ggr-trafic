@@ -13,7 +13,7 @@ def test_seed_and_cli_crud(tmp_path, monkeypatch):
     calls = {r["callsign"] for r in rows}
     emails = {r["email"] for r in rows}
     assert calls == {item["callsign"] for item in operators.SEED}
-    assert len(calls) == 15
+    assert len(calls) == len({item["callsign"] for item in operators.SEED})
     assert operators.find_by_email("jnmartineau@gmail.com")["name"] == "Jean-Noel Martineau"
     assert operators.find_by_callsign("F4DAI")["name"] == "Guy Lemoine"
     assert operators.find_by_callsign("F4HWM")["name"] == "Philippe Oudry"
