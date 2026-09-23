@@ -614,49 +614,84 @@ async def run_vacation(
             pass
 
 
-def _buddy_channels(cfg: dict[str, Any], roles: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _buddy_bands(cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """QRG buddy ordonnées : principale, secours, puis extras (8294, 12353…)."""
     buddy = cfg.get("buddy") or {}
     main = buddy.get("main") or {}
     alt = buddy.get("alternate") or {}
     main_khz = float(main.get("freq_khz") or 4483.0)
     alt_khz = float(alt.get("freq_khz") or 6516.0)
-    main_label = main.get("label") or f"Buddy call {fmt_khz(main_khz)} kHz"
-    alt_label = alt.get("label") or f"Buddy call {fmt_khz(alt_khz)} kHz (secours)"
-    main_zoom = int(main.get("zoom") or 10)
-    alt_zoom = int(alt.get("zoom") or 10)
-    rows: list[dict[str, Any]] = []
-    first = True
-    for site, kiwi in roles.items():
-        slabel = kiwi.get("site_label") or site
-        need_two = int(kiwi.get("free_slots") or 0) >= 2
+    rows: list[dict[str, Any]] = [
+        {
+            "slug": "main",
+            "kind": "buddy-main",
+            "freq_khz": main_khz,
+            "label": main.get("label") or f"Buddy call {fmt_khz(main_khz)} kHz",
+            "zoom": int(main.get("zoom") or 12),
+        },
+        {
+            "slug": "alt",
+            "kind": "buddy-alt",
+            "freq_khz": alt_khz,
+            "label": alt.get("label") or f"Buddy call {fmt_khz(alt_khz)} kHz (secours)",
+            "zoom": int(alt.get("zoom") or 12),
+        },
+    ]
+    for i, raw in enumerate(buddy.get("extras") or []):
+        if not isinstance(raw, dict):
+            continue
+        try:
+            khz = float(raw.get("freq_khz"))
+        except (TypeError, ValueError):
+            continue
+        if not (1000.0 <= khz <= 30000.0):
+            continue
+        slug = f"x{i}"
         rows.append(
             {
-                "id": f"{site}-main",
-                "kind": "buddy-main",
-                "site": site,
-                "site_label": slabel,
-                "freq_khz": main_khz,
-                "label": f"{main_label} · {slabel}",
-                "zoom": main_zoom,
-                "screencast": first,
+                "slug": slug,
+                "kind": "buddy-extra",
+                "freq_khz": khz,
+                "label": raw.get("label") or f"Buddy call {fmt_khz(khz)} kHz",
+                "zoom": int(raw.get("zoom") or 12),
             }
         )
-        first = False
-        if need_two:
+    return rows
+
+
+def _buddy_channels(cfg: dict[str, Any], roles: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    bands = _buddy_bands(cfg)
+    if not bands:
+        return []
+    rows: list[dict[str, Any]] = []
+    first = True
+    cursor = 0
+    for site, kiwi in roles.items():
+        slabel = kiwi.get("site_label") or site
+        free = int(kiwi.get("free_slots") or 0)
+        n = max(1, min(free if free > 0 else 1, len(bands)))
+        for _ in range(n):
+            band = bands[cursor % len(bands)]
+            cursor += 1
             rows.append(
                 {
-                    "id": f"{site}-alt",
-                    "kind": "buddy-alt",
+                    "id": f"{site}-{band['slug']}",
+                    "kind": band["kind"],
                     "site": site,
                     "site_label": slabel,
-                    "freq_khz": alt_khz,
-                    "label": f"{alt_label} · {slabel}",
-                    "zoom": alt_zoom,
-                    "screencast": False,
+                    "freq_khz": band["freq_khz"],
+                    "label": f"{band['label']} · {slabel}",
+                    "zoom": band["zoom"],
+                    "screencast": first,
                 }
             )
-        else:
-            log.info("Kiwi %s : une seule place — 4483 kHz seulement (pas 6516)", kiwi.get("name"))
+            first = False
+        if free < 2 and len(bands) > 1:
+            log.info(
+                "Kiwi %s : %s place(s) — répartition des QRG buddy sur plusieurs SDR",
+                kiwi.get("name"),
+                free or 1,
+            )
     return rows
 
 
@@ -666,7 +701,7 @@ async def run_buddy_call(
     reason: str = "buddy",
     duration_minutes: int | None = None,
 ) -> dict[str, Any]:
-    """Écoute quotidienne 12:00 TU : 4483 kHz + 6516 kHz sur plusieurs Kiwi."""
+    """Écoute quotidienne 12:00 TU : 4483 / 6516 / 8294 / 12353 kHz sur plusieurs Kiwi."""
     cfg = cfg or load_config()
     buddy = cfg.get("buddy") or {}
     root = data_dir(cfg)
@@ -678,15 +713,15 @@ async def run_buddy_call(
     vid = vacation_id(started) + "-buddy"
     session_dir = root / "vacations" / vid
     session_dir.mkdir(parents=True, exist_ok=True)
-    main_khz = float((buddy.get("main") or {}).get("freq_khz") or 4483.0)
-    alt_khz = float((buddy.get("alternate") or {}).get("freq_khz") or 6516.0)
-    cover_hz = [int(round(main_khz * 1000.0)), int(round(alt_khz * 1000.0))]
+    bands = _buddy_bands(cfg)
+    cover_hz = [int(round(float(b["freq_khz"]) * 1000.0)) for b in bands]
+    title_qrgs = " / ".join(fmt_khz(float(b["freq_khz"])) for b in bands)
     min_free = int(((buddy.get("kiwi") or {}).get("min_free_slots") or 2))
     meta: dict[str, Any] = {
         "id": vid,
         "status": "running",
         "reason": reason,
-        "title": f"Buddy call {fmt_khz(main_khz)} / {fmt_khz(alt_khz)} kHz",
+        "title": f"Buddy call {title_qrgs} kHz",
         "version": version(cfg),
         "club": cfg.get("club"),
         "started_at": started.isoformat(),
@@ -721,7 +756,7 @@ async def run_buddy_call(
         meta["kiwis_ranked"] = ranked[:10]
         roles = assign_buddy_kiwis(ranked, lat=float(aim["lat"]), lon=float(aim["lon"]), cfg=cfg)
         if not roles:
-            raise RuntimeError("Aucun KiwiSDR couvrant 4483 et 6516 kHz vers le centroïde buddy")
+            raise RuntimeError("Aucun KiwiSDR couvrant les QRG buddy vers le centroïde")
         meta["kiwi_roles"] = {role: _kiwi_snap(kiwi) for role, kiwi in roles.items()}
         channels = _buddy_channels(cfg, roles)
         assignment = {ch["id"]: roles[str(ch["site"])] for ch in channels if str(ch.get("site")) in roles}
@@ -1274,7 +1309,7 @@ def purge_old(cfg: dict[str, Any] | None = None) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Enregistrer une vacation HF GGR / F6KUF")
     parser.add_argument("--once", action="store_true", help="Lancer un enregistrement immédiat (vacation F6KUF)")
-    parser.add_argument("--buddy", action="store_true", help="Lancer un buddy call immédiat (4483 / 6516 kHz)")
+    parser.add_argument("--buddy", action="store_true", help="Lancer un buddy call immédiat (4483 / 6516 / 8294 / 12353 kHz)")
     parser.add_argument("--test-20m", action="store_true", help="Scan USB 20 m (test), puis archive dans l’UI")
     parser.add_argument(
         "--test-hunt",

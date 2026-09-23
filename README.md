@@ -1,20 +1,20 @@
-# GGR Trafic 1.1.13
+# GGR Trafic 1.1.14
 
 Archives du **trafic HF** entre le radio-club **F6KUF** et les bateaux de la flotte **Golden Globe Race**.
 
-Le **lundi et le jeudi** à **18:00 TU**, F6KUF émet un bulletin météo sur **14.135 MHz USB** (VFO calé sur 14.135000 ; le test radio manuel peut encore chasser ± 5 kHz) et écoute les accusés de réception sur **16.551 MHz USB** et **12.418 MHz USB** (± 5 kHz). Cette semaine : **Philippe F4HWM / F6KUF** depuis **Talmont-Saint-Hilaire**. **Michel FO5QB / F6KUF** (Tahiti) émet **tous les jours** à **18:00 TU** sur la même QRG. Après le **cap de Bonne-Espérance** (34°21′26″S 18°28′24″E), l’émission 14.135 MHz suivie en priorité est celle de Michel, jusqu’au cap Horn. Tous les jours à **12:00 TU**, un **buddy call** est écouté sur **4483 kHz USB** (principale) et **6516 kHz USB** (secours). L’application choisit les [KiwiSDR](http://kiwisdr.com/) selon la position : **bulletin 14.135 MHz** d’abord comme si l’on était sur le bateau (Kiwi le plus proche du centroïde) et près de l’émetteur, plus jusqu’à 4 Kiwi de **portée 20 m** (jusqu’où ça porte) ; **ACK 12.418 / 16.551 MHz** et **buddy 4483 / 6516 kHz** sur **4 à 10 Kiwi omni** répartis autour du centroïde (NVIS / 1 saut selon la QRG, F10.7 et Kp NOAA s’ils sont dispo). Skippers du centroïde (défaut) : Damien Guillou, Etienne Messikommer, Louis Kerdelhue. Audio USB + **screencast** de l’interface SDR pour le replay. L’interface est **FR/EN**. Le condensé METAREA se lit à voix haute (carte son du navigateur → entrée DATA du TRX) et se télécharge en MP3.
+Le **lundi et le jeudi** à **18:00 TU**, F6KUF émet un bulletin météo sur **14.135 MHz USB** (VFO calé sur 14.135000 ; le test radio manuel peut encore chasser ± 5 kHz) et écoute les accusés de réception sur **16.551 MHz USB** et **12.418 MHz USB** (± 5 kHz). Cette semaine : **Philippe F4HWM / F6KUF** depuis **Talmont-Saint-Hilaire**. **Michel FO5QB / F6KUF** (Tahiti) émet **tous les jours** à **18:00 TU** sur la même QRG. Après le **cap de Bonne-Espérance** (34°21′26″S 18°28′24″E), l’émission 14.135 MHz suivie en priorité est celle de Michel, jusqu’au cap Horn. Tous les jours à **12:00 TU**, un **buddy call** est écouté sur **4483 / 6516 / 8294 / 12353 kHz USB**. L’application choisit les [KiwiSDR](http://kiwisdr.com/) selon la position : **bulletin 14.135 MHz** d’abord comme si l’on était sur le bateau (Kiwi le plus proche du centroïde) et près de l’émetteur, plus jusqu’à 4 Kiwi de **portée 20 m** (jusqu’où ça porte) ; **ACK 12.418 / 16.551 MHz** et **buddy 4483 / 6516 / 8294 / 12353 kHz** sur **4 à 10 Kiwi omni** répartis autour du centroïde (NVIS / 1 saut selon la QRG, F10.7 et Kp NOAA s’ils sont dispo). Skippers du centroïde (défaut) : Damien Guillou, Etienne Messikommer, Louis Kerdelhue. Audio USB + **screencast** de l’interface SDR pour le replay. L’interface est **FR/EN**. Le condensé METAREA se lit à voix haute (carte son du navigateur → entrée DATA du TRX) et se télécharge en MP3.
 
 Les trois QRG, la tolérance, l’avance et la durée se règlent dans l’UI (**Réglages**). Un **record immédiat** permet de tester le suivi ± 5 kHz sans attendre 18:00 TU.
 
 ## Fonctionnement
 
 1. **Flotte** — centroïde des bateaux en course via le tracker Yellowbrick (`/BIN/ggr2026/AllPositions3`). Buddy call : centroïde d’un sous-ensemble de skippers (trio par défaut, ou trio + flotte).
-2. **SDR** — bulletin : un Kiwi près de chaque émetteur encore audible (**Philippe / F6KUF** lun. et jeu., **Michel** tous les jours, **Cap Town** en zone SA) **et** un près de la flotte ; ACK : un Kiwi près de la flotte, un en France (≤ 1500 km de Talmont-Saint-Hilaire), un vers Tahiti / Papeete (≤ 2500 km). Buddy : plusieurs Kiwi qui couvrent **4483** et **6516 kHz**, NVIS proche + saut 1 hop (~1400–3200 km à 12:00 TU), pas seulement le plus proche.
+2. **SDR** — bulletin : un Kiwi près de chaque émetteur encore audible (**Philippe / F6KUF** lun. et jeu., **Michel** tous les jours, **Cap Town** en zone SA) **et** un près de la flotte ; ACK : un Kiwi près de la flotte, un en France (≤ 1500 km de Talmont-Saint-Hilaire), un vers Tahiti / Papeete (≤ 2500 km). Buddy : plusieurs Kiwi qui couvrent **4483 / 6516 / 8294 / 12353 kHz**, NVIS proche + saut 1 hop (~1400–3200 km à 12:00 TU), pas seulement le plus proche.
 3. **Enregistrement** — 1 minute avant 18:00 TU, pendant 10 minutes (configurable) :
    - VFO calé sur **14.135000 MHz USB** (pas de chasse sur le bulletin programmé) puis screencast Playwright près de l’émetteur ;
    - WAV 12 kHz sur le bulletin (émetteur + flotte) **et** les deux QRG d’accusé **en même temps**, aux trois sites ;
    - muxage ffmpeg → MP4 H.264 / AAC.
-   Buddy call : 1 minute avant **12:00 TU**, 15 minutes, **4483 kHz** + **6516 kHz** en parallèle.
+   Buddy call : 1 minute avant **12:00 TU**, 15 minutes, **4483 / 6516 / 8294 / 12353 kHz**.
 4. **Replay** — interface web (français) : liste des trafics, lecteur vidéo, pistes audio.
 
 Déploiement prévu sur un VPS **Ubuntu 26.04** avec **k3s**, dans le namespace **`ggr-trafic`**. L’**UI** (`deploy/ggr-trafic`) et l’**enregistreur** (`deploy/ggr-trafic-recorder`) sont deux pods distincts : Playwright / Chromium ne saturent plus le site pendant un bulletin. Ils partagent le PVC **5 Gio** (`local-path`, donc sur `/`) : adapté à un disque racine d’une soixantaine de Go.
@@ -79,7 +79,7 @@ curl -X POST -H "X-Admin-Token: …" \
   -d '{"duration_minutes": 10}' \
   https://ggr-trafic.k3s.lpb.ovh/api/trafic/record
 
-# Buddy call immédiat (4483 / 6516 kHz)
+# Buddy call immédiat (4483 / 6516 / 8294 / 12353 kHz)
 curl -X POST -H "X-Admin-Token: …" \
   -H "Content-Type: application/json" \
   -d '{"kind": "buddy", "duration_minutes": 15}' \
@@ -126,7 +126,7 @@ Défauts dans [`config/default.yaml`](config/default.yaml) ; overrides runtime d
 | --- | --- |
 | Bulletin | 14.135 MHz USB, QRG 14.135000 ; F6KUF lundi et jeudi 18:00 TU (cette semaine Philippe F4HWM, Talmont-Saint-Hilaire) ; Michel FO5QB tous les jours 18:00 TU |
 | Accusé | 16.551 MHz USB, 12.418 MHz USB (± 5 kHz ; flotte + France + Tahiti, en parallèle du bulletin) |
-| Buddy call | 4483 kHz USB (principale), 6516 kHz USB (secours), 12:00 TU, 15 min |
+| Buddy call | 4483 / 6516 / 8294 / 12353 kHz USB, 12:00 TU, 15 min |
 | Centroïde buddy | Damien Guillou, Etienne Messikommer, Louis Kerdelhue (modifiable ; option « + flotte ») |
 | Avance | 1 min (début 17:59 TU) |
 | Durée | 10 min (fin 18:09 TU) |

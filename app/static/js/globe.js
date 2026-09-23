@@ -222,6 +222,9 @@
   }
 
   const traficQBoot = new URLSearchParams(location.search).get("trafic") || new URLSearchParams(location.search).get("vac");
+  const deepQ = new URLSearchParams(location.search);
+  const deepZoom = deepQ.get("zoom") === "1" || deepQ.get("zoom") === "true" || deepQ.has("ch");
+  const deepFocus = deepQ.get("ch") || deepQ.get("focus") || (deepZoom ? "0" : "");
   setPanelOpen(!!traficQBoot);
 
   if (kiwiToggle) {
@@ -1175,11 +1178,16 @@
 
   function mountMuxMixer(v, tracks) {
     if (openVid !== v.id || !window.GgrMixer) return;
+    const q = new URLSearchParams(location.search);
+    const zoom = deepZoom || q.get("zoom") === "1" || q.get("zoom") === "true" || q.has("ch");
+    const focus = deepFocus || q.get("ch") || q.get("focus") || (zoom ? "0" : "");
     window.GgrMixer.mount({
       root: mixRoot,
       tracks: tracks,
       vacId: v.id,
       started: v.started_at,
+      zoom: zoom,
+      focus: focus,
       onFocus: function (trackId) {
         muxFocusId = trackId || null;
         document.body.classList.toggle("kiwi-mix-focus", !!trackId);
@@ -1226,7 +1234,7 @@
       if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) next = full.mixer_tracks;
       else if ((full.channels || []).length) next = mixerTracks(full);
       const richer = next.some((t, i) => (t.src || "") && (t.src || "") !== ((listed[i] && listed[i].src) || ""));
-      if (richer && !muxFocusId) mountMuxMixer(v, next);
+      if (richer) mountMuxMixer(v, next);
     } catch {
       /* carte globe : lat/lon déjà dans la liste */
     }
@@ -2365,6 +2373,8 @@
             buddy_enabled: cur.buddy_enabled,
             buddy_main_khz: cur.buddy_main_khz,
             buddy_alt_khz: cur.buddy_alt_khz,
+            buddy_extra1_khz: cur.buddy_extra1_khz,
+            buddy_extra2_khz: cur.buddy_extra2_khz,
             buddy_time_utc: cur.buddy_time_utc,
             buddy_lead: cur.buddy_lead,
             buddy_duration_minutes: cur.buddy_duration_minutes,

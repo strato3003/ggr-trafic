@@ -135,8 +135,25 @@ def accept_google_user(userinfo: dict[str, Any] | None) -> dict[str, Any]:
     return op
 
 
-def login_redirect(reason: str) -> RedirectResponse:
-    qs = urlencode({"auth": reason})
+def safe_next(value: str | None) -> str:
+    """Chemin relatif sûr après login (anti open-redirect)."""
+    raw = (value or "").strip()
+    if not raw.startswith("/") or raw.startswith("//"):
+        return "/"
+    path = raw.split("?", 1)[0]
+    if path.startswith("/login") or path.startswith("/auth"):
+        return "/"
+    if "\n" in raw or "\r" in raw:
+        return "/"
+    return raw[:500]
+
+
+def login_redirect(reason: str, next_url: str | None = None) -> RedirectResponse:
+    params: dict[str, str] = {"auth": reason}
+    nxt = safe_next(next_url)
+    if nxt != "/":
+        params["next"] = nxt
+    qs = urlencode(params)
     return RedirectResponse(f"/login?{qs}", status_code=302)
 
 
@@ -197,5 +214,9 @@ class RequireLoginMiddleware:
             response = JSONResponse({"ok": False, "detail": "Connexion requise"}, status_code=401)
             await response(scope, receive, send)
             return
-        response = RedirectResponse("/login", status_code=302)
+        qs = scope.get("query_string") or b""
+        target = path + (("?" + qs.decode("latin-1")) if qs else "")
+        from urllib.parse import quote
+
+        response = RedirectResponse("/login?next=" + quote(target, safe=""), status_code=302)
         await response(scope, receive, send)

@@ -1422,6 +1422,59 @@ def test_buddy_channels_record_both_qrgs():
     assert rows[2]["screencast"] is False
 
 
+def test_buddy_channels_round_robin_extras():
+    from recorder.session import _buddy_channels
+
+    cfg = {
+        "buddy": {
+            "main": {"freq_khz": 4483.0, "label": "Buddy call 4483 kHz", "zoom": 12},
+            "alternate": {"freq_khz": 6516.0, "label": "Buddy call 6516 kHz (secours)", "zoom": 12},
+            "extras": [
+                {"freq_khz": 8294.0, "label": "Buddy call 8294 kHz", "zoom": 12},
+                {"freq_khz": 12353.0, "label": "Buddy call 12353 kHz", "zoom": 12},
+            ],
+        }
+    }
+    roles = {
+        "nvis": {"name": "kiwi-nvis", "site_label": "proche / NVIS", "free_slots": 3},
+        "hop": {"name": "kiwi-hop", "site_label": "saut 1 hop", "free_slots": 1},
+    }
+    rows = _buddy_channels(cfg, roles)
+    assert [c["id"] for c in rows] == ["nvis-main", "nvis-alt", "nvis-x0", "hop-x1"]
+    assert [c["freq_khz"] for c in rows] == [4483.0, 6516.0, 8294.0, 12353.0]
+
+
+def test_buddy_context_extras_defaults():
+    from recorder.config import buddy_context
+
+    ctx = buddy_context(
+        {
+            "buddy": {
+                "main": {"freq_khz": 4483.0},
+                "alternate": {"freq_khz": 6516.0},
+                "extras": [
+                    {"freq_khz": 8294.0},
+                    {"freq_khz": 12353.0},
+                ],
+            }
+        }
+    )
+    assert ctx["buddy_extra1_khz"] == 8294.0
+    assert ctx["buddy_extra2_khz"] == 12353.0
+    assert ctx["buddy_qrgs_label"] == "4483 / 6516 / 8294 / 12353"
+
+
+def test_safe_next_keeps_zoom_query():
+    from app.auth_google import safe_next
+
+    assert safe_next("/trafic/2026-01-01T1200Z-buddy?zoom=1&ch=0") == (
+        "/trafic/2026-01-01T1200Z-buddy?zoom=1&ch=0"
+    )
+    assert safe_next("/?trafic=abc&zoom=1") == "/?trafic=abc&zoom=1"
+    assert safe_next("https://evil.example/") == "/"
+    assert safe_next("//evil.example/") == "/"
+
+
 def test_kiwi_tune_url_sets_wf_colormap():
     from recorder.kiwi_list import kiwi_tune_url
 

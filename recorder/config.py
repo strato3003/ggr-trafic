@@ -398,7 +398,29 @@ def buddy_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     kiwi = buddy.get("kiwi") or {}
     main_khz = float(main.get("freq_khz") or 4483.0)
     alt_khz = float(alt.get("freq_khz") or 6516.0)
+    extras: list[dict[str, Any]] = []
+    extra_khz: list[float] = []
+    for raw in buddy.get("extras") or []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            khz = float(raw.get("freq_khz"))
+        except (TypeError, ValueError):
+            continue
+        if not (1000.0 <= khz <= 30000.0):
+            continue
+        extra_khz.append(khz)
+        extras.append(
+            {
+                "freq_khz": khz,
+                "label": raw.get("label") or f"Buddy call {fmt_khz(khz)} kHz",
+                "zoom": int(raw.get("zoom") or 12),
+            }
+        )
+    while len(extra_khz) < 2:
+        extra_khz.append(8294.0 if len(extra_khz) == 0 else 12353.0)
     skippers = [str(x).strip() for x in (cent.get("skippers") or []) if str(x).strip()]
+    all_khz = [main_khz, alt_khz] + extra_khz[:2]
     return {
         "buddy_enabled": bool(buddy.get("enabled", True)),
         "buddy_time_utc": _hhmm(buddy.get("time_utc"), "12:00"),
@@ -406,6 +428,10 @@ def buddy_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "buddy_duration_minutes": int(buddy.get("duration_minutes") or 15),
         "buddy_main_khz": main_khz,
         "buddy_alt_khz": alt_khz,
+        "buddy_extra1_khz": float(extra_khz[0]),
+        "buddy_extra2_khz": float(extra_khz[1]),
+        "buddy_extras": extras,
+        "buddy_qrgs_label": " / ".join(fmt_khz(k) for k in all_khz),
         "buddy_main_label": main.get("label") or f"Buddy call {fmt_khz(main_khz)} kHz",
         "buddy_alt_label": alt.get("label") or f"Buddy call {fmt_khz(alt_khz)} kHz (secours)",
         "buddy_skippers": skippers,
@@ -434,4 +460,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
             return pkg_version("ggr-vacations")
         except PackageNotFoundError:
             cfg = cfg or {}
-            return str(cfg.get("version") or "1.1.13")
+            return str(cfg.get("version") or "1.1.14")

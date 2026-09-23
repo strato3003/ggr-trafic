@@ -56,7 +56,7 @@
         TX {{ tx_mhz }} MHz · ACK {{ ack1_mhz }} / {{ ack2_mhz }} · {{ schedule_ident_short }} {{ time_utc }} TU
       </p>
       <p class="kiwi-ident__qrg">
-        Buddy {{ '%.0f'|format(buddy_main_khz) }} / {{ '%.0f'|format(buddy_alt_khz) }} kHz · {{ buddy_time_utc }} TU
+        Buddy {{ buddy_qrgs_label }} kHz · {{ buddy_time_utc }} TU
       </p>
       <p class="kiwi-ident__qrg">
         {{ t('tx_on_air') }} : {{ bulletin_tx_label | default('F6KUF') }}
@@ -223,6 +223,9 @@
   "qrg": {
     "buddy_main_khz": buddy_main_khz,
     "buddy_alt_khz": buddy_alt_khz,
+    "buddy_extra1_khz": buddy_extra1_khz,
+    "buddy_extra2_khz": buddy_extra2_khz,
+    "buddy_qrgs_label": buddy_qrgs_label,
     "buddy_time_utc": buddy_time_utc
   }
 } | tojson }}</script>
@@ -230,8 +233,8 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
-<script src="/static/js/mixer.js?v={{ version }}-kiwi67"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi58"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi68"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi59"></script>
 <script src="/static/js/wait.js?v={{ version }}-kiwi1"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi76"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi77"></script>
 {% endblock %}

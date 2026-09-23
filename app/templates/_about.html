@@ -6,7 +6,7 @@
     {{ t('about_p_listen', tx_label=bulletin_tx_label | default('F6KUF')) }}{% if bulletin_tx_overlap %}{{ t('about_p_overlap') }}{% endif %}
     {{ t('about_p_kiwis') }}
     {{ t('about_p_ack', ack1=ack1_mhz, ack2=ack2_mhz, tol=qrg_tolerance_khz) }}
-    {{ t('about_p_buddy', buddy=buddy_time_utc, main=('%.0f'|format(buddy_main_khz)), alt=('%.0f'|format(buddy_alt_khz)), skippers=buddy_skippers_short) }}
+    {{ t('about_p_buddy', buddy=buddy_time_utc, qrgs=buddy_qrgs_label, skippers=buddy_skippers_short) }}
     {{ t('about_p_range') }}
   </p>
   <h2>{{ t('about_h2_how') }}</h2>
