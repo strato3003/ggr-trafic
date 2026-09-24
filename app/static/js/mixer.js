@@ -794,6 +794,7 @@ window.GgrMixer = (function () {
     t0 = off;
     playing = true;
     seekGate = true;
+    trLastTickT = null;
     noteReplayPlay();
     const all = tracks.filter((tr) => tr.el && !tr.dead);
     const needWarm = all.some((tr) => !trackPlayable(tr));
