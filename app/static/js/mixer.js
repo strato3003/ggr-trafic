@@ -571,6 +571,31 @@ window.GgrMixer = (function () {
     return Math.round(buf);
   }
 
+  /** true si la timeline autour de t (ou currentTime) est déjà en cache. */
+  function bufferedAt(el, t) {
+    if (!el || !el.buffered || !el.buffered.length) return false;
+    const cur = Number.isFinite(t) ? t : Number.isFinite(el.currentTime) ? el.currentTime : 0;
+    try {
+      for (let i = 0; i < el.buffered.length; i++) {
+        const a = el.buffered.start(i);
+        const b = el.buffered.end(i);
+        if (a - 0.35 <= cur && cur + 1.2 <= b) return true;
+      }
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+
+  function playheadCovered(tr) {
+    const el = tr && tr.el;
+    if (!el) return false;
+    if (el.readyState >= 4) return true;
+    const cur = Number.isFinite(el.currentTime) ? el.currentTime : t0;
+    if (bufferedAt(el, cur)) return true;
+    return el.readyState >= 3 && bufferAroundPct(el) >= 80;
+  }
+
   function setAudioLoadPoll(on) {
     if (on) {
       if (audioLoadPoll) return;
@@ -596,24 +621,31 @@ window.GgrMixer = (function () {
     const HAVE_CURRENT = 2;
     const HAVE_FUTURE = 3;
     const NETWORK_LOADING = 2;
+    const uncovered = live.filter((tr) => !playheadCovered(tr));
     const ready = live.filter((tr) => tr.el.readyState >= HAVE_FUTURE).length;
     const canPlay = live.filter((tr) => tr.el.readyState >= HAVE_CURRENT).length;
-    const netBusy = live.some((tr) => tr.el.networkState === NETWORK_LOADING);
-    const starving = playing && live.some((tr) => tr.el.readyState < HAVE_FUTURE);
-    const seeking = seekGate || live.some((tr) => tr.el.seeking);
-    // Ne plus traiter readyState<2 seul comme « chargement » : sinon 0/n figé à l’arrêt.
+    // Seek waterfall / scrub : pas d’UI si le buffer couvre déjà la tête de lecture.
+    const netBusy = uncovered.some((tr) => tr.el.networkState === NETWORK_LOADING);
+    const seekingGap = uncovered.some((tr) => tr.el.seeking) || (seekGate && uncovered.length > 0);
+    const starving = playing && uncovered.some((tr) => tr.el.readyState < HAVE_FUTURE);
     const busy =
-      audioWarming || seeking || netBusy || starving || (playing && canPlay < live.length);
+      (audioWarming && uncovered.length > 0) ||
+      seekingGap ||
+      netBusy ||
+      starving ||
+      (playing && uncovered.length > 0);
+
+    if (!uncovered.length && audioWarming && !playing) audioWarming = false;
 
     live.forEach((tr) => {
       if (tr.extractBusy) return;
-      if (!busy) {
+      if (!busy || playheadCovered(tr)) {
         setTrackLoad(tr, 100, { done: true });
         return;
       }
       const pct = trackAudioPct(tr);
       const label =
-        seeking && pct < 8 ? t("audio_seek") : audioWarming && !playing ? t("audio_prep") : t("audio_load");
+        seekingGap && pct < 8 ? t("audio_seek") : audioWarming && !playing ? t("audio_prep") : t("audio_load");
       setTrackLoad(tr, pct, { label: label });
     });
 
@@ -627,10 +659,10 @@ window.GgrMixer = (function () {
       hideGlobalAudioLoad();
       return;
     }
-    const pcts = live.map((tr) => (tr.extractBusy ? tr.loadPct || 0 : trackAudioPct(tr)));
-    const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
+    const pcts = uncovered.map((tr) => (tr.extractBusy ? tr.loadPct || 0 : trackAudioPct(tr)));
+    const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 100;
     let msg;
-    if (seeking && !avg) msg = t("audio_seek");
+    if (seekingGap && !avg) msg = t("audio_seek");
     else if (audioWarming && !playing) msg = t("audio_prep") + " " + avg + " % · " + canPlay + "/" + live.length;
     else if (avg) msg = t("audio_buf", { pct: avg, ready: canPlay, n: live.length });
     else msg = t("audio_load_n", { ready: canPlay, n: live.length });
@@ -748,9 +780,11 @@ window.GgrMixer = (function () {
     t0 = off;
     playing = true;
     seekGate = true;
-    audioWarming = true;
     noteReplayPlay();
     const all = tracks.filter((tr) => tr.el && !tr.dead);
+    // Seek déjà en cache : pas de bandeau « rechargement » à 100 %.
+    const needWarm = all.some((tr) => !playheadCovered(tr));
+    audioWarming = needWarm;
     all.forEach((tr) => {
       if (tr.el.preload !== "auto") tr.el.preload = "auto";
       tr.el.muted = true;
@@ -808,6 +842,9 @@ window.GgrMixer = (function () {
       }
       goPlay();
     });
+    window.setTimeout(() => {
+      if (gen === playGen && seekGate) goPlay();
+    }, needWarm ? 2500 : 400);
   }
 
   function setPlayUi(on) {
