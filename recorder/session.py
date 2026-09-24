@@ -231,6 +231,25 @@ def _channels(
                     "screencast": bool((cfg.get("sdr") or {}).get("screencast_ack", False)),
                 }
             )
+    # Voie réservée : ACK depuis TRX local (SCU-17 / beam), remplie par upload navigateur.
+    ack0 = (radio.get("ack") or [{}])[0] if (radio.get("ack") or []) else {}
+    try:
+        local_khz = float(ack0.get("freq_khz") or 16551.0)
+    except (TypeError, ValueError):
+        local_khz = 16551.0
+    rows.append(
+        {
+            "id": "ack-local",
+            "kind": "ack",
+            "site": "local",
+            "site_label": "TRX local (SCU-17)",
+            "freq_khz": local_khz,
+            "label": "Accusé TRX local (beam)",
+            "zoom": int(ack0.get("zoom") or 10),
+            "screencast": False,
+            "local_trx": True,
+        }
+    )
     return rows
 
 
@@ -592,6 +611,10 @@ async def run_vacation(
 
         jobs = []
         for ch in channels:
+            if ch.get("local_trx"):
+                # Placeholder : audio apporté plus tard via POST /local-ack (SCU-17).
+                meta["channels"].append({**ch})
+                continue
             kiwi = assignment.get(ch["id"])
             if not kiwi:
                 log.warning("Canal %s sans Kiwi — ignoré", ch["id"])

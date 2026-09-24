@@ -557,10 +557,24 @@ window.GgrMixer = (function () {
     return bufferedPct(el);
   }
 
+  /** % visible par piste (buffer HTML5), jamais figé à 0 si le réseau travaille. */
+  function trackAudioPct(tr) {
+    const el = tr && tr.el;
+    if (!el) return 0;
+    const buf = Math.max(bufferedPct(el), bufferAroundPct(el));
+    const rs = el.readyState || 0;
+    if (rs >= 4) return 100;
+    if (rs >= 3) return Math.max(70, Math.round(buf));
+    if (rs >= 2) return Math.max(45, Math.round(buf));
+    if (rs >= 1) return Math.max(12, Math.round(buf) || (el.networkState === 2 ? 8 : 5));
+    if (el.networkState === 2) return Math.max(3, Math.round(buf));
+    return Math.round(buf);
+  }
+
   function setAudioLoadPoll(on) {
     if (on) {
       if (audioLoadPoll) return;
-      audioLoadPoll = window.setInterval(updateAudioLoad, 250);
+      audioLoadPoll = window.setInterval(updateAudioLoad, 200);
       return;
     }
     if (!audioLoadPoll) return;
@@ -568,51 +582,65 @@ window.GgrMixer = (function () {
     audioLoadPoll = 0;
   }
 
-  function updateAudioLoad() {
+  function hideGlobalAudioLoad() {
     if (!audioLoadEl) return;
+    audioLoadEl.hidden = true;
+    if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = "";
+    else audioLoadEl.textContent = "";
+    if (audioLoadFill) audioLoadFill.style.width = "0%";
+    setAudioLoadPoll(false);
+  }
+
+  function updateAudioLoad() {
     const live = tracks.filter((tr) => tr.el && !tr.dead && liveForPlay(tr));
-    if (!live.length) {
-      audioLoadEl.hidden = true;
-      if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = "";
-      else audioLoadEl.textContent = "";
-      if (audioLoadFill) audioLoadFill.style.width = "0%";
-      setAudioLoadPoll(false);
-      return;
-    }
     const HAVE_CURRENT = 2;
     const HAVE_FUTURE = 3;
+    const NETWORK_LOADING = 2;
     const ready = live.filter((tr) => tr.el.readyState >= HAVE_FUTURE).length;
     const canPlay = live.filter((tr) => tr.el.readyState >= HAVE_CURRENT).length;
-    const loading = live.some((tr) => tr.el.networkState === 2 || tr.el.readyState < HAVE_CURRENT);
+    const netBusy = live.some((tr) => tr.el.networkState === NETWORK_LOADING);
     const starving = playing && live.some((tr) => tr.el.readyState < HAVE_FUTURE);
     const seeking = seekGate || live.some((tr) => tr.el.seeking);
-    const busy = audioWarming || seeking || loading || starving || (playing && ready < live.length);
-    if (!busy && ready === live.length && !playing) {
-      audioLoadEl.hidden = true;
-      if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = "";
-      if (audioLoadFill) audioLoadFill.style.width = "0%";
-      setAudioLoadPoll(false);
-      audioWarming = false;
+    // Ne plus traiter readyState<2 seul comme « chargement » : sinon 0/n figé à l’arrêt.
+    const busy =
+      audioWarming || seeking || netBusy || starving || (playing && canPlay < live.length);
+
+    live.forEach((tr) => {
+      if (tr.extractBusy) return;
+      if (!busy) {
+        setTrackLoad(tr, 100, { done: true });
+        return;
+      }
+      const pct = trackAudioPct(tr);
+      const label =
+        seeking && pct < 8 ? t("audio_seek") : audioWarming && !playing ? t("audio_prep") : t("audio_load");
+      setTrackLoad(tr, pct, { label: label });
+    });
+
+    if (!audioLoadEl) {
+      if (busy) setAudioLoadPoll(true);
+      else setAudioLoadPoll(false);
       return;
     }
-    if (!busy) {
-      audioLoadEl.hidden = true;
-      if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = "";
-      if (audioLoadFill) audioLoadFill.style.width = "0%";
-      setAudioLoadPoll(false);
+    if (!live.length || !busy) {
+      if (!busy) audioWarming = false;
+      hideGlobalAudioLoad();
       return;
     }
-    const pcts = live.map((tr) => bufferAroundPct(tr.el));
+    const pcts = live.map((tr) => (tr.extractBusy ? tr.loadPct || 0 : trackAudioPct(tr)));
     const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
     let msg;
     if (seeking && !avg) msg = t("audio_seek");
-    else if (audioWarming && !playing) msg = t("audio_prep") + (avg ? " " + avg + " %" : "");
+    else if (audioWarming && !playing) msg = t("audio_prep") + " " + avg + " % · " + canPlay + "/" + live.length;
     else if (avg) msg = t("audio_buf", { pct: avg, ready: canPlay, n: live.length });
     else msg = t("audio_load_n", { ready: canPlay, n: live.length });
     audioLoadEl.hidden = false;
     if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = msg;
     else audioLoadEl.textContent = msg;
-    if (audioLoadFill) audioLoadFill.style.width = Math.max(4, avg || Math.round((canPlay / Math.max(1, live.length)) * 100)) + "%";
+    if (audioLoadFill) {
+      audioLoadFill.style.width =
+        Math.max(4, avg || Math.round((canPlay / Math.max(1, live.length)) * 100)) + "%";
+    }
     audioLoadEl.title = msg;
     setAudioLoadPoll(true);
   }
@@ -810,6 +838,7 @@ window.GgrMixer = (function () {
     playing = false;
     tracks.forEach((tr) => {
       if (tr.el) tr.el.pause();
+      if (!tr.extractBusy) setTrackLoad(tr, 100, { done: true });
     });
     setPlayUi(false);
     cancelAnimationFrame(raf);
@@ -1159,9 +1188,11 @@ window.GgrMixer = (function () {
           '<p class="mix__wf-legend" hidden>USB 0 Hz (bas) → 2,7 kHz (haut) · noir/bleu = bruit · cyan/vert = signal · jaune/blanc = fort</p>' +
           (tr.dead
             ? ""
-            : '<div class="mix__wf-load"' +
-              (tr.waterfall ? " hidden" : "") +
-              ">Extraction bande son en cours… 0 %</div>") +
+            : '<div class="mix__wf-load" hidden>' +
+              '<i class="mix__wf-load-fill" aria-hidden="true"></i>' +
+              '<span class="mix__wf-load-txt">' +
+              t("audio_load") +
+              " · 0 %</span></div>") +
           '<div class="mix__loop" hidden>' +
           '<div class="mix__loop-dim mix__loop-dim--l"></div>' +
           '<div class="mix__loop-sel">' +
@@ -1270,16 +1301,35 @@ window.GgrMixer = (function () {
     updateLoopUi();
   }
 
-  function setExtract(tr, pct, done) {
-    const el = tr.loadEl;
+  function setTrackLoad(tr, pct, opts) {
+    const el = tr && tr.loadEl;
     if (!el) return;
-    if (done || tr.dead) {
+    const done = !!(opts && opts.done);
+    if (done || (tr && tr.dead)) {
       el.hidden = true;
+      tr.loadPct = 100;
       return;
     }
-    const n = Math.max(0, Math.min(100, Math.round(pct)));
+    const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    tr.loadPct = n;
     el.hidden = false;
-    el.textContent = "Extraction bande son en cours… " + n + " %";
+    const fill = el.querySelector(".mix__wf-load-fill");
+    const txt = el.querySelector(".mix__wf-load-txt");
+    const label = (opts && opts.label) || t("audio_load");
+    if (fill) fill.style.width = n + "%";
+    if (txt) txt.textContent = label + " · " + n + " %";
+    else el.textContent = label + " · " + n + " %";
+  }
+
+  function setExtract(tr, pct, done) {
+    if (!tr) return;
+    if (done) {
+      tr.extractBusy = false;
+      setTrackLoad(tr, 100, { done: true });
+      return;
+    }
+    tr.extractBusy = true;
+    setTrackLoad(tr, pct, { label: t("audio_extract") });
   }
 
   function attachAudio(tr) {
@@ -1312,6 +1362,7 @@ window.GgrMixer = (function () {
     tr.el.addEventListener("loadedmetadata", () => {
       noteDuration(tr.el.duration);
       if (!playing) seekElTo(tr, t0);
+      updateAudioLoad();
     });
     tr.el.addEventListener("timeupdate", () => {
       if (!playing || seekGate || !loopOn || !liveForPlay(tr)) return;
@@ -1540,6 +1591,8 @@ window.GgrMixer = (function () {
         specDb: false,
         waterfall: row.waterfall || (row.id ? "waterfall-" + row.id + ".png" : ""),
         storedWf: false,
+        extractBusy: false,
+        loadPct: 0,
       });
     });
     if (!tracks.length) {
@@ -1620,10 +1673,7 @@ window.GgrMixer = (function () {
     if (ro) ro.disconnect();
     ac.abort();
     if (audioLoadEl) {
-      audioLoadEl.hidden = true;
-      if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = "";
-      else audioLoadEl.textContent = "";
-      if (audioLoadFill) audioLoadFill.style.width = "0%";
+      hideGlobalAudioLoad();
     }
     const bin = document.getElementById("mix-audio-bin");
     if (bin) bin.remove();

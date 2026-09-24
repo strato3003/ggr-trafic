@@ -1021,7 +1021,10 @@ def test_ack_channels_per_site():
         "ack2-fleet",
         "ack2-france",
         "ack2-tahiti",
+        "ack-local",
     ]
+    assert channels[-1]["local_trx"] is True
+    assert channels[-1]["freq_khz"] == 16551.0
     assert channels[0]["site_label"] == "flotte (bulletin)"
     assert channels[0]["screencast"] is True
     roles = {
@@ -1034,11 +1037,13 @@ def test_ack_channels_per_site():
     assert got["tx"]["name"] == "k-fleet-tx"
     assert got["ack1-france"]["name"] == "k-fr"
     assert got["ack2-tahiti"]["name"] == "k-th"
+    assert "ack-local" not in got
 
     overlap = _channels(cfg, sites, extra_tx=[{"id": "cape", "label": "Cap Town"}])
     assert [c["id"] for c in overlap[:2]] == ["tx", "tx-cape"]
     assert overlap[1]["site"] == "tx_cape"
     assert overlap[1]["screencast"] is False
+    assert overlap[-1]["id"] == "ack-local"
 
 
 def test_runtime_settings_override_qrg(tmp_path, monkeypatch):

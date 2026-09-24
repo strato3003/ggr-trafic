@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent
 SUBZONES_PATH = ROOT / "static" / "geo" / "metarea2-subzones.json"
 METAREAS_PATH = ROOT / "static" / "geo" / "metareas.json"
 WWMIWS = "https://wwmiws.wmo.int/index.php/metareas"
-UA = "GGR-Trafic/1.1.18 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
+UA = "GGR-Trafic/1.1.19 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
 CACHE_TTL_S = 20 * 60
 # Grilles intérieures officielles (rectangles + océan). Les autres METAREA
 # basculent seules via le polygone OHI + le bulletinset WWMIWS du même n°.

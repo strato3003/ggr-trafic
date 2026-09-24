@@ -1614,21 +1614,42 @@ body.kiwi-mix-focus .mix__seek {
 .mix__wf-load {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 0.4rem;
   z-index: 3;
   pointer-events: none;
-  font: 600 0.58rem var(--sans);
-  letter-spacing: 0.01em;
-  color: #e8f4fc;
-  text-shadow: 0 1px 2px #000;
-  background: linear-gradient(90deg, rgba(4, 12, 20, 0.72), rgba(4, 12, 20, 0.28) 70%, transparent);
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
-  text-overflow: ellipsis;
+  background: rgba(4, 12, 20, 0.42);
 }
 .mix__wf-load[hidden] { display: none; }
+.mix__wf-load-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--brass) 70%, transparent),
+    color-mix(in srgb, var(--foam, #9ed0e8) 45%, transparent)
+  );
+  transition: width 0.18s linear;
+  pointer-events: none;
+}
+.mix__wf-load-txt {
+  position: relative;
+  z-index: 1;
+  padding: 0.2rem 0.55rem;
+  border-radius: 3px;
+  font: 700 0.72rem/1.25 var(--sans);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: #f2f8fc;
+  text-shadow: 0 1px 2px #000;
+  background: rgba(4, 12, 20, 0.55);
+  white-space: nowrap;
+}
 .mix__head {
   position: absolute;
   top: 0;

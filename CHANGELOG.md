@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.19 — 2026-09-24
+
+- Mixeur : progression par piste (remplissage + %) ; bandeau global ne reste plus figé à 0/n.
+- SCU-17 : module navigateur (`scu17.js`) + voie `ack-local` réservée (upload TRX/beam à venir).
+
 ## 1.1.18 — 2026-09-24
 
 - Bulletin : 1 Kiwi flotte (14.135 + screencast) + 5 omni ACK ; plus de faisceaux / multi-QTH / extrêmes.
