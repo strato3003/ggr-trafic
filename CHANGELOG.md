@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.1.17 — 2026-09-24
+
+- Mixeur : barre de chargement audio dédiée (%, voies), visible dès le deep-link `?t=` / seek ; préchauffage buffer au positionnement.
+
 ## 1.1.16 — 2026-09-23
 
 - METAREA FR : lexique synoptique complété (moving, weakening, New High, Monsoon trough, vestige Fay, UTC collé, coords décimales).
