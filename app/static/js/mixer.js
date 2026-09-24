@@ -99,6 +99,7 @@ window.GgrMixer = (function () {
   let handleDrag = null;
   let seekGate = false;
   let playGen = 0;
+  let trLastTickT = null;
   const ac = new AbortController();
   const sig = { signal: ac.signal };
   const ICO_EXPAND =
@@ -554,20 +555,32 @@ window.GgrMixer = (function () {
     } catch {
       /* ignore */
     }
-    return bufferedPct(el);
+    return 0;
   }
 
-  /** % buffer HTML5 (durée), monotone pour la jauge. */
+  /**
+   * Jauge « prêt à jouer » autour de la tête (pas le % fichier entier).
+   * Monotone + creep réseau pour ne jamais rester figée.
+   */
   function trackLoadPct(tr) {
     const el = tr && tr.el;
     if (!el) return Number(tr && tr.loadPct) || 0;
-    const buf = bufferedPct(el);
     const prev = Number(tr.loadPct) || 0;
-    if (buf >= 0.5) return Math.max(prev, buf);
-    // Avant le 1er range buffered : indiquer l’activité réseau sans rester à 1 % figé.
-    if (el.networkState === 2) return Math.max(prev, Math.min(12, prev + 0.8));
-    if ((el.readyState || 0) >= 1) return Math.max(prev, 4);
-    return prev;
+    const around = bufferAroundPct(el);
+    const whole = bufferedPct(el);
+    const rs = el.readyState || 0;
+    let next = prev;
+    if (around > 0) next = Math.max(next, around);
+    else if (whole > 0) next = Math.max(next, Math.min(85, whole));
+    if (rs >= 4) next = Math.max(next, 95);
+    else if (rs >= 3) next = Math.max(next, 70);
+    else if (rs >= 2) next = Math.max(next, 45);
+    else if (rs >= 1) next = Math.max(next, 12);
+    // Creep tant que le navigateur charge (évite 1 % / 12 % figés).
+    if (el.networkState === 2 && next < 92) next = Math.min(92, next + 1.2);
+    else if (rs < 2 && next < 18) next = Math.min(18, next + 0.6);
+    if (playheadCovered(tr)) next = Math.max(next, 100);
+    return next;
   }
 
   function bufferedAt(el, t) {
@@ -588,9 +601,16 @@ window.GgrMixer = (function () {
   function playheadCovered(tr) {
     const el = tr && tr.el;
     if (!el) return false;
-    if (el.readyState >= 4 && bufferedPct(el) >= 98) return true;
+    if ((el.readyState || 0) >= 3 && bufferAroundPct(el) >= 50) return true;
+    if ((el.readyState || 0) >= 4) return true;
     const cur = Number.isFinite(el.currentTime) ? el.currentTime : t0;
     return bufferedAt(el, cur);
+  }
+
+  function trackPlayable(tr) {
+    const el = tr && tr.el;
+    if (!el) return false;
+    return (el.readyState || 0) >= 2 && (playheadCovered(tr) || bufferAroundPct(el) >= 25);
   }
 
   function setAudioLoadPoll(on) {
@@ -615,46 +635,20 @@ window.GgrMixer = (function () {
 
   function updateAudioLoad() {
     const live = tracks.filter((tr) => tr.el && !tr.dead && liveForPlay(tr));
-    const HAVE_CURRENT = 2;
-    const HAVE_FUTURE = 3;
-    const NETWORK_LOADING = 2;
-    const canPlay = live.filter((tr) => tr.el.readyState >= HAVE_CURRENT).length;
-    const netBusy = live.some((tr) => tr.el.networkState === NETWORK_LOADING);
-    const notReady = live.some((tr) => tr.el.readyState < HAVE_CURRENT);
-    const starving = playing && live.some((tr) => tr.el.readyState < HAVE_FUTURE && !playheadCovered(tr));
-    // Seek : UI seulement si la tête n’est pas encore couverte (pas de flash à 100 %).
-    const seekGap = live.some((tr) => {
-      if (!(tr.el.seeking || seekGate)) return false;
-      return !playheadCovered(tr);
-    });
-    const busy =
-      audioWarming ||
-      seekGap ||
-      starving ||
-      (netBusy && live.some((tr) => bufferedPct(tr.el) < 99)) ||
-      (audioWarming && notReady) ||
-      (playing && live.some((tr) => tr.el.readyState < HAVE_CURRENT));
+    const canPlay = live.filter((tr) => trackPlayable(tr)).length;
+    const seekGap = live.some((tr) => (tr.el.seeking || seekGate) && !playheadCovered(tr));
+    const starving = playing && live.some((tr) => !trackPlayable(tr));
+    const warmingGap = audioWarming && live.some((tr) => !trackPlayable(tr));
+    const busy = !!(live.length && (audioWarming || seekGap || starving || warmingGap));
 
-    if (
-      audioWarming &&
-      !playing &&
-      live.length &&
-      live.every((tr) => tr.el.readyState >= HAVE_CURRENT && (playheadCovered(tr) || bufferAroundPct(tr.el) >= 35))
-    ) {
+    if (audioWarming && !playing && live.length && live.every((tr) => trackPlayable(tr))) {
       audioWarming = false;
     }
 
     live.forEach((tr) => {
+      // Extract waterfall : ne pas écraser sa jauge, mais garder le poll actif.
       if (tr.extractBusy) return;
-      if (!busy) {
-        setTrackLoad(tr, 100, { done: true });
-        return;
-      }
-      if (playheadCovered(tr) && bufferedPct(tr.el) >= 99) {
-        setTrackLoad(tr, 100, { done: true });
-        return;
-      }
-      if (seekGap && playheadCovered(tr) && !netBusy && !audioWarming) {
+      if (!busy || trackPlayable(tr)) {
         setTrackLoad(tr, 100, { done: true });
         return;
       }
@@ -665,16 +659,20 @@ window.GgrMixer = (function () {
     });
 
     if (!audioLoadEl) {
-      if (busy) setAudioLoadPoll(true);
-      else setAudioLoadPoll(false);
+      setAudioLoadPoll(busy || live.some((tr) => tr.extractBusy));
       return;
     }
     if (!live.length || !busy) {
       if (!busy) audioWarming = false;
       hideGlobalAudioLoad();
+      // Extraire encore ? poll pour les overlays piste.
+      if (live.some((tr) => tr.extractBusy)) setAudioLoadPoll(true);
       return;
     }
-    const pcts = live.map((tr) => (tr.extractBusy ? tr.loadPct || 0 : trackLoadPct(tr)));
+    const pcts = live.map((tr) => {
+      if (tr.extractBusy) return Number(tr.loadPct) || 0;
+      return trackPlayable(tr) ? 100 : trackLoadPct(tr);
+    });
     const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
     let msg;
     if (seekGap && !avg) msg = t("audio_seek");
@@ -700,7 +698,8 @@ window.GgrMixer = (function () {
       try {
         tr.el.preload = "auto";
         if (!tr.el.getAttribute("src") && tr.src) tr.el.src = media(tr.src);
-        tr.el.load();
+        // Relance le buffer sans détruire le média déjà partiellement chargé.
+        if ((tr.el.readyState || 0) < 2) tr.el.load();
       } catch {
         /* ignore */
       }
@@ -709,7 +708,7 @@ window.GgrMixer = (function () {
     Promise.all(live.map((tr) => waitSeek(tr, off))).then(() => {
       const tid = window.setInterval(() => {
         updateAudioLoad();
-        const ok = live.every((tr) => tr.el && (tr.el.readyState >= 2 || bufferAroundPct(tr.el) >= 40));
+        const ok = live.every((tr) => trackPlayable(tr));
         if (ok || playing) {
           clearInterval(tid);
           if (!playing) audioWarming = false;
@@ -797,7 +796,7 @@ window.GgrMixer = (function () {
     seekGate = true;
     noteReplayPlay();
     const all = tracks.filter((tr) => tr.el && !tr.dead);
-    const needWarm = all.some((tr) => tr.el.readyState < 2);
+    const needWarm = all.some((tr) => !trackPlayable(tr));
     audioWarming = needWarm;
     all.forEach((tr) => {
       try {
@@ -806,14 +805,23 @@ window.GgrMixer = (function () {
       } catch {
         /* ignore */
       }
+      // Débloquer l’autoplay sans laisser les pistes définitivement mutées.
+      applyGain(tr);
+      const silentWarm = !!(focusId && tr.id !== focusId) || !!tr.muted;
       tr.el.muted = true;
-      tr.el.play().catch(() => {
-        try {
-          tr.el.load();
-        } catch {
-          /* ignore */
-        }
-      });
+      const p = tr.el.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => {
+          if (gen !== playGen) return;
+          if (!silentWarm) applyGain(tr);
+        }).catch(() => {
+          try {
+            if ((tr.el.readyState || 0) < 1) tr.el.load();
+          } catch {
+            /* ignore */
+          }
+        });
+      }
     });
     updateAudioLoad();
     setPlayUi(true);
@@ -825,28 +833,27 @@ window.GgrMixer = (function () {
       seekGate = false;
       t0 = off;
       all.forEach((tr) => {
-        applyGain(tr);
         if (focusId && tr.id !== focusId) {
           try {
             tr.el.pause();
           } catch {
             /* ignore */
           }
+          applyGain(tr);
           return;
         }
         seekElTo(tr, off);
-        tr.el.play().catch(() => {
-          tr.el.addEventListener(
-            "canplay",
-            () => {
-              if (gen !== playGen || !playing) return;
-              tr.el.play().catch(() => {});
-            },
-            { once: true }
-          );
+        applyGain(tr);
+        const kick = () => {
+          if (gen !== playGen || !playing) return;
+          applyGain(tr);
+          tr.el.play().catch(() => {});
+        };
+        tr.el.play().then(kick).catch(() => {
+          tr.el.addEventListener("canplay", kick, { once: true });
+          window.setTimeout(kick, 400);
         });
       });
-      all.forEach((tr) => applyGain(tr));
       audioWarming = false;
       updateAudioLoad();
       tickTimer = setInterval(tick, 50);
@@ -869,7 +876,7 @@ window.GgrMixer = (function () {
     });
     window.setTimeout(() => {
       if (gen === playGen && seekGate) goPlay();
-    }, needWarm ? 2500 : 500);
+    }, needWarm ? 1800 : 350);
   }
 
   function setPlayUi(on) {
@@ -918,11 +925,21 @@ window.GgrMixer = (function () {
     }
     const clock = clockTrack();
     if (clock && clock.el && clock.el.readyState < 2) {
+      // Buffering : la tête reste, la jauge avance (creep).
       updateHead();
       updateAudioLoad();
       return;
     }
     const t = nowT();
+    // Si currentTime ne bouge plus alors qu’on joue → famine buffer.
+    if (clock && clock.el && !clock.el.paused && Number.isFinite(clock.el.currentTime)) {
+      const cur = clock.el.currentTime;
+      if (trLastTickT == null) trLastTickT = cur;
+      if (Math.abs(cur - trLastTickT) < 0.001 && (clock.el.readyState || 0) < 3) {
+        updateAudioLoad();
+      }
+      trLastTickT = cur;
+    }
     updateHead();
     updateAudioLoad();
     const lp = loopOn ? loopBounds() : null;
@@ -1388,10 +1405,13 @@ window.GgrMixer = (function () {
     if (done) {
       tr.extractBusy = false;
       setTrackLoad(tr, 100, { done: true });
+      // Réaffiche la jauge audio si le buffer n’est pas encore jouable.
+      updateAudioLoad();
       return;
     }
     tr.extractBusy = true;
     setTrackLoad(tr, pct, { label: t("audio_extract") });
+    setAudioLoadPoll(true);
   }
 
   function attachAudio(tr) {
@@ -1503,7 +1523,8 @@ window.GgrMixer = (function () {
     if (!tr || tr.dead || tr.peaks || tr.waveBusy) return;
     tr.waveBusy = true;
     try {
-      const wav = await fetchWav(tr, true);
+      let wav = await fetchWav(tr, true);
+      if (!wav) wav = await fetchWav(tr, true);
       if (!wav) return;
       tr.peaks = computePeaks(wav.samples, 1024);
       if (focusId === tr.id) drawWave(tr);
@@ -1581,6 +1602,8 @@ window.GgrMixer = (function () {
       return;
     }
     noteDuration(wav.samples.length / wav.sampleRate);
+    // Pics type Audacity dès qu’on a le PCM (zoom + piste onde).
+    if (!tr.peaks) tr.peaks = computePeaks(wav.samples, 1024);
     tr.specDb = true;
     setExtract(tr, 45);
     tr.spec = await spectrogram(wav.samples, wav.sampleRate, 1 / 32768, async (img, asDb, frac) => {
