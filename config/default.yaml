@@ -1,5 +1,5 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "1.1.16"
+version: "1.1.19"
 
 club:
   callsign: F6KUF
@@ -23,14 +23,16 @@ tx_sites:
 
 # F6KUF : lundi et jeudi 18:00 TU. Michel FO5QB : tous les jours 18:00 TU.
 schedule:
-  # Heure TU du bulletin météo
+  # Heure TU du bulletin météo (H)
   time_utc: "18:00"
   days: [mon, thu]
   tahiti_daily: true
-  # Démarrer 1 min avant 18:00 TU (fenêtre 17:59–18:09 TU si durée 10 min).
+  # Démarrer 1 min avant H (calage Kiwi / VFO).
   lead_minutes: 1
-  # Durée d’enregistrement bulletin + ACK en parallèle (ajustable dans Réglages)
-  duration_minutes: 10
+  # Durée totale session (bulletin dès le début + ACK après H+10).
+  duration_minutes: 25
+  # Accusés seulement après la lecture du bulletin (H+10 TU).
+  ack_delay_minutes: 10
 
 radio:
   mode: usb
@@ -115,10 +117,10 @@ sdr:
   max_freq_hz: 17000000
   screencast_tx: true
   screencast_ack: false
-  # Cône 20 m F6KUF → flotte : contrôle de portée (jusqu’où le bulletin porte),
-  # pas l’écoute « comme si on était sur le bateau » (ça c’est le Kiwi centroïde).
+  # Bulletin 14.135 : un seul Kiwi près du centroïde (vérifier la diffusion) + screencast.
+  # Les faisceaux TX→flotte sont désactivés (count: 0) ; la portée se juge au centroïde.
   beam:
-    count: 4
+    count: 0
     min_fleet_km: 800
     min_tx_km: 400
     max_xt_km: 1500
@@ -126,19 +128,15 @@ sdr:
     min_separation_km: 400
     min_path_km: 1500
     max_tx_km: 12000
-    # Fraction du trajet TX→flotte : 0.75 = près des bateaux ou au-delà (Brésil), pas l’Europe.
     min_along: 0.75
-  # ACK 12.418 / 16.551 : cercle omni autour du centroïde, 4–10 Kiwi répartis.
+  # ACK 12.418 / 16.551 : 4–5 Kiwi omni autour du centroïde (2 QRG / SDR).
   ack_omni:
-    count: 6
+    count: 5
     min_separation_km: 400
   viewport:
     width: 1280
     height: 800
-  # Écoute ACK en parallèle : un Kiwi distinct par site (rayon max autour du point).
-  # Bulletin 14.135 MHz : recouvrement France / Cap Town / Tahiti (la flotte n’est
-  # plus un seul centroïde). Un Kiwi près de chaque QTH encore audible ET un Kiwi
-  # près des skippers (centroïde + extrêmes ouest/est si la flotte s’étale).
+  # QTH club (France / Cap Town / Tahiti) : info UI / hint prop, plus de voies TX dédiées.
   # QRG d’enregistrement = 14135.0 kHz (pas de chasse USB sur le trafic programmé).
   sites:
     france:

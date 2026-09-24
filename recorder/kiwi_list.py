@@ -357,7 +357,7 @@ _BEAM_MIN_ALONG = 0.75
 _OMNI_FORWARD_DEG = 110.0
 _OMNI_MIN = 4
 _OMNI_MAX = 10
-_OMNI_DEFAULT = 6
+_OMNI_DEFAULT = 5
 
 _SDR_SITE_DEFAULTS: dict[str, dict[str, Any]] = {
     "france": {"label": "Philippe F4HWM / F6KUF", "lat": 46.46806, "lon": -1.61694, "radius_km": 1500.0},
@@ -715,18 +715,15 @@ def assign_vacation_kiwis(
     boats: list[dict[str, Any]] | None = None,
     when: datetime | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Bulletin 14.135 : Kiwi de chaque QTH encore audible + Kiwi flotte (centroïde / extrêmes).
+    """Bulletin : 1 Kiwi près du centroïde (14.135) + 4–5 omni ACK autour de la flotte.
 
-    ACK : flotte + France + Tahiti (+ Cap Town en zone SA). Si plus de Kiwi distinct,
-    on réutilise le Kiwi TX du même site.
+    Plus de faisceaux TX→flotte, ni QTH multiples (France/Cap/Tahiti), ni extrêmes
+    ouest/est : la diffusion se vérifie au centroïde ; les accusés sur le cercle omni.
     """
     sdr = cfg.get("sdr") or {}
     tx_slots = int(sdr.get("min_free_slots") or 2)
     out: dict[str, dict[str, Any]] = {}
     used: set[str] = set()
-    points = _boat_points(boats, fleet_lat, fleet_lon)
-    qths = bulletin_tx_qths(cfg, fleet_lat, fleet_lon, boats=boats, when=when)
-    club = bulletin_tx_qth(cfg, fleet_lat, fleet_lon, when=when)
 
     def bind(
         role: str,
@@ -765,83 +762,18 @@ def assign_vacation_kiwis(
         used.add(kiwi_key(kiwi))
         return chosen
 
-    tx = bind(
-        "tx",
-        float(club["lat"]),
-        float(club["lon"]),
-        f"{club['label']} (bulletin)",
-        radius_km=club.get("radius_km"),
-        min_free=tx_slots,
-        extra={"club_id": club["id"]},
-    )
-    if tx is None:
+    # Écoute bulletin 14.135 : Kiwi le plus proche de la flotte (+ screencast).
+    fleet_tx = bind("tx", fleet_lat, fleet_lon, "flotte (bulletin)", min_free=tx_slots)
+    if fleet_tx is None:
         return out
     log.info(
-        "Kiwi TX bulletin émetteur → %s (%s, %.0f km)",
-        tx.get("name"),
-        club["label"],
-        tx.get("site_km") or 0,
+        "Kiwi bulletin flotte → %s (%.0f km du centroïde)",
+        fleet_tx.get("name"),
+        fleet_tx.get("site_km") or 0,
     )
 
-    for qth in qths:
-        if qth["id"] == club["id"]:
-            continue
-        extra_tx = bind(
-            f"tx_{qth['id']}",
-            float(qth["lat"]),
-            float(qth["lon"]),
-            f"{qth['label']} (bulletin)",
-            radius_km=qth.get("radius_km"),
-            extra={"club_id": qth["id"]},
-            relax_radius=False,
-        )
-        if extra_tx is not None:
-            log.info(
-                "Kiwi TX bulletin recouvrement → %s (%s, %.0f km)",
-                extra_tx.get("name"),
-                qth["label"],
-                extra_tx.get("site_km") or 0,
-            )
-
-    fleet_tx = bind("tx_fleet", fleet_lat, fleet_lon, "flotte (bulletin)")
-    if fleet_tx is not None:
-        log.info(
-            "Kiwi TX bulletin flotte → %s (%.0f km de la flotte)",
-            fleet_tx.get("name"),
-            fleet_tx.get("site_km") or 0,
-        )
-
-    west, east = _fleet_extremes(points)
-    for role, point, label in (
-        ("tx_fleet_west", west, "flotte ouest (bulletin)"),
-        ("tx_fleet_east", east, "flotte est (bulletin)"),
-    ):
-        if point is None:
-            continue
-        if haversine_km(fleet_lat, fleet_lon, point[0], point[1]) < _FLEET_EXTREME_MIN_KM:
-            continue
-        extreme = bind(role, point[0], point[1], label)
-        if extreme is not None:
-            log.info(
-                "Kiwi TX bulletin %s → %s (%.0f km)",
-                label,
-                extreme.get("name"),
-                extreme.get("site_km") or 0,
-            )
-
-    beam_qth = bulletin_beam_qth(cfg, fleet_lat, fleet_lon, boats=boats)
-    bind_bulletin_beam(
-        out,
-        pool,
-        used,
-        tx_lat=float(beam_qth["lat"]),
-        tx_lon=float(beam_qth["lon"]),
-        fleet_lat=fleet_lat,
-        fleet_lon=fleet_lon,
-        cfg=cfg,
-        bind=bind,
-    )
-
+    # Hint hémisphère pour les sauts ACK (émetteur → flotte), sans ouvrir de voie TX là-bas.
+    club = bulletin_tx_qth(cfg, fleet_lat, fleet_lon, when=when)
     ack_freqs = [
         float(row.get("freq_khz") or 0)
         for row in ((cfg.get("radio") or {}).get("ack") or [])
@@ -857,8 +789,8 @@ def assign_vacation_kiwis(
         hour_utc=hour,
         section=("sdr", "ack_omni"),
         exclude=None,
-        tx_lat=float(beam_qth["lat"]),
-        tx_lon=float(beam_qth["lon"]),
+        tx_lat=float(club["lat"]),
+        tx_lon=float(club["lon"]),
     )
     for role, kiwi in omni.items():
         key = kiwi_key(kiwi)

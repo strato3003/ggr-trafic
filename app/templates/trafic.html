@@ -23,7 +23,6 @@
     <div class="mix__transport">
       <button type="button" class="btn mix__play" id="mix-play" aria-pressed="false" aria-label="{{ t('play') }}" title="{{ t('play') }}"></button>
       <span class="mix__clock" id="mix-time">— TU</span>
-      <span class="mix__audio-load" id="mix-audio-load" hidden></span>
       <button type="button" class="mix__ico-btn mix__loop-btn" id="mix-loop" hidden aria-pressed="false" aria-label="{{ t('loop') }}" title="{{ t('loop') }}"></button>
       <span class="mix__loop-lab" id="mix-loop-lab" hidden></span>
       <button type="button" class="mix__ico-btn mix__zoom-off" id="mix-unzoom" hidden aria-label="{{ t('collapse_track') }}" title="{{ t('menu_collapse_short') }}"></button>
@@ -33,6 +32,10 @@
         <input type="range" id="mix-seek" min="0" max="1" step="0.05" value="0" title="{{ t('seek_right_click') }}">
       </label>
     </div>
+    <div class="mix__audio-load" id="mix-audio-load" hidden role="status" aria-live="polite">
+      <span class="mix__audio-load-txt" id="mix-audio-load-txt"></span>
+      <span class="mix__audio-load-bar" aria-hidden="true"><i id="mix-audio-load-fill"></i></span>
+    </div>
     <div class="mix__body" id="ggr-mix">
       <div class="mix__desk" id="mix-strips"></div>
     </div>
@@ -41,10 +44,15 @@
   <script type="application/json" id="ggr-mix-data">{{ (trafic.mixer_tracks or []) | tojson }}</script>
 
   {% if trafic.error %}
+  {% set playable = (trafic.mixer_tracks or []) | selectattr('has_audio') | list %}
+  {% if playable and trafic.status in ('partial', 'error') %}
+  <p class="warn">{{ t('traffic_partial', err=trafic.error) }}</p>
+  {% else %}
   <p class="err">{{ t('traffic_error', err=trafic.error) }}</p>
+  {% endif %}
   {% endif %}
 </article>
 {% endblock %}
 {% block extra_js %}
-<script src="/static/js/mixer.js?v={{ version }}-kiwi69"></script>
+<script src="/static/js/mixer.js?v={{ version }}-kiwi74"></script>
 {% endblock %}

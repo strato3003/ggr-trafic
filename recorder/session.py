@@ -34,6 +34,81 @@ LOCK_NAME = ".recording.lock"
 RECORDING_GRACE_S = 180
 
 
+def _ack_window(cfg: dict[str, Any], duration_s: int) -> tuple[int, int]:
+    """Délai et durée ACK depuis le début de session (secondes).
+
+    Les accusés démarrent à time_utc + ack_delay_minutes (H+10), donc
+    ``lead_minutes + ack_delay_minutes`` après le début d’enregistrement.
+    """
+    sched = cfg.get("schedule") or {}
+    lead = max(0, int(sched.get("lead_minutes") or 1))
+    after_h = sched.get("ack_delay_minutes")
+    after_h = 10 if after_h is None else max(0, int(after_h))
+    delay_s = (lead + after_h) * 60
+    if delay_s >= int(duration_s):
+        return delay_s, 0
+    return delay_s, int(duration_s) - delay_s
+
+
+def _prepend_wav_silence(path: Path, silence_s: float, *, sample_rate: int = 12_000) -> None:
+    """Aligne un WAV ACK sur la timeline session (silence avant H+10)."""
+    if silence_s <= 0.05 or not path.is_file() or path.stat().st_size < 64:
+        return
+    import wave
+
+    with wave.open(str(path), "rb") as wf:
+        nch = wf.getnchannels()
+        sw = wf.getsampwidth()
+        rate = wf.getframerate() or sample_rate
+        data = wf.readframes(wf.getnframes())
+    n_pad = int(round(float(silence_s) * rate))
+    if n_pad <= 0:
+        return
+    pad = b"\x00" * (n_pad * nch * sw)
+    with wave.open(str(path), "wb") as wf:
+        wf.setnchannels(nch)
+        wf.setsampwidth(sw)
+        wf.setframerate(rate)
+        wf.writeframes(pad + data)
+
+
+async def _await_recording_jobs(
+    jobs: list[Any],
+    *,
+    timeout: float,
+    label: str,
+) -> tuple[list[Any], str | None]:
+    """Lance les jobs d’enregistrement ; en timeout, récupère les voies déjà finies.
+
+    Retourne (results alignés sur jobs, avertissement ou None).
+    Si aucune voie n’est terminée, lève RuntimeError.
+    """
+    if not jobs:
+        return [], None
+    tasks = [asyncio.ensure_future(job) for job in jobs]
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=timeout,
+        )
+        return list(results), None
+    except TimeoutError:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        settled = await asyncio.gather(*tasks, return_exceptions=True)
+        n_ok = sum(1 for r in settled if not isinstance(r, BaseException))
+        mins = max(1, int(timeout / 60))
+        warn = (
+            f"{label} après {mins} min "
+            f"({n_ok}/{len(tasks)} voies terminées — screencast ou audio bloqué)"
+        )
+        log.error("%s", warn)
+        if n_ok == 0:
+            raise RuntimeError(warn) from None
+        return list(settled), warn
+
+
 async def _with_waterfall(job: Any, session_dir: Path, channel_id: str, wav: Path) -> Any:
     """Calcule le PNG waterfall USB dès que le WAV de cette voie est fermé."""
     try:
@@ -86,30 +161,24 @@ def _channels(
     club_label: str | None = None,
     extra_tx: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Voies bulletin : 1 écoute 14.135 près flotte + ACK omni (2 QRG × N Kiwi).
+
+    ``extra_tx`` est conservé pour compat / tests, mais le bulletin courant
+    n’en ajoute plus (plus de faisceaux ni QTH multiples).
+    """
     radio = cfg.get("radio") or {}
     tx = radio.get("tx") or {}
-    club = (club_label or "F6KUF").strip() or "F6KUF"
     tx_label = tx.get("label") or "Bulletin F6KUF"
     rows = [
         {
             "id": "tx",
             "kind": "tx",
             "site": "tx",
-            "site_label": f"{club} (bulletin)",
-            "freq_khz": float(tx["freq_khz"]),
-            "label": tx_label,
-            "zoom": int(tx.get("zoom") or 10),
-            "screencast": bool((cfg.get("sdr") or {}).get("screencast_tx", True)),
-        },
-        {
-            "id": "tx-fleet",
-            "kind": "tx",
-            "site": "tx_fleet",
             "site_label": "flotte (bulletin)",
             "freq_khz": float(tx["freq_khz"]),
             "label": tx_label + " · flotte",
             "zoom": int(tx.get("zoom") or 10),
-            "screencast": False,
+            "screencast": bool((cfg.get("sdr") or {}).get("screencast_tx", True)),
         },
     ]
     for extra in extra_tx or []:
@@ -162,6 +231,25 @@ def _channels(
                     "screencast": bool((cfg.get("sdr") or {}).get("screencast_ack", False)),
                 }
             )
+    # Voie réservée : ACK depuis TRX local (SCU-17 / beam), remplie par upload navigateur.
+    ack0 = (radio.get("ack") or [{}])[0] if (radio.get("ack") or []) else {}
+    try:
+        local_khz = float(ack0.get("freq_khz") or 16551.0)
+    except (TypeError, ValueError):
+        local_khz = 16551.0
+    rows.append(
+        {
+            "id": "ack-local",
+            "kind": "ack",
+            "site": "local",
+            "site_label": "TRX local (SCU-17)",
+            "freq_khz": local_khz,
+            "label": "Accusé TRX local (beam)",
+            "zoom": int(ack0.get("zoom") or 10),
+            "screencast": False,
+            "local_trx": True,
+        }
+    )
     return rows
 
 
@@ -449,47 +537,32 @@ async def run_vacation(
             when=started,
         )
         club = bulletin_tx_qth(cfg, float(fleet["lat"]), float(fleet["lon"]), when=started)
-        qths = bulletin_tx_qths(
-            cfg,
-            float(fleet["lat"]),
-            float(fleet["lon"]),
-            boats=core,
-            when=started,
-        )
         meta["kiwi_roles"] = {role: _kiwi_snap(kiwi) for role, kiwi in roles.items()}
         meta["bulletin_tx"] = {"id": club["id"], "label": club["label"], "lat": club["lat"], "lon": club["lon"]}
         meta["bulletin_tx_qths"] = [
-            {"id": qth["id"], "label": qth["label"], "lat": qth["lat"], "lon": qth["lon"]} for qth in qths
+            {
+                "id": qth["id"],
+                "label": qth["label"],
+                "lat": qth["lat"],
+                "lon": qth["lon"],
+            }
+            for qth in bulletin_tx_qths(
+                cfg,
+                float(fleet["lat"]),
+                float(fleet["lon"]),
+                boats=core,
+                when=started,
+            )
         ]
-        extra_tx: list[dict[str, Any]] = []
-        for qth in qths:
-            if qth["id"] == club["id"]:
-                continue
-            role = f"tx_{qth['id']}"
-            if role in roles:
-                extra_tx.append({"id": qth["id"], "label": qth["label"], "role": role})
-        for role, label in (("tx_fleet_west", "flotte ouest"), ("tx_fleet_east", "flotte est")):
-            if role in roles:
-                extra_tx.append({"id": role.removeprefix("tx_").replace("_", "-"), "label": label, "role": role})
-        for role, kiwi in roles.items():
-            if str(role).startswith("tx_beam"):
-                n = str(role).removeprefix("tx_beam")
-                extra_tx.append(
-                    {
-                        "id": f"beam{n}",
-                        "label": kiwi.get("site_label") or f"faisceau {n}",
-                        "role": role,
-                    }
-                )
         ack_sites = [
             {"id": sid, "label": kiwi.get("site_label") or sid}
             for sid, kiwi in roles.items()
             if not _is_tx_role(str(sid))
         ]
-        channels = _channels(cfg, ack_sites, club_label=str(club["label"]), extra_tx=extra_tx)
+        channels = _channels(cfg, ack_sites, club_label=str(club["label"]))
         assignment = _pick_kiwis(roles, channels)
         if "tx" not in assignment:
-            raise RuntimeError("Aucun KiwiSDR disponible près de l’émetteur du bulletin")
+            raise RuntimeError("Aucun KiwiSDR disponible près de la flotte pour le bulletin")
 
         # QRG nominale 14135.0 kHz : pas de chasse USB (un QSO voisin dans ± 5 kHz
         # n’est pas le bulletin F6KUF / Michel). Le test radio manuel peut encore chasser.
@@ -502,18 +575,46 @@ async def run_vacation(
         minutes = (
             duration_minutes
             if duration_minutes is not None
-            else int((cfg.get("schedule") or {}).get("duration_minutes") or 10)
+            else int((cfg.get("schedule") or {}).get("duration_minutes") or 25)
         )
         duration = int(minutes) * 60
         meta["duration_minutes"] = int(minutes)
+        ack_delay_s, ack_dur_s = _ack_window(cfg, duration)
+        meta["ack_delay_minutes"] = round(ack_delay_s / 60.0, 2)
         radio = cfg.get("radio") or {}
         filt = radio.get("usb_filter") or {}
         ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-trafic"
         viewport = (cfg.get("sdr") or {}).get("viewport") or {"width": 1280, "height": 800}
         when_label = started.strftime("%Y-%m-%d %H:%M")
 
+        async def _ack_record(kiwi: dict[str, Any], ch: dict[str, Any], wav: Path) -> Any:
+            if ack_dur_s <= 0:
+                log.warning("Canal ACK %s ignoré : fenêtre nulle (augmentez duration_minutes)", ch["id"])
+                return {"ok": False, "skipped": "ack_window"}
+            if ack_delay_s > 0:
+                log.info("ACK %s : attente %ss (H+%s) puis %ss", ch["id"], ack_delay_s, int((cfg.get("schedule") or {}).get("ack_delay_minutes") or 10), ack_dur_s)
+                await asyncio.sleep(ack_delay_s)
+            raw = await record_kiwi_wav(
+                kiwi,
+                ch["freq_khz"],
+                wav,
+                ack_dur_s,
+                mode=str(radio.get("mode") or "usb"),
+                low_hz=int(filt.get("low_hz") or 300),
+                high_hz=int(filt.get("high_hz") or 2700),
+                ident=f"{ident}-{ch.get('site') or ch['id']}",
+            )
+            _prepend_wav_silence(wav, float(ack_delay_s))
+            if isinstance(raw, dict):
+                raw = {**raw, "ack_delay_s": float(ack_delay_s)}
+            return raw
+
         jobs = []
         for ch in channels:
+            if ch.get("local_trx"):
+                # Placeholder : audio apporté plus tard via POST /local-ack (SCU-17).
+                meta["channels"].append({**ch})
+                continue
             kiwi = assignment.get(ch["id"])
             if not kiwi:
                 log.warning("Canal %s sans Kiwi — ignoré", ch["id"])
@@ -524,7 +625,20 @@ async def run_vacation(
             }
             wav = session_dir / f"audio-{ch['id']}.wav"
             ch_out["audio_file"] = str(wav.name)
-            if ch.get("screencast"):
+            if ch.get("kind") == "ack":
+                if ack_dur_s <= 0:
+                    log.warning("ACK désactivés : duration (%ss) ≤ délai H+10", duration)
+                    continue
+                ch_out["ack_delay_s"] = float(ack_delay_s)
+                jobs.append(
+                    _with_waterfall(
+                        _ack_record(kiwi, ch, wav),
+                        session_dir,
+                        ch["id"],
+                        wav,
+                    )
+                )
+            elif ch.get("screencast"):
                 webm = session_dir / f"screencast-{ch['id']}.webm"
                 overlay = {
                     "when": when_label,
@@ -562,7 +676,7 @@ async def run_vacation(
                             mode=str(radio.get("mode") or "usb"),
                             low_hz=int(filt.get("low_hz") or 300),
                             high_hz=int(filt.get("high_hz") or 2700),
-                            ident=f"{ident}-{ch.get('site') or ch['id']}" if ch.get("kind") == "ack" else ident,
+                            ident=ident,
                         ),
                         session_dir,
                         ch["id"],
@@ -572,21 +686,11 @@ async def run_vacation(
             meta["channels"].append(ch_out)
 
         _write_meta(session_dir, meta)
-        try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*jobs, return_exceptions=True),
-                timeout=duration + RECORDING_GRACE_S,
-            )
-        except TimeoutError:
-            log.error(
-                "Vacation %s : timeout après %ss",
-                vid,
-                duration + RECORDING_GRACE_S,
-            )
-            raise RuntimeError(
-                f"Timeout après {int((duration + RECORDING_GRACE_S) / 60)} min "
-                "(screencast ou audio bloqué)"
-            ) from None
+        results, timeout_warn = await _await_recording_jobs(
+            jobs,
+            timeout=duration + RECORDING_GRACE_S,
+            label="Timeout",
+        )
         meta["raw_results"] = [
             (repr(r) if isinstance(r, Exception) else r) for r in results
         ]
@@ -594,10 +698,15 @@ async def run_vacation(
             if isinstance(raw, dict) and isinstance(raw.get("audio_delay_s"), (int, float)):
                 ch["audio_delay_s"] = round(float(raw["audio_delay_s"]), 3)
 
-        meta["status"] = "complete"
+        if timeout_warn:
+            meta["status"] = "partial"
+            meta["error"] = timeout_warn
+        else:
+            meta["status"] = "complete"
+            meta.pop("error", None)
         meta["ended_at"] = datetime.now(timezone.utc).isoformat()
         meta["fleet_fmt"] = fleet.get("fmt") or fmt_latlon(fleet["lat"], fleet["lon"])
-        log.info("Vacation %s terminée", vid)
+        log.info("Vacation %s terminée%s", vid, " (partiel)" if timeout_warn else "")
         return meta
     except Exception as exc:
         meta["status"] = "error"
@@ -883,23 +992,29 @@ async def run_buddy_call(
         if not jobs:
             raise RuntimeError("Aucun canal buddy à enregistrer")
         _write_meta(session_dir, meta)
-        try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*jobs, return_exceptions=True),
-                timeout=duration + RECORDING_GRACE_S,
-            )
-        except TimeoutError:
-            raise RuntimeError(
-                f"Timeout buddy après {int((duration + RECORDING_GRACE_S) / 60)} min"
-            ) from None
+        results, timeout_warn = await _await_recording_jobs(
+            jobs,
+            timeout=duration + RECORDING_GRACE_S,
+            label="Timeout buddy",
+        )
         meta["raw_results"] = [(repr(r) if isinstance(r, Exception) else r) for r in results]
         for ch, raw in zip(meta["channels"], results):
             if isinstance(raw, dict) and isinstance(raw.get("audio_delay_s"), (int, float)):
                 ch["audio_delay_s"] = round(float(raw["audio_delay_s"]), 3)
-        meta["status"] = "complete"
+        if timeout_warn:
+            meta["status"] = "partial"
+            meta["error"] = timeout_warn
+        else:
+            meta["status"] = "complete"
+            meta.pop("error", None)
         meta["ended_at"] = datetime.now(timezone.utc).isoformat()
         meta["fleet_fmt"] = aim.get("fmt") or fmt_latlon(aim["lat"], aim["lon"])
-        log.info("Buddy call %s terminé (%s Kiwi)", vid, len(roles))
+        log.info(
+            "Buddy call %s terminé (%s Kiwi)%s",
+            vid,
+            len(roles),
+            " (partiel)" if timeout_warn else "",
+        )
         return meta
     except Exception as exc:
         meta["status"] = "error"

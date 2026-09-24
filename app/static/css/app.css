@@ -185,6 +185,14 @@ h2 { font-size: 1.15rem; margin-top: 2rem; }
 .chan { background: var(--panel); padding: 1rem; border: 1px solid var(--line); }
 .chan audio { width: 100%; margin-top: 0.6rem; }
 .err { color: var(--err); }
+.warn {
+  color: color-mix(in srgb, var(--brass) 70%, #b45309);
+  background: color-mix(in srgb, var(--brass) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brass) 40%, transparent);
+  border-radius: 4px;
+  padding: 0.45rem 0.65rem;
+  margin: 0.5rem 0;
+}
 .fleet-box { background: var(--panel); padding: 1rem 1.2rem; border-left: 3px solid var(--brass); margin: 1rem 0 1.5rem; }
 .ggr-map-fig { margin: 0 0 1.75rem; }
 .ggr-map { height: 36rem; width: 100%; background: #071019; border: 1px solid var(--line); }
@@ -1606,21 +1614,42 @@ body.kiwi-mix-focus .mix__seek {
 .mix__wf-load {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 0.4rem;
   z-index: 3;
   pointer-events: none;
-  font: 600 0.58rem var(--sans);
-  letter-spacing: 0.01em;
-  color: #e8f4fc;
-  text-shadow: 0 1px 2px #000;
-  background: linear-gradient(90deg, rgba(4, 12, 20, 0.72), rgba(4, 12, 20, 0.28) 70%, transparent);
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
-  text-overflow: ellipsis;
+  background: rgba(4, 12, 20, 0.42);
 }
 .mix__wf-load[hidden] { display: none; }
+.mix__wf-load-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--brass) 70%, transparent),
+    color-mix(in srgb, var(--foam, #9ed0e8) 45%, transparent)
+  );
+  transition: width 0.18s linear;
+  pointer-events: none;
+}
+.mix__wf-load-txt {
+  position: relative;
+  z-index: 1;
+  padding: 0.2rem 0.55rem;
+  border-radius: 3px;
+  font: 700 0.72rem/1.25 var(--sans);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: #f2f8fc;
+  text-shadow: 0 1px 2px #000;
+  background: rgba(4, 12, 20, 0.55);
+  white-space: nowrap;
+}
 .mix__head {
   position: absolute;
   top: 0;
@@ -1756,18 +1785,47 @@ body.kiwi-mix-focus .mix__seek {
   min-width: 0;
   font-size: 0.72rem;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 .mix__audio-load {
-  flex: 0 1 8.5rem;
-  min-width: 0;
-  max-width: 9.5rem;
-  color: var(--muted);
-  font-size: 0.68rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+  margin: 0.15rem 0 0.35rem;
+  padding: 0.35rem 0.55rem;
+  color: var(--foam);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  background: color-mix(in srgb, var(--brass) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brass) 35%, transparent);
+  border-radius: 4px;
 }
 .mix__audio-load[hidden] { display: none; }
+.mix__audio-load-txt {
+  flex: 1 1 auto;
+  min-width: 8rem;
+  font-variant-numeric: tabular-nums;
+}
+.mix__audio-load-bar {
+  flex: 1 1 10rem;
+  min-width: 6rem;
+  max-width: 18rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  overflow: hidden;
+}
+.mix__audio-load-bar > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--brass);
+  transition: width 0.2s ease;
+}
+body.kiwi-mix-focus .mix__audio-load {
+  margin: 0 0.3rem 0.45rem;
+}
 .mix__seek {
   flex: 1 1 auto;
   min-width: 5rem;

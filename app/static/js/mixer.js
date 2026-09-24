@@ -59,6 +59,10 @@ window.GgrMixer = (function () {
   const playBtn = document.getElementById("mix-play");
   const timeEl = document.getElementById("mix-time");
   const audioLoadEl = document.getElementById("mix-audio-load");
+  const audioLoadTxt = document.getElementById("mix-audio-load-txt") || audioLoadEl;
+  const audioLoadFill = document.getElementById("mix-audio-load-fill");
+  let audioWarming = false;
+  let audioLoadPoll = 0;
   const seekEl = document.getElementById("mix-seek");
   const loopBtn = document.getElementById("mix-loop");
   const loopLab = document.getElementById("mix-loop-lab");
@@ -533,35 +537,285 @@ window.GgrMixer = (function () {
     }
   }
 
-  function updateAudioLoad() {
+  /** Portion utile autour de currentTime (deep-link / seek milieu). */
+  function bufferAroundPct(el) {
+    if (!el || !el.buffered || !el.buffered.length) return 0;
+    const cur = Number.isFinite(el.currentTime) ? el.currentTime : 0;
+    const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+    const need = Math.min(12, dur ? Math.max(4, dur * 0.02) : 12);
+    try {
+      for (let i = 0; i < el.buffered.length; i++) {
+        const a = el.buffered.start(i);
+        const b = el.buffered.end(i);
+        if (cur + 0.35 < a || cur - 0.35 > b) continue;
+        const ahead = Math.max(0, b - cur);
+        return Math.min(100, Math.round((ahead / need) * 100));
+      }
+    } catch {
+      /* ignore */
+    }
+    return bufferedPct(el);
+  }
+
+  /** % affiché : prefetch octets (fiable) sinon buffer HTML5 (souvent par à-coups). */
+  function downloadPct(tr) {
+    if (!tr) return 0;
+    if (tr.prefetchBusy || tr.prefetchDone) return Number(tr.loadPct) || (tr.prefetchDone ? 100 : 0);
+    const el = tr.el;
+    if (!el) return Number(tr.loadPct) || 0;
+    const raw = bufferedPct(el);
+    if (raw >= 0.5) return raw;
+    if (el.networkState === 2) return Math.max(1, tr.loadPct || 0);
+    if ((el.readyState || 0) >= 1) return Math.max(2, tr.loadPct || 0);
+    return tr.loadPct || 0;
+  }
+
+  /** true si la timeline autour de t (ou currentTime) est déjà en cache. */
+  function bufferedAt(el, t) {
+    if (!el || !el.buffered || !el.buffered.length) return false;
+    const cur = Number.isFinite(t) ? t : Number.isFinite(el.currentTime) ? el.currentTime : 0;
+    try {
+      for (let i = 0; i < el.buffered.length; i++) {
+        const a = el.buffered.start(i);
+        const b = el.buffered.end(i);
+        if (a - 0.35 <= cur && cur + 1.2 <= b) return true;
+      }
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+
+  function playheadCovered(tr) {
+    if (tr && tr.prefetchDone && tr.el && tr.el.readyState >= 1) return true;
+    const el = tr && tr.el;
+    if (!el) return false;
+    const cur = Number.isFinite(el.currentTime) ? el.currentTime : t0;
+    return bufferedAt(el, cur);
+  }
+
+  function setAudioLoadPoll(on) {
+    if (on) {
+      if (audioLoadPoll) return;
+      audioLoadPoll = window.setInterval(updateAudioLoad, 200);
+      return;
+    }
+    if (!audioLoadPoll) return;
+    clearInterval(audioLoadPoll);
+    audioLoadPoll = 0;
+  }
+
+  function hideGlobalAudioLoad() {
     if (!audioLoadEl) return;
-    const live = tracks.filter((t) => t.el && !t.dead && liveForPlay(t));
-    if (!live.length) {
-      audioLoadEl.hidden = true;
-      audioLoadEl.textContent = "";
+    audioLoadEl.hidden = true;
+    if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = "";
+    else audioLoadEl.textContent = "";
+    if (audioLoadFill) audioLoadFill.style.width = "0%";
+    setAudioLoadPoll(false);
+  }
+
+  function updateAudioLoad() {
+    const live = tracks.filter((tr) => tr.el && !tr.dead && liveForPlay(tr));
+    const HAVE_CURRENT = 2;
+    const canPlay = live.filter((tr) => tr.el.readyState >= HAVE_CURRENT || tr.prefetchDone).length;
+
+    const stillDownloading = live.some((tr) => tr.prefetchBusy || (audioWarming && !tr.prefetchDone));
+    const seekNeedsData = live.some((tr) => {
+      if (tr.prefetchDone) return false;
+      if (!(tr.el.seeking || seekGate)) return false;
+      const cur = Number.isFinite(tr.el.currentTime) ? tr.el.currentTime : t0;
+      return !bufferedAt(tr.el, cur);
+    });
+    const starving =
+      playing && live.some((tr) => !tr.prefetchDone && tr.el.readyState < 3 && !playheadCovered(tr));
+    const busy = stillDownloading || seekNeedsData || starving;
+
+    if (audioWarming && live.length && live.every((tr) => tr.prefetchDone)) {
+      audioWarming = false;
+    }
+
+    live.forEach((tr) => {
+      if (tr.extractBusy) return;
+      if (!busy) {
+        setTrackLoad(tr, 100, { done: true });
+        return;
+      }
+      if (tr.prefetchDone && !tr.prefetchBusy) {
+        setTrackLoad(tr, 100, { done: true });
+        return;
+      }
+      if (seekNeedsData && !stillDownloading && playheadCovered(tr)) {
+        setTrackLoad(tr, 100, { done: true });
+        return;
+      }
+      const pct = Math.max(1, Math.round(downloadPct(tr)));
+      const label =
+        seekNeedsData && !stillDownloading
+          ? t("audio_seek")
+          : audioWarming && !playing
+            ? t("audio_prep")
+            : t("audio_load");
+      setTrackLoad(tr, pct, { label: label });
+    });
+
+    if (!audioLoadEl) {
+      if (busy) setAudioLoadPoll(true);
+      else setAudioLoadPoll(false);
       return;
     }
-    const HAVE_FUTURE = 3;
-    const ready = live.filter((t) => t.el.readyState >= HAVE_FUTURE).length;
-    const loading = live.some((t) => t.el.networkState === 2);
-    const starving = playing && live.some((t) => t.el.readyState < HAVE_FUTURE);
-    if (!loading && !starving && ready === live.length) {
-      audioLoadEl.hidden = true;
-      audioLoadEl.textContent = "";
+    if (!live.length || !busy) {
+      if (!busy) audioWarming = false;
+      hideGlobalAudioLoad();
       return;
     }
-    if (!playing && !loading) {
-      audioLoadEl.hidden = true;
-      audioLoadEl.textContent = "";
-      return;
-    }
-    const pcts = live.map((t) => bufferedPct(t.el)).filter((p) => p > 0);
+    const active = live.filter((tr) => tr.extractBusy || tr.prefetchBusy || (tr.loadEl && !tr.loadEl.hidden));
+    const pcts = (active.length ? active : live).map((tr) =>
+      tr.extractBusy ? tr.loadPct || 0 : Math.round(downloadPct(tr))
+    );
     const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
+    let msg;
+    if (seekNeedsData && !stillDownloading && !avg) msg = t("audio_seek");
+    else if (audioWarming && !playing) msg = t("audio_prep") + " " + avg + " % · " + canPlay + "/" + live.length;
+    else if (avg) msg = t("audio_buf", { pct: avg, ready: canPlay, n: live.length });
+    else msg = t("audio_load_n", { ready: canPlay, n: live.length });
     audioLoadEl.hidden = false;
-    if (starving && avg && avg < 100) audioLoadEl.textContent = "Buffer " + avg + " %";
-    else if (avg) audioLoadEl.textContent = "Audio " + avg + " % · " + ready + "/" + live.length;
-    else audioLoadEl.textContent = t("audio_load") + " " + ready + "/" + live.length;
-    audioLoadEl.title = "Fichiers WAV USB en cours de chargement dans le navigateur";
+    if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = msg;
+    else audioLoadEl.textContent = msg;
+    if (audioLoadFill) {
+      audioLoadFill.style.width = Math.max(2, avg || Math.round((canPlay / Math.max(1, live.length)) * 100)) + "%";
+    }
+    audioLoadEl.title = msg;
+    setAudioLoadPoll(true);
+  }
+
+  /**
+   * Télécharge le fichier Lecture (MP3/M4A) avec progression octets → blob local.
+   * Le buffer HTML5 saute souvent de 1 % à 100 % ; le fetch stream est continu.
+   */
+  async function prefetchPlayAudio(tr) {
+    if (!tr || tr.dead || !tr.src) return false;
+    if (tr.prefetchDone) return true;
+    if (tr.prefetchBusy) {
+      while (tr.prefetchBusy) await new Promise((r) => setTimeout(r, 80));
+      return !!tr.prefetchDone;
+    }
+    tr.prefetchBusy = true;
+    tr.loadPct = 0;
+    setTrackLoad(tr, 1, { label: t("audio_load") });
+    updateAudioLoad();
+    try {
+      const res = await fetch(media(tr.src), { credentials: "same-origin" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const total = Number(res.headers.get("content-length")) || 0;
+      const mime = res.headers.get("content-type") || "audio/mpeg";
+      const chunks = [];
+      let received = 0;
+      let lastPaint = 0;
+      const paint = async (pct) => {
+        const shown = Math.max(tr.loadPct || 0, Math.min(99, pct));
+        if (shown - lastPaint < 0.4 && shown < 99) return;
+        lastPaint = shown;
+        tr.loadPct = shown;
+        if (!tr.extractBusy) setTrackLoad(tr, shown, { label: t("audio_load") });
+        updateAudioLoad();
+        await new Promise((r) => requestAnimationFrame(r));
+      };
+      if (res.body && typeof res.body.getReader === "function") {
+        const reader = res.body.getReader();
+        while (true) {
+          const step = await reader.read();
+          if (step.done) break;
+          chunks.push(step.value);
+          received += step.value.byteLength;
+          const pct = total
+            ? (received / total) * 100
+            : Math.min(95, 3 + received / 180000);
+          await paint(pct);
+        }
+      } else {
+        const buf = await res.arrayBuffer();
+        chunks.push(new Uint8Array(buf));
+        received = buf.byteLength;
+        await paint(100);
+      }
+      const blob = new Blob(chunks, { type: mime });
+      if (tr.blobUrl) {
+        try {
+          URL.revokeObjectURL(tr.blobUrl);
+        } catch {
+          /* ignore */
+        }
+      }
+      tr.blobUrl = URL.createObjectURL(blob);
+      if (tr.el) {
+        const keep = Number.isFinite(tr.el.currentTime) ? tr.el.currentTime : t0;
+        tr.el.src = tr.blobUrl;
+        tr.el.preload = "auto";
+        await new Promise((resolve) => {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            resolve();
+          };
+          tr.el.addEventListener("loadedmetadata", finish, { once: true });
+          tr.el.addEventListener("error", finish, { once: true });
+          try {
+            tr.el.load();
+          } catch {
+            finish();
+          }
+          window.setTimeout(finish, 8000);
+        });
+        noteDuration(tr.el.duration);
+        seekElTo(tr, Number.isFinite(keep) ? keep : t0);
+      }
+      tr.prefetchDone = true;
+      tr.loadPct = 100;
+      setTrackLoad(tr, 100, { done: true });
+      return true;
+    } catch (err) {
+      console.warn("Prefetch audio", tr.id, err);
+      if (tr.el && !tr.el.getAttribute("src") && !tr.blobUrl) {
+        try {
+          tr.el.src = media(tr.src);
+          tr.el.preload = "auto";
+          tr.el.load();
+        } catch {
+          /* ignore */
+        }
+      }
+      return false;
+    } finally {
+      tr.prefetchBusy = false;
+      updateAudioLoad();
+    }
+  }
+
+  async function prefetchPool(list, limit) {
+    const items = list.filter((tr) => tr && !tr.dead && tr.src);
+    if (!items.length) return;
+    let idx = 0;
+    const workers = Array.from({ length: Math.min(limit || 3, items.length) }, async () => {
+      while (idx < items.length) {
+        const tr = items[idx++];
+        await prefetchPlayAudio(tr);
+      }
+    });
+    await Promise.all(workers);
+  }
+
+  function warmAudioAt(off) {
+    const live = tracks.filter((tr) => tr.el && !tr.dead);
+    if (!live.length) return;
+    audioWarming = true;
+    updateAudioLoad();
+    void prefetchPool(live, 3).then(() => {
+      return Promise.all(live.map((tr) => waitSeek(tr, off)));
+    }).then(() => {
+      audioWarming = false;
+      updateAudioLoad();
+    });
   }
 
   function updateHead() {
@@ -637,17 +891,8 @@ window.GgrMixer = (function () {
     seekGate = true;
     noteReplayPlay();
     const all = tracks.filter((tr) => tr.el && !tr.dead);
-    all.forEach((tr) => {
-      if (tr.el.preload !== "auto") tr.el.preload = "auto";
-      tr.el.muted = true;
-      tr.el.play().catch(() => {
-        try {
-          tr.el.load();
-        } catch {
-          /* ignore */
-        }
-      });
-    });
+    const needWarm = all.some((tr) => !tr.prefetchDone);
+    audioWarming = needWarm;
     updateAudioLoad();
     setPlayUi(true);
     cancelAnimationFrame(raf);
@@ -667,31 +912,43 @@ window.GgrMixer = (function () {
           }
           return;
         }
+        seekElTo(tr, off);
+        tr.el.muted = true;
         tr.el.play().catch(() => {
-          tr.el.addEventListener("canplay", () => {
-            if (gen !== playGen || !playing) return;
-            tr.el.play().catch(() => {});
-          }, { once: true });
+          tr.el.addEventListener(
+            "canplay",
+            () => {
+              if (gen !== playGen || !playing) return;
+              tr.el.play().catch(() => {});
+            },
+            { once: true }
+          );
         });
       });
+      all.forEach((tr) => applyGain(tr));
+      audioWarming = false;
+      updateAudioLoad();
       tickTimer = setInterval(tick, 50);
       raf = requestAnimationFrame(function loop() {
         tick();
         if (playing) raf = requestAnimationFrame(loop);
       });
     };
-    Promise.all(all.map((tr) => waitSeek(tr, off))).then(() => {
-      if (gen !== playGen || !playing) return;
-      const clock = clockTrack();
-      const cur = clock && clock.el && Number.isFinite(clock.el.currentTime) ? clock.el.currentTime : off;
-      const lp = loopOn ? loopBounds() : null;
-      if (lp && clock && clock.el && clock.el.readyState >= 1 && (cur < lp.a - 1 || cur >= lp.b - 0.02)) {
-        all.forEach((tr) => seekElTo(tr, off));
-        window.setTimeout(goPlay, 80);
-        return;
-      }
-      goPlay();
-    });
+    const prep = needWarm ? prefetchPool(all, 3) : Promise.resolve();
+    prep
+      .then(() => Promise.all(all.map((tr) => waitSeek(tr, off))))
+      .then(() => {
+        if (gen !== playGen || !playing) return;
+        const clock = clockTrack();
+        const cur = clock && clock.el && Number.isFinite(clock.el.currentTime) ? clock.el.currentTime : off;
+        const lp = loopOn ? loopBounds() : null;
+        if (lp && clock && clock.el && clock.el.readyState >= 1 && (cur < lp.a - 1 || cur >= lp.b - 0.02)) {
+          all.forEach((tr) => seekElTo(tr, off));
+          window.setTimeout(goPlay, 80);
+          return;
+        }
+        goPlay();
+      });
   }
 
   function setPlayUi(on) {
@@ -717,10 +974,12 @@ window.GgrMixer = (function () {
   function pauseAt(t) {
     playGen += 1;
     seekGate = false;
+    audioWarming = false;
     t0 = Math.max(0, Math.min(duration || t, t));
     playing = false;
     tracks.forEach((tr) => {
       if (tr.el) tr.el.pause();
+      if (!tr.extractBusy) setTrackLoad(tr, 100, { done: true });
     });
     setPlayUi(false);
     cancelAnimationFrame(raf);
@@ -733,15 +992,18 @@ window.GgrMixer = (function () {
     if (!playing) return;
     if (seekGate) {
       updateHead();
+      updateAudioLoad();
       return;
     }
     const clock = clockTrack();
     if (clock && clock.el && clock.el.readyState < 2) {
       updateHead();
+      updateAudioLoad();
       return;
     }
     const t = nowT();
     updateHead();
+    updateAudioLoad();
     const lp = loopOn ? loopBounds() : null;
     if (lp) {
       if (t >= lp.b - 0.02 || t < lp.a - 1) {
@@ -1067,9 +1329,11 @@ window.GgrMixer = (function () {
           '<p class="mix__wf-legend" hidden>USB 0 Hz (bas) → 2,7 kHz (haut) · noir/bleu = bruit · cyan/vert = signal · jaune/blanc = fort</p>' +
           (tr.dead
             ? ""
-            : '<div class="mix__wf-load"' +
-              (tr.waterfall ? " hidden" : "") +
-              ">Extraction bande son en cours… 0 %</div>") +
+            : '<div class="mix__wf-load" hidden>' +
+              '<i class="mix__wf-load-fill" aria-hidden="true"></i>' +
+              '<span class="mix__wf-load-txt">' +
+              t("audio_load") +
+              " · 0 %</span></div>") +
           '<div class="mix__loop" hidden>' +
           '<div class="mix__loop-dim mix__loop-dim--l"></div>' +
           '<div class="mix__loop-sel">' +
@@ -1178,16 +1442,35 @@ window.GgrMixer = (function () {
     updateLoopUi();
   }
 
-  function setExtract(tr, pct, done) {
-    const el = tr.loadEl;
+  function setTrackLoad(tr, pct, opts) {
+    const el = tr && tr.loadEl;
     if (!el) return;
-    if (done || tr.dead) {
+    const done = !!(opts && opts.done);
+    if (done || (tr && tr.dead)) {
       el.hidden = true;
+      tr.loadPct = 100;
       return;
     }
-    const n = Math.max(0, Math.min(100, Math.round(pct)));
+    const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    tr.loadPct = n;
     el.hidden = false;
-    el.textContent = "Extraction bande son en cours… " + n + " %";
+    const fill = el.querySelector(".mix__wf-load-fill");
+    const txt = el.querySelector(".mix__wf-load-txt");
+    const label = (opts && opts.label) || t("audio_load");
+    if (fill) fill.style.width = n + "%";
+    if (txt) txt.textContent = label + " · " + n + " %";
+    else el.textContent = label + " · " + n + " %";
+  }
+
+  function setExtract(tr, pct, done) {
+    if (!tr) return;
+    if (done) {
+      tr.extractBusy = false;
+      setTrackLoad(tr, 100, { done: true });
+      return;
+    }
+    tr.extractBusy = true;
+    setTrackLoad(tr, pct, { label: t("audio_extract") });
   }
 
   function attachAudio(tr) {
@@ -1196,10 +1479,9 @@ window.GgrMixer = (function () {
       drawTrack(tr);
       return;
     }
-    const url = media(tr.src);
-    tr.el = new Audio(url);
-    // metadata : permet noteDuration / deep-link ?t= sans attendre Play
-    tr.el.preload = deepTimePending ? "metadata" : "none";
+    // Pas de src réseau : le prefetch fetch→blob alimente la jauge octets.
+    tr.el = new Audio();
+    tr.el.preload = "auto";
     tr.el.controls = false;
     tr.el.hidden = true;
     tr.el.setAttribute("aria-hidden", "true");
@@ -1220,6 +1502,7 @@ window.GgrMixer = (function () {
     tr.el.addEventListener("loadedmetadata", () => {
       noteDuration(tr.el.duration);
       if (!playing) seekElTo(tr, t0);
+      updateAudioLoad();
     });
     tr.el.addEventListener("timeupdate", () => {
       if (!playing || seekGate || !loopOn || !liveForPlay(tr)) return;
@@ -1418,7 +1701,10 @@ window.GgrMixer = (function () {
     }
     const t = duration > 0 ? Math.min(duration, sec) : sec;
     previewSeek(t);
-    if (duration > 0) deepTimePending = false;
+    if (duration > 0) {
+      deepTimePending = false;
+      warmAudioAt(t0);
+    }
   }
 
   async function load() {
@@ -1445,6 +1731,11 @@ window.GgrMixer = (function () {
         specDb: false,
         waterfall: row.waterfall || (row.id ? "waterfall-" + row.id + ".png" : ""),
         storedWf: false,
+        extractBusy: false,
+        loadPct: 0,
+        prefetchBusy: false,
+        prefetchDone: false,
+        blobUrl: "",
       });
     });
     if (!tracks.length) {
@@ -1464,18 +1755,14 @@ window.GgrMixer = (function () {
     await Promise.all(tracks.map((tr) => loadStoredWf(tr)));
     const painted = tracks.filter((tr) => tr.storedWf).length;
     tracks.forEach(attachAudio);
-    if (deepTimePending) {
-      tracks.forEach((tr) => {
-        if (tr.el) {
-          try {
-            tr.el.load();
-          } catch {
-            /* ignore */
-          }
-        }
-      });
-    }
-    void Promise.all(tracks.map((tr) => waitDuration(tr, deepTimePending ? 12000 : 20000))).then(() => {
+    audioWarming = true;
+    updateAudioLoad();
+    void prefetchPool(
+      tracks.filter((tr) => !tr.dead),
+      3
+    ).then(() => {
+      audioWarming = false;
+      updateAudioLoad();
       if (deepTimePending) applyDeepTime();
     });
     tracks.forEach((tr) => {
@@ -1489,24 +1776,38 @@ window.GgrMixer = (function () {
         statusEl.textContent = t("mix_ready", { live: live, n: tracks.length });
       updateHead();
       applyDeepFocus();
-      applyDeepTime();
+      if (!deepTimePending) applyDeepTime();
       return;
     }
     if (statusEl) statusEl.textContent = t("no_audio");
     playBtn.disabled = true;
     applyDeepFocus();
-    applyDeepTime();
+    if (!deepTimePending) applyDeepTime();
   }
 
   function destroy() {
     playing = false;
+    audioWarming = false;
+    setAudioLoadPoll(false);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
     tracks.forEach((tr) => {
       if (tr.el) {
         tr.el.pause();
         tr.el.removeAttribute("src");
-        tr.el.load();
+        try {
+          tr.el.load();
+        } catch {
+          /* ignore */
+        }
+      }
+      if (tr.blobUrl) {
+        try {
+          URL.revokeObjectURL(tr.blobUrl);
+        } catch {
+          /* ignore */
+        }
+        tr.blobUrl = "";
       }
     });
     document.body.classList.remove("kiwi-mix-focus");
@@ -1521,8 +1822,7 @@ window.GgrMixer = (function () {
     if (ro) ro.disconnect();
     ac.abort();
     if (audioLoadEl) {
-      audioLoadEl.hidden = true;
-      audioLoadEl.textContent = "";
+      hideGlobalAudioLoad();
     }
     const bin = document.getElementById("mix-audio-bin");
     if (bin) bin.remove();
