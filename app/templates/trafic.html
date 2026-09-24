@@ -44,7 +44,12 @@
   <script type="application/json" id="ggr-mix-data">{{ (trafic.mixer_tracks or []) | tojson }}</script>
 
   {% if trafic.error %}
+  {% set playable = (trafic.mixer_tracks or []) | selectattr('has_audio') | list %}
+  {% if playable and trafic.status in ('partial', 'error') %}
+  <p class="warn">{{ t('traffic_partial', err=trafic.error) }}</p>
+  {% else %}
   <p class="err">{{ t('traffic_error', err=trafic.error) }}</p>
+  {% endif %}
   {% endif %}
 </article>
 {% endblock %}

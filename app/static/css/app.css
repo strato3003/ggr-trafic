@@ -185,6 +185,14 @@ h2 { font-size: 1.15rem; margin-top: 2rem; }
 .chan { background: var(--panel); padding: 1rem; border: 1px solid var(--line); }
 .chan audio { width: 100%; margin-top: 0.6rem; }
 .err { color: var(--err); }
+.warn {
+  color: color-mix(in srgb, var(--brass) 70%, #b45309);
+  background: color-mix(in srgb, var(--brass) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brass) 40%, transparent);
+  border-radius: 4px;
+  padding: 0.45rem 0.65rem;
+  margin: 0.5rem 0;
+}
 .fleet-box { background: var(--panel); padding: 1rem 1.2rem; border-left: 3px solid var(--brass); margin: 1rem 0 1.5rem; }
 .ggr-map-fig { margin: 0 0 1.75rem; }
 .ggr-map { height: 36rem; width: 100%; background: #071019; border: 1px solid var(--line); }

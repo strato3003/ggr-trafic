@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.1.18 — 2026-09-24
+
+- Bulletin : 1 Kiwi flotte (14.135 + screencast) + 5 omni ACK ; plus de faisceaux / multi-QTH / extrêmes.
+- ACK démarrés à H+10 (après lecture du bulletin) ; durée session 25 min ; salvage timeout → statut `partial`.
+- Mixeur : bandeau chargement audio + avertissement enregistrement incomplet.
+
 ## 1.1.17 — 2026-09-24
 
 - Mixeur : barre de chargement audio dédiée (%, voies), visible dès le deep-link `?t=` / seek ; préchauffage buffer au positionnement.

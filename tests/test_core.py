@@ -915,41 +915,32 @@ def test_assign_vacation_kiwis_geo_sites():
         kiwi("fr", "les-sables", 46.5025, -1.7888, snr=22, free=4),
         kiwi("th", "papeete", -17.5350, -149.5697, snr=16, free=2),
         kiwi("nz", "auckland", -36.85, 174.76, snr=30, free=4),
+        kiwi("omni-w", "st-helena", -15.9, -5.7, snr=14, free=3),
+        kiwi("omni-e", "reunion", -21.1, 55.5, snr=15, free=3),
+        kiwi("omni-n", "canaries", 28.3, -16.6, snr=16, free=3),
+        kiwi("omni-s", "trinidade", -20.5, -29.3, snr=13, free=3),
     ]
     cfg = {
         "sdr": {
             "min_free_slots": 2,
+            "ack_omni": {"count": 4, "min_separation_km": 400},
             "sites": {
                 "france": {"lat": 46.5025, "lon": -1.7888, "label": "France", "radius_km": 1500},
                 "tahiti": {"lat": -17.5350, "lon": -149.5697, "label": "Tahiti", "radius_km": 2500},
             },
-        }
+        },
+        "radio": {"ack": [{"freq_khz": 16551.0}, {"freq_khz": 12418.0}]},
     }
     roles = assign_vacation_kiwis(pool, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg)
-    # Atlantique sud, recouvrement autour du cap : F6KUF + Cap Town + Tahiti.
-    assert roles["tx"]["id"] == "fr"
-    assert roles["tx"].get("club_id") == "france"
-    assert roles["tx_cape"]["id"] == "near-b"
-    assert roles["tx_tahiti"]["id"] == "th"
-    assert roles["tx_fleet"]["id"] == "near-a"
-    assert any(r.get("id") == "near-a" for r in roles.values())
-    assert "loud-far" not in {r["id"] for r in roles.values() if str(r.get("site") or "").startswith("tx")}
-    assert "nz" not in {r["id"] for r in roles.values()}
-
-    thin = [k for k in pool if k["id"] != "th"]
-    padded = assign_vacation_kiwis(thin, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg)
-    assert padded["tx"]["id"] == "fr"
-    assert padded.get("tx_tahiti") is None or padded["tx_tahiti"]["id"] != "th"
-
-    indian = assign_vacation_kiwis(pool, fleet_lat=-35.0, fleet_lon=25.0, cfg=cfg)
-    assert indian["tx"]["id"] == "th"
-    assert indian["tx"].get("club_id") == "tahiti"
-    assert indian["tx_france"]["id"] == "fr"
-    assert indian["tx_cape"]["id"] == "near-b"
+    assert roles["tx"]["id"] == "near-a"
+    assert not any(k.startswith("tx_") for k in roles)
+    assert not any(k.startswith("tx_beam") for k in roles)
+    assert 4 <= len([k for k in roles if k.startswith("omni")]) <= 5
+    assert "loud-far" not in {r["id"] for r in roles.values() if r.get("site") == "tx"}
 
 
 def test_assign_vacation_kiwis_bulletin_beam():
-    from recorder.geo import haversine_km
+    """Faisceaux désactivés (count: 0) : aucun rôle tx_beam*."""
     from recorder.kiwi_list import assign_vacation_kiwis
 
     def kiwi(kid, name, lat, lon, snr=20.0, free=3):
@@ -964,9 +955,8 @@ def test_assign_vacation_kiwis_bulletin_beam():
         }
 
     fleet_lat, fleet_lon = 19.503, -19.184
-    tx_lat, tx_lon = 46.46806, -1.61694
     pool = [
-        kiwi("fr", "talmont", tx_lat, tx_lon, snr=22, free=4),
+        kiwi("fr", "talmont", 46.46806, -1.61694, snr=22, free=4),
         kiwi("fleet", "mindelo", 16.9, -25.0, snr=18, free=3),
         kiwi("canaries", "tenerife", 28.3, -16.6, snr=16, free=3),
         kiwi("azores", "faial", 38.7, -27.2, snr=18, free=3),
@@ -974,40 +964,34 @@ def test_assign_vacation_kiwis_bulletin_beam():
         kiwi("pardinho", "pardinho", -23.11, -48.38, snr=18, free=4),
         kiwi("ba", "ramos-mejia", -34.66, -58.54, snr=12, free=2),
         kiwi("th", "papeete", -17.5350, -149.5697, snr=16, free=2),
-        kiwi("loud-far", "singapore", 1.35, 103.82, snr=40, free=8),
     ]
     cfg = {
         "sdr": {
             "min_free_slots": 2,
-            "beam": {
-                "count": 4,
-                "min_fleet_km": 800,
-                "max_xt_km": 1500,
-                "max_daz_deg": 16,
-                "min_separation_km": 400,
-            },
+            "beam": {"count": 0},
+            "ack_omni": {"count": 4, "min_separation_km": 400},
             "sites": {
-                "france": {"lat": tx_lat, "lon": tx_lon, "label": "France", "radius_km": 1500},
-                "tahiti": {"lat": -17.5350, "lon": -149.5697, "label": "Tahiti", "radius_km": 2500},
+                "france": {"lat": 46.46806, "lon": -1.61694, "label": "France", "radius_km": 1500},
             },
-        }
+        },
+        "radio": {"ack": [{"freq_khz": 16551.0}, {"freq_khz": 12418.0}]},
     }
-    tuesday = datetime(2026, 9, 22, 15, 0, tzinfo=timezone.utc)
-    roles = assign_vacation_kiwis(pool, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg, when=tuesday)
-    assert roles["tx"]["id"] == "th"
-    beams = [roles[k] for k in sorted(roles) if k.startswith("tx_beam")]
-    beam_ids = {r["id"] for r in beams}
-    assert 1 <= len(beams) <= 4
-    assert "natal" in beam_ids
-    assert "ba" in beam_ids or "pardinho" in beam_ids
-    assert "canaries" not in beam_ids
-    assert "loud-far" not in beam_ids
-    assert "azores" not in beam_ids
-    assert "th" not in beam_ids
-    assert all(r["id"] != "fr" for r in beams)
-    assert all(
-        haversine_km(float(r["lat"]), float(r["lon"]), fleet_lat, fleet_lon) >= 800 for r in beams
+    roles = assign_vacation_kiwis(
+        pool, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg, when=datetime(2026, 9, 22, 18, 0, tzinfo=timezone.utc)
     )
+    assert roles["tx"]["id"] == "fleet"
+    assert not any(k.startswith("tx_beam") for k in roles)
+
+
+def test_ack_window_h_plus_10():
+    from recorder.session import _ack_window
+
+    delay, dur = _ack_window({"schedule": {"lead_minutes": 1, "ack_delay_minutes": 10}}, 25 * 60)
+    assert delay == 11 * 60
+    assert dur == 14 * 60
+    delay0, dur0 = _ack_window({"schedule": {"lead_minutes": 1, "ack_delay_minutes": 10}}, 10 * 60)
+    assert delay0 == 11 * 60
+    assert dur0 == 0
 
 
 def test_ack_channels_per_site():
@@ -1031,7 +1015,6 @@ def test_ack_channels_per_site():
     channels = _channels(cfg, sites)
     assert [c["id"] for c in channels] == [
         "tx",
-        "tx-fleet",
         "ack1-fleet",
         "ack1-france",
         "ack1-tahiti",
@@ -1039,29 +1022,23 @@ def test_ack_channels_per_site():
         "ack2-france",
         "ack2-tahiti",
     ]
+    assert channels[0]["site_label"] == "flotte (bulletin)"
+    assert channels[0]["screencast"] is True
     roles = {
-        "tx": {"name": "k-tx"},
-        "tx_fleet": {"name": "k-fleet-tx"},
+        "tx": {"name": "k-fleet-tx"},
         "fleet": {"name": "k-fleet"},
         "france": {"name": "k-fr"},
         "tahiti": {"name": "k-th"},
     }
     got = _pick_kiwis(roles, channels)
-    assert got["tx"]["name"] == "k-tx"
-    assert got["tx-fleet"]["name"] == "k-fleet-tx"
+    assert got["tx"]["name"] == "k-fleet-tx"
     assert got["ack1-france"]["name"] == "k-fr"
     assert got["ack2-tahiti"]["name"] == "k-th"
 
     overlap = _channels(cfg, sites, extra_tx=[{"id": "cape", "label": "Cap Town"}])
-    assert [c["id"] for c in overlap[:3]] == ["tx", "tx-fleet", "tx-cape"]
-    assert overlap[2]["site"] == "tx_cape"
-    assert overlap[2]["screencast"] is False
-    beam = _channels(
-        cfg,
-        sites,
-        extra_tx=[{"id": "beam1", "label": "faisceau bulletin 1", "role": "tx_beam1"}],
-    )
-    assert any(c["id"] == "tx-beam1" and c["site"] == "tx_beam1" for c in beam)
+    assert [c["id"] for c in overlap[:2]] == ["tx", "tx-cape"]
+    assert overlap[1]["site"] == "tx_cape"
+    assert overlap[1]["screencast"] is False
 
 
 def test_runtime_settings_override_qrg(tmp_path, monkeypatch):
@@ -1618,11 +1595,10 @@ def test_bulletin_tx_qths_overlap_france_cape_tahiti():
         cfg=cfg,
         boats=split + [{"lat": -40.0, "lon": 35.0, "name": "Est"}],
     )
-    assert roles["tx"]["id"] == "th"
-    assert roles["tx_france"]["id"] == "fr"
-    assert roles["tx_cape"]["id"] == "cape"
-    assert "tx_fleet_west" in roles
-    assert "tx_fleet_east" in roles
+    assert roles["tx"]["id"] in {"west", "cape", "east", "canaries"}
+    assert not any(k.startswith("tx_") for k in roles)
+    assert "tx_fleet_west" not in roles
+    assert "tx_fleet_east" not in roles
 
 
 def test_metrics_payload_exposes_ggr_gauges(tmp_path, monkeypatch):
