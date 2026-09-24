@@ -557,20 +557,19 @@ window.GgrMixer = (function () {
     return bufferedPct(el);
   }
 
-  /** % affiché : prefetch octets (fiable) sinon buffer HTML5 (souvent par à-coups). */
-  function downloadPct(tr) {
-    if (!tr) return 0;
-    if (tr.prefetchBusy || tr.prefetchDone) return Number(tr.loadPct) || (tr.prefetchDone ? 100 : 0);
-    const el = tr.el;
-    if (!el) return Number(tr.loadPct) || 0;
-    const raw = bufferedPct(el);
-    if (raw >= 0.5) return raw;
-    if (el.networkState === 2) return Math.max(1, tr.loadPct || 0);
-    if ((el.readyState || 0) >= 1) return Math.max(2, tr.loadPct || 0);
-    return tr.loadPct || 0;
+  /** % buffer HTML5 (durée), monotone pour la jauge. */
+  function trackLoadPct(tr) {
+    const el = tr && tr.el;
+    if (!el) return Number(tr && tr.loadPct) || 0;
+    const buf = bufferedPct(el);
+    const prev = Number(tr.loadPct) || 0;
+    if (buf >= 0.5) return Math.max(prev, buf);
+    // Avant le 1er range buffered : indiquer l’activité réseau sans rester à 1 % figé.
+    if (el.networkState === 2) return Math.max(prev, Math.min(12, prev + 0.8));
+    if ((el.readyState || 0) >= 1) return Math.max(prev, 4);
+    return prev;
   }
 
-  /** true si la timeline autour de t (ou currentTime) est déjà en cache. */
   function bufferedAt(el, t) {
     if (!el || !el.buffered || !el.buffered.length) return false;
     const cur = Number.isFinite(t) ? t : Number.isFinite(el.currentTime) ? el.currentTime : 0;
@@ -587,9 +586,9 @@ window.GgrMixer = (function () {
   }
 
   function playheadCovered(tr) {
-    if (tr && tr.prefetchDone && tr.el && tr.el.readyState >= 1) return true;
     const el = tr && tr.el;
     if (!el) return false;
+    if (el.readyState >= 4 && bufferedPct(el) >= 98) return true;
     const cur = Number.isFinite(el.currentTime) ? el.currentTime : t0;
     return bufferedAt(el, cur);
   }
@@ -597,7 +596,7 @@ window.GgrMixer = (function () {
   function setAudioLoadPoll(on) {
     if (on) {
       if (audioLoadPoll) return;
-      audioLoadPoll = window.setInterval(updateAudioLoad, 200);
+      audioLoadPoll = window.setInterval(updateAudioLoad, 100);
       return;
     }
     if (!audioLoadPoll) return;
@@ -617,20 +616,31 @@ window.GgrMixer = (function () {
   function updateAudioLoad() {
     const live = tracks.filter((tr) => tr.el && !tr.dead && liveForPlay(tr));
     const HAVE_CURRENT = 2;
-    const canPlay = live.filter((tr) => tr.el.readyState >= HAVE_CURRENT || tr.prefetchDone).length;
-
-    const stillDownloading = live.some((tr) => tr.prefetchBusy || (audioWarming && !tr.prefetchDone));
-    const seekNeedsData = live.some((tr) => {
-      if (tr.prefetchDone) return false;
+    const HAVE_FUTURE = 3;
+    const NETWORK_LOADING = 2;
+    const canPlay = live.filter((tr) => tr.el.readyState >= HAVE_CURRENT).length;
+    const netBusy = live.some((tr) => tr.el.networkState === NETWORK_LOADING);
+    const notReady = live.some((tr) => tr.el.readyState < HAVE_CURRENT);
+    const starving = playing && live.some((tr) => tr.el.readyState < HAVE_FUTURE && !playheadCovered(tr));
+    // Seek : UI seulement si la tête n’est pas encore couverte (pas de flash à 100 %).
+    const seekGap = live.some((tr) => {
       if (!(tr.el.seeking || seekGate)) return false;
-      const cur = Number.isFinite(tr.el.currentTime) ? tr.el.currentTime : t0;
-      return !bufferedAt(tr.el, cur);
+      return !playheadCovered(tr);
     });
-    const starving =
-      playing && live.some((tr) => !tr.prefetchDone && tr.el.readyState < 3 && !playheadCovered(tr));
-    const busy = stillDownloading || seekNeedsData || starving;
+    const busy =
+      audioWarming ||
+      seekGap ||
+      starving ||
+      (netBusy && live.some((tr) => bufferedPct(tr.el) < 99)) ||
+      (audioWarming && notReady) ||
+      (playing && live.some((tr) => tr.el.readyState < HAVE_CURRENT));
 
-    if (audioWarming && live.length && live.every((tr) => tr.prefetchDone)) {
+    if (
+      audioWarming &&
+      !playing &&
+      live.length &&
+      live.every((tr) => tr.el.readyState >= HAVE_CURRENT && (playheadCovered(tr) || bufferAroundPct(tr.el) >= 35))
+    ) {
       audioWarming = false;
     }
 
@@ -640,21 +650,17 @@ window.GgrMixer = (function () {
         setTrackLoad(tr, 100, { done: true });
         return;
       }
-      if (tr.prefetchDone && !tr.prefetchBusy) {
+      if (playheadCovered(tr) && bufferedPct(tr.el) >= 99) {
         setTrackLoad(tr, 100, { done: true });
         return;
       }
-      if (seekNeedsData && !stillDownloading && playheadCovered(tr)) {
+      if (seekGap && playheadCovered(tr) && !netBusy && !audioWarming) {
         setTrackLoad(tr, 100, { done: true });
         return;
       }
-      const pct = Math.max(1, Math.round(downloadPct(tr)));
-      const label =
-        seekNeedsData && !stillDownloading
-          ? t("audio_seek")
-          : audioWarming && !playing
-            ? t("audio_prep")
-            : t("audio_load");
+      const pct = Math.max(1, Math.round(trackLoadPct(tr)));
+      tr.loadPct = pct;
+      const label = seekGap && !audioWarming ? t("audio_seek") : audioWarming && !playing ? t("audio_prep") : t("audio_load");
       setTrackLoad(tr, pct, { label: label });
     });
 
@@ -668,13 +674,10 @@ window.GgrMixer = (function () {
       hideGlobalAudioLoad();
       return;
     }
-    const active = live.filter((tr) => tr.extractBusy || tr.prefetchBusy || (tr.loadEl && !tr.loadEl.hidden));
-    const pcts = (active.length ? active : live).map((tr) =>
-      tr.extractBusy ? tr.loadPct || 0 : Math.round(downloadPct(tr))
-    );
+    const pcts = live.map((tr) => (tr.extractBusy ? tr.loadPct || 0 : trackLoadPct(tr)));
     const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
     let msg;
-    if (seekNeedsData && !stillDownloading && !avg) msg = t("audio_seek");
+    if (seekGap && !avg) msg = t("audio_seek");
     else if (audioWarming && !playing) msg = t("audio_prep") + " " + avg + " % · " + canPlay + "/" + live.length;
     else if (avg) msg = t("audio_buf", { pct: avg, ready: canPlay, n: live.length });
     else msg = t("audio_load_n", { ready: canPlay, n: live.length });
@@ -688,133 +691,36 @@ window.GgrMixer = (function () {
     setAudioLoadPoll(true);
   }
 
-  /**
-   * Télécharge le fichier Lecture (MP3/M4A) avec progression octets → blob local.
-   * Le buffer HTML5 saute souvent de 1 % à 100 % ; le fetch stream est continu.
-   */
-  async function prefetchPlayAudio(tr) {
-    if (!tr || tr.dead || !tr.src) return false;
-    if (tr.prefetchDone) return true;
-    if (tr.prefetchBusy) {
-      while (tr.prefetchBusy) await new Promise((r) => setTimeout(r, 80));
-      return !!tr.prefetchDone;
-    }
-    tr.prefetchBusy = true;
-    tr.loadPct = 0;
-    setTrackLoad(tr, 1, { label: t("audio_load") });
-    updateAudioLoad();
-    try {
-      const res = await fetch(media(tr.src), { credentials: "same-origin" });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const total = Number(res.headers.get("content-length")) || 0;
-      const mime = res.headers.get("content-type") || "audio/mpeg";
-      const chunks = [];
-      let received = 0;
-      let lastPaint = 0;
-      const paint = async (pct) => {
-        const shown = Math.max(tr.loadPct || 0, Math.min(99, pct));
-        if (shown - lastPaint < 0.4 && shown < 99) return;
-        lastPaint = shown;
-        tr.loadPct = shown;
-        if (!tr.extractBusy) setTrackLoad(tr, shown, { label: t("audio_load") });
-        updateAudioLoad();
-        await new Promise((r) => requestAnimationFrame(r));
-      };
-      if (res.body && typeof res.body.getReader === "function") {
-        const reader = res.body.getReader();
-        while (true) {
-          const step = await reader.read();
-          if (step.done) break;
-          chunks.push(step.value);
-          received += step.value.byteLength;
-          const pct = total
-            ? (received / total) * 100
-            : Math.min(95, 3 + received / 180000);
-          await paint(pct);
-        }
-      } else {
-        const buf = await res.arrayBuffer();
-        chunks.push(new Uint8Array(buf));
-        received = buf.byteLength;
-        await paint(100);
-      }
-      const blob = new Blob(chunks, { type: mime });
-      if (tr.blobUrl) {
-        try {
-          URL.revokeObjectURL(tr.blobUrl);
-        } catch {
-          /* ignore */
-        }
-      }
-      tr.blobUrl = URL.createObjectURL(blob);
-      if (tr.el) {
-        const keep = Number.isFinite(tr.el.currentTime) ? tr.el.currentTime : t0;
-        tr.el.src = tr.blobUrl;
-        tr.el.preload = "auto";
-        await new Promise((resolve) => {
-          let done = false;
-          const finish = () => {
-            if (done) return;
-            done = true;
-            resolve();
-          };
-          tr.el.addEventListener("loadedmetadata", finish, { once: true });
-          tr.el.addEventListener("error", finish, { once: true });
-          try {
-            tr.el.load();
-          } catch {
-            finish();
-          }
-          window.setTimeout(finish, 8000);
-        });
-        noteDuration(tr.el.duration);
-        seekElTo(tr, Number.isFinite(keep) ? keep : t0);
-      }
-      tr.prefetchDone = true;
-      tr.loadPct = 100;
-      setTrackLoad(tr, 100, { done: true });
-      return true;
-    } catch (err) {
-      console.warn("Prefetch audio", tr.id, err);
-      if (tr.el && !tr.el.getAttribute("src") && !tr.blobUrl) {
-        try {
-          tr.el.src = media(tr.src);
-          tr.el.preload = "auto";
-          tr.el.load();
-        } catch {
-          /* ignore */
-        }
-      }
-      return false;
-    } finally {
-      tr.prefetchBusy = false;
-      updateAudioLoad();
-    }
-  }
-
-  async function prefetchPool(list, limit) {
-    const items = list.filter((tr) => tr && !tr.dead && tr.src);
-    if (!items.length) return;
-    let idx = 0;
-    const workers = Array.from({ length: Math.min(limit || 3, items.length) }, async () => {
-      while (idx < items.length) {
-        const tr = items[idx++];
-        await prefetchPlayAudio(tr);
-      }
-    });
-    await Promise.all(workers);
-  }
-
   function warmAudioAt(off) {
     const live = tracks.filter((tr) => tr.el && !tr.dead);
     if (!live.length) return;
     audioWarming = true;
+    live.forEach((tr) => {
+      tr.loadPct = 0;
+      try {
+        tr.el.preload = "auto";
+        if (!tr.el.getAttribute("src") && tr.src) tr.el.src = media(tr.src);
+        tr.el.load();
+      } catch {
+        /* ignore */
+      }
+    });
     updateAudioLoad();
-    void prefetchPool(live, 3).then(() => {
-      return Promise.all(live.map((tr) => waitSeek(tr, off)));
-    }).then(() => {
-      audioWarming = false;
-      updateAudioLoad();
+    Promise.all(live.map((tr) => waitSeek(tr, off))).then(() => {
+      const tid = window.setInterval(() => {
+        updateAudioLoad();
+        const ok = live.every((tr) => tr.el && (tr.el.readyState >= 2 || bufferAroundPct(tr.el) >= 40));
+        if (ok || playing) {
+          clearInterval(tid);
+          if (!playing) audioWarming = false;
+          updateAudioLoad();
+        }
+      }, 200);
+      window.setTimeout(() => {
+        clearInterval(tid);
+        if (!playing) audioWarming = false;
+        updateAudioLoad();
+      }, 25000);
     });
   }
 
@@ -891,8 +797,24 @@ window.GgrMixer = (function () {
     seekGate = true;
     noteReplayPlay();
     const all = tracks.filter((tr) => tr.el && !tr.dead);
-    const needWarm = all.some((tr) => !tr.prefetchDone);
+    const needWarm = all.some((tr) => tr.el.readyState < 2);
     audioWarming = needWarm;
+    all.forEach((tr) => {
+      try {
+        tr.el.preload = "auto";
+        if (!tr.el.getAttribute("src") && tr.src) tr.el.src = media(tr.src);
+      } catch {
+        /* ignore */
+      }
+      tr.el.muted = true;
+      tr.el.play().catch(() => {
+        try {
+          tr.el.load();
+        } catch {
+          /* ignore */
+        }
+      });
+    });
     updateAudioLoad();
     setPlayUi(true);
     cancelAnimationFrame(raf);
@@ -913,7 +835,6 @@ window.GgrMixer = (function () {
           return;
         }
         seekElTo(tr, off);
-        tr.el.muted = true;
         tr.el.play().catch(() => {
           tr.el.addEventListener(
             "canplay",
@@ -934,21 +855,21 @@ window.GgrMixer = (function () {
         if (playing) raf = requestAnimationFrame(loop);
       });
     };
-    const prep = needWarm ? prefetchPool(all, 3) : Promise.resolve();
-    prep
-      .then(() => Promise.all(all.map((tr) => waitSeek(tr, off))))
-      .then(() => {
-        if (gen !== playGen || !playing) return;
-        const clock = clockTrack();
-        const cur = clock && clock.el && Number.isFinite(clock.el.currentTime) ? clock.el.currentTime : off;
-        const lp = loopOn ? loopBounds() : null;
-        if (lp && clock && clock.el && clock.el.readyState >= 1 && (cur < lp.a - 1 || cur >= lp.b - 0.02)) {
-          all.forEach((tr) => seekElTo(tr, off));
-          window.setTimeout(goPlay, 80);
-          return;
-        }
-        goPlay();
-      });
+    Promise.all(all.map((tr) => waitSeek(tr, off))).then(() => {
+      if (gen !== playGen || !playing) return;
+      const clock = clockTrack();
+      const cur = clock && clock.el && Number.isFinite(clock.el.currentTime) ? clock.el.currentTime : off;
+      const lp = loopOn ? loopBounds() : null;
+      if (lp && clock && clock.el && clock.el.readyState >= 1 && (cur < lp.a - 1 || cur >= lp.b - 0.02)) {
+        all.forEach((tr) => seekElTo(tr, off));
+        window.setTimeout(goPlay, 80);
+        return;
+      }
+      goPlay();
+    });
+    window.setTimeout(() => {
+      if (gen === playGen && seekGate) goPlay();
+    }, needWarm ? 2500 : 500);
   }
 
   function setPlayUi(on) {
@@ -1479,8 +1400,9 @@ window.GgrMixer = (function () {
       drawTrack(tr);
       return;
     }
-    // Pas de src réseau : le prefetch fetch→blob alimente la jauge octets.
-    tr.el = new Audio();
+    const url = media(tr.src);
+    tr.el = new Audio(url);
+    // auto : stream immédiat (son + jauge buffer), sans attendre un prefetch blob.
     tr.el.preload = "auto";
     tr.el.controls = false;
     tr.el.hidden = true;
@@ -1522,6 +1444,11 @@ window.GgrMixer = (function () {
       const clock = clockTrack();
       if (clock && clock.el === tr.el) pauseAt(duration || tr.el.currentTime || 0);
     });
+    try {
+      tr.el.load();
+    } catch {
+      /* ignore */
+    }
   }
 
   function pcmName(src) {
@@ -1733,9 +1660,6 @@ window.GgrMixer = (function () {
         storedWf: false,
         extractBusy: false,
         loadPct: 0,
-        prefetchBusy: false,
-        prefetchDone: false,
-        blobUrl: "",
       });
     });
     if (!tracks.length) {
@@ -1757,13 +1681,12 @@ window.GgrMixer = (function () {
     tracks.forEach(attachAudio);
     audioWarming = true;
     updateAudioLoad();
-    void prefetchPool(
-      tracks.filter((tr) => !tr.dead),
-      3
-    ).then(() => {
-      audioWarming = false;
-      updateAudioLoad();
+    void Promise.all(tracks.map((tr) => waitDuration(tr, deepTimePending ? 12000 : 20000))).then(() => {
       if (deepTimePending) applyDeepTime();
+      else {
+        audioWarming = false;
+        updateAudioLoad();
+      }
     });
     tracks.forEach((tr) => {
       if (tr.storedWf || tr.dead) return;
@@ -1800,14 +1723,6 @@ window.GgrMixer = (function () {
         } catch {
           /* ignore */
         }
-      }
-      if (tr.blobUrl) {
-        try {
-          URL.revokeObjectURL(tr.blobUrl);
-        } catch {
-          /* ignore */
-        }
-        tr.blobUrl = "";
       }
     });
     document.body.classList.remove("kiwi-mix-focus");
