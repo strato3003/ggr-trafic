@@ -1,4 +1,4 @@
-# GGR Trafic 1.1.19
+# GGR Trafic 1.1.20
 
 Archives du **trafic HF** entre le radio-club **F6KUF** et les bateaux de la flotte **Golden Globe Race**.
 

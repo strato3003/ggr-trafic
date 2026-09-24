@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.1.20 — 2026-09-25
+
+- Mixeur : retour lecture HTML5 native (plus de prefetch blob) ; jauge autour de la tête de lecture ; unmute fiable ; pics Audacity dès le PCM.
+
 ## 1.1.19 — 2026-09-24
 
 - Mixeur : progression par piste (remplissage + %) ; bandeau global ne reste plus figé à 0/n.
