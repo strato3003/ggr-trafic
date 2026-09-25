@@ -1339,7 +1339,49 @@
   function altitudeToZoom(alt) {
     const a = Number(alt);
     if (!Number.isFinite(a)) return 5;
-    return Math.max(3, Math.min(11, Math.round(9.2 - a * 2.4)));
+    // globe.gl altitude (rayons) → Leaflet zoom (approx. visuelle).
+    return Math.max(2, Math.min(15, Math.round(9.2 - a * 2.4)));
+  }
+
+  function zoomToAltitude(zoom) {
+    const z = Number(zoom);
+    if (!Number.isFinite(z)) return 1.5;
+    return Math.max(0.12, Math.min(3.8, (9.2 - z) / 2.4));
+  }
+
+  /** Vue courante (avant bascule 2D/3D). */
+  function readView(fromMode) {
+    if (fromMode === "2d" && map && typeof map.getCenter === "function") {
+      const c = map.getCenter();
+      const z = map.getZoom();
+      if (!c || !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return null;
+      return { lat: c.lat, lng: c.lng, zoom: z, altitude: zoomToAltitude(z) };
+    }
+    if (fromMode !== "2d" && globe && typeof globe.pointOfView === "function") {
+      try {
+        const pov = globe.pointOfView();
+        if (pov && Number.isFinite(pov.lat) && Number.isFinite(pov.lng)) {
+          const alt = Number.isFinite(pov.altitude) ? pov.altitude : 1.5;
+          return { lat: pov.lat, lng: pov.lng, altitude: alt, zoom: altitudeToZoom(alt) };
+        }
+      } catch {
+        /* globe.gl */
+      }
+    }
+    return null;
+  }
+
+  function applyKeptView(view, mode) {
+    if (!view || !Number.isFinite(view.lat) || !Number.isFinite(view.lng)) return;
+    if (mode === "2d" && map) {
+      const z = Number.isFinite(view.zoom) ? view.zoom : altitudeToZoom(view.altitude);
+      map.setView([view.lat, view.lng], z, { animate: false });
+      return;
+    }
+    if (mode !== "2d" && globe && typeof globe.pointOfView === "function") {
+      const alt = Number.isFinite(view.altitude) ? view.altitude : zoomToAltitude(view.zoom);
+      globe.pointOfView({ lat: view.lat, lng: view.lng, altitude: alt }, 0);
+    }
   }
 
   function lookAt(lat, lng, altitude, ms) {
@@ -2088,9 +2130,12 @@
     window.setTimeout(sizeGlobe, 50);
   }
 
-  function initMap() {
+  function initMap(kept) {
     if (!mapEl || map || typeof L === "undefined" || typeof L.map !== "function") return;
-    const dest = fleetView();
+    const dest =
+      kept && Number.isFinite(kept.lat) && Number.isFinite(kept.lng)
+        ? kept
+        : fleetView();
     map = L.map(mapEl, {
       zoomControl: true,
       attributionControl: false,
@@ -2099,7 +2144,8 @@
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
     }).addTo(map);
-    map.setView([dest.lat, dest.lng], altitudeToZoom(dest.altitude));
+    const z = Number.isFinite(dest.zoom) ? dest.zoom : altitudeToZoom(dest.altitude);
+    map.setView([dest.lat, dest.lng], z);
     if (typeof map.getPane === "function" && !map.getPane("metarea")) {
       map.createPane("metarea");
       map.getPane("metarea").style.zIndex = 350;
@@ -2116,6 +2162,7 @@
       if (!map) return;
       map.invalidateSize();
       refreshMap();
+      if (kept) applyKeptView(kept, "2d");
     }, 80);
   }
 
@@ -2130,6 +2177,9 @@
   function applyMapMode(mode, opts) {
     const boot = !!(opts && opts.boot);
     const next = mode === "2d" ? "2d" : "3d";
+    if (!boot && next === mapMode) return;
+    // Capturer avant de changer mapMode.
+    const keep = !boot ? readView(mapMode) : null;
     const first3d = next === "3d" && !globe;
     mapMode = next;
     document.body.classList.toggle("is-map-2d", mapMode === "2d");
@@ -2141,24 +2191,35 @@
     }
     syncModeButtons();
     if (mapMode === "2d") {
-      if (!map) initMap();
+      if (!map) initMap(keep);
       else {
         map.invalidateSize();
+        if (keep) applyKeptView(keep, "2d");
         refreshMap();
+        window.setTimeout(() => {
+          if (!map) return;
+          map.invalidateSize();
+          if (keep) applyKeptView(keep, "2d");
+        }, 60);
       }
       pauseGlobe();
       return;
     }
     if (first3d) {
-      initGlobe({ intro: boot });
+      initGlobe({ intro: boot && !keep, view: keep });
       requestAnimationFrame(sizeGlobe);
     } else {
       resumeGlobe();
+      if (keep) {
+        applyKeptView(keep, "3d");
+        window.setTimeout(() => applyKeptView(keep, "3d"), 50);
+      }
     }
   }
 
   function initGlobe(opts) {
     const intro = !opts || opts.intro !== false;
+    const kept = opts && opts.view;
     const waiting = document.body.classList.contains("is-unavailable");
     if (intro && !waiting && layers.banner) introPlaying = true;
     if (typeof Globe !== "function") {
@@ -2270,6 +2331,10 @@
     const dest = fleetView();
     if (waiting) {
       globe.pointOfView({ lat: 8, lng: -20, altitude: 2.35 }, 0);
+    } else if (kept && Number.isFinite(kept.lat) && Number.isFinite(kept.lng)) {
+      introPlaying = false;
+      const alt = Number.isFinite(kept.altitude) ? kept.altitude : zoomToAltitude(kept.zoom);
+      globe.pointOfView({ lat: kept.lat, lng: kept.lng, altitude: alt }, 0);
     } else if (intro) {
       introPlaying = true;
       globe.pointOfView({ lat: 8, lng: dest.lng + BANNER_PAN_SPAN, altitude: BANNER_PAN_ALT }, 0);
@@ -2289,7 +2354,7 @@
     bindKmAlign();
     el.addEventListener("wheel", scheduleKmAlign, { passive: true });
     tuneOsmTiles(globe);
-    if (intro && layers.banner && !waiting) {
+    if (intro && !kept && layers.banner && !waiting) {
       const bootBanner = () => startGgrEquatorBanner(globe);
       if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);
       const afterFont = () => bootBanner();
