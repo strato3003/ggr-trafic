@@ -361,6 +361,7 @@ body.map-opt-on .map-opt-toggle__arr {
 }
 .map-opt__row--split {
   align-items: center;
+  flex-wrap: wrap;
   cursor: default;
 }
 .map-opt__main {
@@ -371,34 +372,20 @@ body.map-opt-on .map-opt-toggle__arr {
   min-width: 0;
   cursor: pointer;
 }
-.map-opt__side {
-  flex: 0 0 auto;
-  margin: 0;
-  padding: 0.12rem 0.42rem;
-  border: 1px solid rgba(201, 162, 39, 0.45);
-  border-radius: 2px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  text-transform: lowercase;
-  cursor: pointer;
-  line-height: 1.2;
-}
-.map-opt__side.is-on,
-.map-opt__side[aria-pressed="true"] {
-  color: var(--foam);
-  border-color: var(--brass);
-  background: rgba(201, 162, 39, 0.18);
-}
 .map-opt__side--check {
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
-  text-transform: none;
-  letter-spacing: 0;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.12rem 0.35rem;
+  border: 1px solid rgba(201, 162, 39, 0.35);
+  border-radius: 2px;
+  color: var(--foam);
+  font-size: 0.72rem;
+  line-height: 1.2;
   cursor: pointer;
+  white-space: nowrap;
 }
 .map-opt__side--check input {
   accent-color: var(--brass);

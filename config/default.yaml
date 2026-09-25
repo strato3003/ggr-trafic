@@ -178,6 +178,7 @@ web:
     sdr_fleet: true
     sdr_potential: false
     labels_sdr: true
+    sdr_distance: true
     boats: true
     labels_boats: true
     metarea: true

@@ -82,11 +82,14 @@
   let mapMode = "3d";
   let metareaFc = null;
   const display = data.display || {};
-  function prefOn(lsKey, cfgKey, fallback) {
+  function prefOn(lsKey, cfgKey, fallback, altKeys) {
     try {
-      const v = localStorage.getItem(lsKey);
-      if (v === "on") return true;
-      if (v === "off") return false;
+      const keys = [lsKey].concat(Array.isArray(altKeys) ? altKeys : []);
+      for (let i = 0; i < keys.length; i++) {
+        const v = localStorage.getItem(keys[i]);
+        if (v === "on") return true;
+        if (v === "off") return false;
+      }
     } catch {
       /* ignore */
     }
@@ -127,8 +130,9 @@
     sdrActive: prefOn("ggr-layer-sdrActive", "sdr_fleet", true),
     sdrPotential: prefOn("ggr-layer-sdrPotential", "sdr_potential", false),
     boats: prefOn("ggr-layer-boats", "boats", true),
-    labelsSdr: prefOn("ggr-layer-labels-sdr", "labels_sdr", true),
-    labelsBoats: prefOn("ggr-layer-labels-boats", "labels_boats", true),
+    labelsSdr: prefOn("ggr-layer-labelsSdr", "labels_sdr", true, ["ggr-layer-labels-sdr"]),
+    labelsBoats: prefOn("ggr-layer-labelsBoats", "labels_boats", true, ["ggr-layer-labels-boats"]),
+    sdrDistance: prefOn("ggr-layer-sdrDistance", "sdr_distance", true),
   };
   let panelOpenedOnce = false;
 
@@ -943,6 +947,7 @@
   }
 
   function kiwiKmPoints() {
+    if (!layers.sdrDistance) return [];
     if (!muxOpen && !layers.sdrActive) return [];
     const center = muxOpen ? muxCenter() : fleetCenter();
     if (!center) return [];
@@ -2847,37 +2852,6 @@
     refreshGlobe();
   }
 
-  function syncLabelButtons() {
-    document.querySelectorAll("#map-opt [data-labels]").forEach((btn) => {
-      const kind = btn.getAttribute("data-labels");
-      const on = kind === "sdr" ? layers.labelsSdr : kind === "boats" ? layers.labelsBoats : false;
-      btn.setAttribute("aria-pressed", on ? "true" : "false");
-      btn.classList.toggle("is-on", on);
-    });
-  }
-
-  function setLabels(kind, on) {
-    if (kind === "sdr") {
-      layers.labelsSdr = !!on;
-      try {
-        localStorage.setItem("ggr-layer-labels-sdr", on ? "on" : "off");
-      } catch {
-        /* ignore */
-      }
-    } else if (kind === "boats") {
-      layers.labelsBoats = !!on;
-      try {
-        localStorage.setItem("ggr-layer-labels-boats", on ? "on" : "off");
-      } catch {
-        /* ignore */
-      }
-    } else {
-      return;
-    }
-    syncLabelButtons();
-    refreshGlobe();
-  }
-
   function applyDisplay(d) {
     if (!d || typeof d !== "object") return;
     layers.banner = !!d.banner;
@@ -2886,13 +2860,15 @@
     layers.boats = !!d.boats;
     layers.labelsSdr = d.labels_sdr != null ? !!d.labels_sdr : layers.labelsSdr;
     layers.labelsBoats = d.labels_boats != null ? !!d.labels_boats : d.skippers != null ? !!d.skippers : layers.labelsBoats;
+    layers.sdrDistance = d.sdr_distance != null ? !!d.sdr_distance : layers.sdrDistance;
     try {
       localStorage.setItem("ggr-layer-banner", layers.banner ? "on" : "off");
       localStorage.setItem("ggr-layer-sdrActive", layers.sdrActive ? "on" : "off");
       localStorage.setItem("ggr-layer-sdrPotential", layers.sdrPotential ? "on" : "off");
       localStorage.setItem("ggr-layer-boats", layers.boats ? "on" : "off");
-      localStorage.setItem("ggr-layer-labels-sdr", layers.labelsSdr ? "on" : "off");
-      localStorage.setItem("ggr-layer-labels-boats", layers.labelsBoats ? "on" : "off");
+      localStorage.setItem("ggr-layer-labelsSdr", layers.labelsSdr ? "on" : "off");
+      localStorage.setItem("ggr-layer-labelsBoats", layers.labelsBoats ? "on" : "off");
+      localStorage.setItem("ggr-layer-sdrDistance", layers.sdrDistance ? "on" : "off");
     } catch {
       /* ignore */
     }
@@ -2906,7 +2882,6 @@
       else if (key === "subzones") inp.checked = subzonesOn;
       else if (Object.prototype.hasOwnProperty.call(layers, key)) inp.checked = !!layers[key];
     });
-    syncLabelButtons();
     if (layers.sdrPotential && !kiwisAll.length) loadKiwisAll();
     refreshGlobe();
   }
@@ -2919,14 +2894,6 @@
     else if (Object.prototype.hasOwnProperty.call(layers, key)) inp.checked = !!layers[key];
     inp.addEventListener("change", () => setLayer(key, inp.checked));
   });
-  document.querySelectorAll("#map-opt [data-labels]").forEach((btn) => {
-    const kind = btn.getAttribute("data-labels");
-    btn.addEventListener("click", () => {
-      const cur = kind === "sdr" ? layers.labelsSdr : layers.labelsBoats;
-      setLabels(kind, !cur);
-    });
-  });
-  syncLabelButtons();
   loadKiwisAll();
   fetch("/static/geo/metareas.json")
     .then((r) => (r.ok ? r.json() : null))

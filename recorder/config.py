@@ -206,6 +206,7 @@ DISPLAY_KEYS = (
     ("sdr_fleet", True),
     ("sdr_potential", False),
     ("labels_sdr", True),
+    ("sdr_distance", True),
     ("boats", True),
     ("labels_boats", True),
     ("metarea", True),

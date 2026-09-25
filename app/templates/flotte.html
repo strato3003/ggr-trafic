@@ -30,12 +30,22 @@
       <label class="map-opt__row"><input type="checkbox" data-layer="banner" checked> {{ t('layer_banner') }}</label>
       <div class="map-opt__row map-opt__row--split" title="{{ t('layer_sdr_title') }}">
         <label class="map-opt__main"><input type="checkbox" data-layer="sdrActive" checked> {{ t('layer_sdr') }}</label>
-        <button type="button" class="map-opt__side" data-labels="sdr" aria-pressed="true" title="{{ t('layer_labels') }}">{{ t('layer_labels') }}</button>
+        <label class="map-opt__side map-opt__side--check">
+          <input type="checkbox" data-layer="labelsSdr" checked>
+          {{ t('layer_labels') }}
+        </label>
+        <label class="map-opt__side map-opt__side--check">
+          <input type="checkbox" data-layer="sdrDistance" checked>
+          {{ t('layer_distance') }}
+        </label>
       </div>
       <label class="map-opt__row"><input type="checkbox" data-layer="sdrPotential"> {{ t('layer_potential') }}</label>
       <div class="map-opt__row map-opt__row--split">
         <label class="map-opt__main"><input type="checkbox" data-layer="boats" checked> {{ t('layer_boats') }}</label>
-        <button type="button" class="map-opt__side" data-labels="boats" aria-pressed="true" title="{{ t('layer_labels') }}">{{ t('layer_labels') }}</button>
+        <label class="map-opt__side map-opt__side--check">
+          <input type="checkbox" data-layer="labelsBoats" checked>
+          {{ t('layer_labels') }}
+        </label>
       </div>
       <div class="map-opt__row map-opt__row--split">
         <label class="map-opt__main"><input type="checkbox" data-layer="metarea" id="ggr-metarea" checked> {{ t('layer_metarea') }}</label>
@@ -245,7 +255,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.41.4"></script>
 <script src="/static/js/mixer.js?v={{ version }}-kiwi76"></script>
-<script src="/static/js/reglages.js?v={{ version }}-kiwi79"></script>
+<script src="/static/js/reglages.js?v={{ version }}-kiwi81"></script>
 <script src="/static/js/wait.js?v={{ version }}-kiwi1"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi80"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi81"></script>
 {% endblock %}

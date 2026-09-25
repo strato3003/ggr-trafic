@@ -222,6 +222,10 @@
       {{ t('setup_disp_labels_sdr') }}
     </label>
     <label class="settings__check">
+      <input name="display_sdr_distance" type="checkbox"{% if disp.sdr_distance %} checked{% endif %}>
+      {{ t('setup_disp_sdr_distance') }}
+    </label>
+    <label class="settings__check">
       <input name="display_sdr_potential" type="checkbox"{% if disp.sdr_potential %} checked{% endif %}>
       {{ t('layer_potential') }}
     </label>

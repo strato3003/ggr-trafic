@@ -85,6 +85,7 @@
         sdr_fleet: !!(form.elements.namedItem("display_sdr_fleet") && form.elements.namedItem("display_sdr_fleet").checked),
         sdr_potential: !!(form.elements.namedItem("display_sdr_potential") && form.elements.namedItem("display_sdr_potential").checked),
         labels_sdr: !!(form.elements.namedItem("display_labels_sdr") && form.elements.namedItem("display_labels_sdr").checked),
+        sdr_distance: !!(form.elements.namedItem("display_sdr_distance") && form.elements.namedItem("display_sdr_distance").checked),
         boats: !!(form.elements.namedItem("display_boats") && form.elements.namedItem("display_boats").checked),
         labels_boats: !!(form.elements.namedItem("display_labels_boats") && form.elements.namedItem("display_labels_boats").checked),
         metarea: !!(form.elements.namedItem("display_metarea") && form.elements.namedItem("display_metarea").checked),
