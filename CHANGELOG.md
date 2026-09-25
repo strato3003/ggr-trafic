@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.21 — 2026-09-25
+
+- Carte : calques (libellés SDR/voiliers, distance km, METAREA + sous-zones) ; bouton de fermeture collé au panneau ; zoom +/− au-dessus des calques.
+- Conserver lat/lon et zoom au bascule 2D ↔ 3D.
+
 ## 1.1.20 — 2026-09-25
 
 - Mixeur : retour lecture HTML5 native (plus de prefetch blob) ; jauge autour de la tête de lecture ; unmute fiable ; pics Audacity dès le PCM.
