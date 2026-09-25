@@ -215,19 +215,27 @@
     </label>
     <label class="settings__check">
       <input name="display_sdr_fleet" type="checkbox"{% if disp.sdr_fleet %} checked{% endif %}>
-      {{ t('setup_disp_sdr') }}
+      {{ t('layer_sdr') }}
+    </label>
+    <label class="settings__check">
+      <input name="display_labels_sdr" type="checkbox"{% if disp.labels_sdr %} checked{% endif %}>
+      {{ t('setup_disp_labels_sdr') }}
+    </label>
+    <label class="settings__check">
+      <input name="display_sdr_distance" type="checkbox"{% if disp.sdr_distance %} checked{% endif %}>
+      {{ t('setup_disp_sdr_distance') }}
     </label>
     <label class="settings__check">
       <input name="display_sdr_potential" type="checkbox"{% if disp.sdr_potential %} checked{% endif %}>
       {{ t('layer_potential') }}
     </label>
     <label class="settings__check">
-      <input name="display_skippers" type="checkbox"{% if disp.skippers %} checked{% endif %}>
-      {{ t('layer_skippers') }}
-    </label>
-    <label class="settings__check">
       <input name="display_boats" type="checkbox"{% if disp.boats %} checked{% endif %}>
       {{ t('layer_boats') }}
+    </label>
+    <label class="settings__check">
+      <input name="display_labels_boats" type="checkbox"{% if disp.labels_boats %} checked{% endif %}>
+      {{ t('setup_disp_labels_boats') }}
     </label>
     <label class="settings__check">
       <input name="display_metarea" type="checkbox"{% if disp.metarea %} checked{% endif %}>

@@ -82,11 +82,14 @@
   let mapMode = "3d";
   let metareaFc = null;
   const display = data.display || {};
-  function prefOn(lsKey, cfgKey, fallback) {
+  function prefOn(lsKey, cfgKey, fallback, altKeys) {
     try {
-      const v = localStorage.getItem(lsKey);
-      if (v === "on") return true;
-      if (v === "off") return false;
+      const keys = [lsKey].concat(Array.isArray(altKeys) ? altKeys : []);
+      for (let i = 0; i < keys.length; i++) {
+        const v = localStorage.getItem(keys[i]);
+        if (v === "on") return true;
+        if (v === "off") return false;
+      }
     } catch {
       /* ignore */
     }
@@ -126,8 +129,10 @@
     banner: prefOn("ggr-layer-banner", "banner", true),
     sdrActive: prefOn("ggr-layer-sdrActive", "sdr_fleet", true),
     sdrPotential: prefOn("ggr-layer-sdrPotential", "sdr_potential", false),
-    skippers: prefOn("ggr-layer-skippers", "skippers", true),
     boats: prefOn("ggr-layer-boats", "boats", true),
+    labelsSdr: prefOn("ggr-layer-labelsSdr", "labels_sdr", true, ["ggr-layer-labels-sdr"]),
+    labelsBoats: prefOn("ggr-layer-labelsBoats", "labels_boats", true, ["ggr-layer-labels-boats"]),
+    sdrDistance: prefOn("ggr-layer-sdrDistance", "sdr_distance", true),
   };
   let panelOpenedOnce = false;
 
@@ -470,14 +475,12 @@
   function points() {
     const rows = [];
     boats.forEach((b) => {
-      const buddy = boatInBuddy(b.name);
-      if (buddy && !layers.skippers) return;
-      if (!buddy && !layers.boats) return;
+      if (!layers.boats) return;
       rows.push({
         ...b,
         lng: b.lon,
         kind: "boat",
-        inBuddy: buddy,
+        inBuddy: boatInBuddy(b.name),
       });
     });
     const seenSdr = new Set();
@@ -677,11 +680,17 @@
       icon.style.boxShadow = "0 0 8px #3dba7a";
     }
     wrap.appendChild(icon);
-    if ((d.kind === "boat" && d.inBuddy) || d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi" || d.kind === "tx") {
+    const sdrKinds = d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi" || d.kind === "tx";
+    const showLab =
+      (d.kind === "boat" && layers.labelsBoats) || (sdrKinds && layers.labelsSdr);
+    if (showLab) {
       const name = document.createElement("span");
       name.className = "globe-mark__name";
       name.style.cssText = "position:absolute;left:14px;top:50%;transform:translateY(-50%);white-space:nowrap;";
-      name.textContent = d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi" ? sdrLabel(d) : d.name || "";
+      name.textContent =
+        d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi"
+          ? sdrLabel(d)
+          : d.name || "";
       wrap.appendChild(name);
     }
     if (d.kind !== "boat") {
@@ -704,9 +713,7 @@
   function paths() {
     return boats
       .map((b) => {
-        const buddy = boatInBuddy(b.name);
-        if (buddy && !layers.skippers) return null;
-        if (!buddy && !layers.boats) return null;
+        if (!layers.boats) return null;
         const pts = (b.track || [])
           .filter((p) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]))
           .map((p) => [p[0], p[1]]);
@@ -940,6 +947,7 @@
   }
 
   function kiwiKmPoints() {
+    if (!layers.sdrDistance) return [];
     if (!muxOpen && !layers.sdrActive) return [];
     const center = muxOpen ? muxCenter() : fleetCenter();
     if (!center) return [];
@@ -1336,7 +1344,49 @@
   function altitudeToZoom(alt) {
     const a = Number(alt);
     if (!Number.isFinite(a)) return 5;
-    return Math.max(3, Math.min(11, Math.round(9.2 - a * 2.4)));
+    // globe.gl altitude (rayons) → Leaflet zoom (approx. visuelle).
+    return Math.max(2, Math.min(15, Math.round(9.2 - a * 2.4)));
+  }
+
+  function zoomToAltitude(zoom) {
+    const z = Number(zoom);
+    if (!Number.isFinite(z)) return 1.5;
+    return Math.max(0.12, Math.min(3.8, (9.2 - z) / 2.4));
+  }
+
+  /** Vue courante (avant bascule 2D/3D). */
+  function readView(fromMode) {
+    if (fromMode === "2d" && map && typeof map.getCenter === "function") {
+      const c = map.getCenter();
+      const z = map.getZoom();
+      if (!c || !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return null;
+      return { lat: c.lat, lng: c.lng, zoom: z, altitude: zoomToAltitude(z) };
+    }
+    if (fromMode !== "2d" && globe && typeof globe.pointOfView === "function") {
+      try {
+        const pov = globe.pointOfView();
+        if (pov && Number.isFinite(pov.lat) && Number.isFinite(pov.lng)) {
+          const alt = Number.isFinite(pov.altitude) ? pov.altitude : 1.5;
+          return { lat: pov.lat, lng: pov.lng, altitude: alt, zoom: altitudeToZoom(alt) };
+        }
+      } catch {
+        /* globe.gl */
+      }
+    }
+    return null;
+  }
+
+  function applyKeptView(view, mode) {
+    if (!view || !Number.isFinite(view.lat) || !Number.isFinite(view.lng)) return;
+    if (mode === "2d" && map) {
+      const z = Number.isFinite(view.zoom) ? view.zoom : altitudeToZoom(view.altitude);
+      map.setView([view.lat, view.lng], z, { animate: false });
+      return;
+    }
+    if (mode !== "2d" && globe && typeof globe.pointOfView === "function") {
+      const alt = Number.isFinite(view.altitude) ? view.altitude : zoomToAltitude(view.zoom);
+      globe.pointOfView({ lat: view.lat, lng: view.lng, altitude: alt }, 0);
+    }
   }
 
   function lookAt(lat, lng, altitude, ms) {
@@ -2085,18 +2135,22 @@
     window.setTimeout(sizeGlobe, 50);
   }
 
-  function initMap() {
+  function initMap(kept) {
     if (!mapEl || map || typeof L === "undefined" || typeof L.map !== "function") return;
-    const dest = fleetView();
+    const dest =
+      kept && Number.isFinite(kept.lat) && Number.isFinite(kept.lng)
+        ? kept
+        : fleetView();
     map = L.map(mapEl, {
-      zoomControl: true,
+      zoomControl: false,
       attributionControl: false,
       worldCopyJump: true,
     });
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
     }).addTo(map);
-    map.setView([dest.lat, dest.lng], altitudeToZoom(dest.altitude));
+    const z = Number.isFinite(dest.zoom) ? dest.zoom : altitudeToZoom(dest.altitude);
+    map.setView([dest.lat, dest.lng], z);
     if (typeof map.getPane === "function" && !map.getPane("metarea")) {
       map.createPane("metarea");
       map.getPane("metarea").style.zIndex = 350;
@@ -2113,6 +2167,7 @@
       if (!map) return;
       map.invalidateSize();
       refreshMap();
+      if (kept) applyKeptView(kept, "2d");
     }, 80);
   }
 
@@ -2127,6 +2182,9 @@
   function applyMapMode(mode, opts) {
     const boot = !!(opts && opts.boot);
     const next = mode === "2d" ? "2d" : "3d";
+    if (!boot && next === mapMode) return;
+    // Capturer avant de changer mapMode.
+    const keep = !boot ? readView(mapMode) : null;
     const first3d = next === "3d" && !globe;
     mapMode = next;
     document.body.classList.toggle("is-map-2d", mapMode === "2d");
@@ -2138,24 +2196,35 @@
     }
     syncModeButtons();
     if (mapMode === "2d") {
-      if (!map) initMap();
+      if (!map) initMap(keep);
       else {
         map.invalidateSize();
+        if (keep) applyKeptView(keep, "2d");
         refreshMap();
+        window.setTimeout(() => {
+          if (!map) return;
+          map.invalidateSize();
+          if (keep) applyKeptView(keep, "2d");
+        }, 60);
       }
       pauseGlobe();
       return;
     }
     if (first3d) {
-      initGlobe({ intro: boot });
+      initGlobe({ intro: boot && !keep, view: keep });
       requestAnimationFrame(sizeGlobe);
     } else {
       resumeGlobe();
+      if (keep) {
+        applyKeptView(keep, "3d");
+        window.setTimeout(() => applyKeptView(keep, "3d"), 50);
+      }
     }
   }
 
   function initGlobe(opts) {
     const intro = !opts || opts.intro !== false;
+    const kept = opts && opts.view;
     const waiting = document.body.classList.contains("is-unavailable");
     if (intro && !waiting && layers.banner) introPlaying = true;
     if (typeof Globe !== "function") {
@@ -2267,6 +2336,10 @@
     const dest = fleetView();
     if (waiting) {
       globe.pointOfView({ lat: 8, lng: -20, altitude: 2.35 }, 0);
+    } else if (kept && Number.isFinite(kept.lat) && Number.isFinite(kept.lng)) {
+      introPlaying = false;
+      const alt = Number.isFinite(kept.altitude) ? kept.altitude : zoomToAltitude(kept.zoom);
+      globe.pointOfView({ lat: kept.lat, lng: kept.lng, altitude: alt }, 0);
     } else if (intro) {
       introPlaying = true;
       globe.pointOfView({ lat: 8, lng: dest.lng + BANNER_PAN_SPAN, altitude: BANNER_PAN_ALT }, 0);
@@ -2286,7 +2359,7 @@
     bindKmAlign();
     el.addEventListener("wheel", scheduleKmAlign, { passive: true });
     tuneOsmTiles(globe);
-    if (intro && layers.banner && !waiting) {
+    if (intro && !kept && layers.banner && !waiting) {
       const bootBanner = () => startGgrEquatorBanner(globe);
       if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);
       const afterFont = () => bootBanner();
@@ -2484,6 +2557,32 @@
 
   document.querySelectorAll(".map-mode [data-map-mode]").forEach((btn) => {
     btn.addEventListener("click", () => applyMapMode(btn.getAttribute("data-map-mode")));
+  });
+  function mapZoomBy(dir) {
+    const inward = dir === "in";
+    if (mapMode === "2d") {
+      if (!map) initMap();
+      if (!map) return;
+      if (inward) map.zoomIn();
+      else map.zoomOut();
+      return;
+    }
+    if (!globe || typeof globe.pointOfView !== "function") return;
+    const pov = globe.pointOfView() || {};
+    const alt = Number(pov.altitude);
+    const cur = Number.isFinite(alt) ? alt : 1.6;
+    const next = Math.min(4.8, Math.max(0.28, inward ? cur * 0.72 : cur / 0.72));
+    globe.pointOfView(
+      {
+        lat: Number.isFinite(pov.lat) ? pov.lat : 0,
+        lng: Number.isFinite(pov.lng) ? pov.lng : 0,
+        altitude: next,
+      },
+      260
+    );
+  }
+  document.querySelectorAll(".map-zoom [data-map-zoom]").forEach((btn) => {
+    btn.addEventListener("click", () => mapZoomBy(btn.getAttribute("data-map-zoom")));
   });
   function lectureClass(text, inCoast) {
     const raw = String(text || "").trim();
@@ -2784,14 +2883,18 @@
     layers.banner = !!d.banner;
     layers.sdrActive = !!d.sdr_fleet;
     layers.sdrPotential = !!d.sdr_potential;
-    layers.skippers = !!d.skippers;
     layers.boats = !!d.boats;
+    layers.labelsSdr = d.labels_sdr != null ? !!d.labels_sdr : layers.labelsSdr;
+    layers.labelsBoats = d.labels_boats != null ? !!d.labels_boats : d.skippers != null ? !!d.skippers : layers.labelsBoats;
+    layers.sdrDistance = d.sdr_distance != null ? !!d.sdr_distance : layers.sdrDistance;
     try {
       localStorage.setItem("ggr-layer-banner", layers.banner ? "on" : "off");
       localStorage.setItem("ggr-layer-sdrActive", layers.sdrActive ? "on" : "off");
       localStorage.setItem("ggr-layer-sdrPotential", layers.sdrPotential ? "on" : "off");
-      localStorage.setItem("ggr-layer-skippers", layers.skippers ? "on" : "off");
       localStorage.setItem("ggr-layer-boats", layers.boats ? "on" : "off");
+      localStorage.setItem("ggr-layer-labelsSdr", layers.labelsSdr ? "on" : "off");
+      localStorage.setItem("ggr-layer-labelsBoats", layers.labelsBoats ? "on" : "off");
+      localStorage.setItem("ggr-layer-sdrDistance", layers.sdrDistance ? "on" : "off");
     } catch {
       /* ignore */
     }

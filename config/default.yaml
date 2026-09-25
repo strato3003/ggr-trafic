@@ -1,5 +1,5 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "1.1.20"
+version: "1.1.21"
 
 club:
   callsign: F6KUF
@@ -177,8 +177,10 @@ web:
     banner: true
     sdr_fleet: true
     sdr_potential: false
-    skippers: true
+    labels_sdr: true
+    sdr_distance: true
     boats: true
+    labels_boats: true
     metarea: true
     subzones: true
 

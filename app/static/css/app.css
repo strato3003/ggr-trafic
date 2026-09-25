@@ -258,15 +258,63 @@ body.is-map-3d .ggr-map-2d {
   color: var(--bg);
   background: var(--brass);
 }
-.map-opt-toggle {
+.map-zoom {
+  position: absolute;
+  top: 4.55rem;
+  left: 0.85rem;
+  z-index: 22;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(8, 22, 36, 0.88);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.map-zoom button {
+  margin: 0;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  font: 600 1.05rem/1 var(--sans);
+  color: var(--foam);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.map-zoom button + button {
+  border-top: 1px solid var(--line);
+}
+.map-zoom button:hover { background: #12324c; }
+.map-opt-dock {
   position: absolute;
   left: 0;
   top: 50%;
+  z-index: 20;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.map-opt-dock > * {
+  pointer-events: auto;
+}
+body.map-opt-on .map-opt-dock {
+  left: var(--rail-gap);
+}
+.map-opt-toggle {
+  position: relative;
+  left: auto;
+  top: auto;
   z-index: 21;
   width: 1.15rem;
   height: 2.55rem;
   margin: 0;
   padding: 0;
+  flex: 0 0 auto;
+  align-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -278,7 +326,7 @@ body.is-map-3d .ggr-map-2d {
   border-left: 0;
   border-radius: 0 8px 8px 0;
   cursor: pointer;
-  transform: translateY(-50%);
+  transform: none;
   overflow: visible;
 }
 .map-opt-toggle:hover { background: var(--kiwi-2); }
@@ -321,29 +369,28 @@ body:not(.map-opt-on) .map-opt-toggle__arr {
     drop-shadow(0 0 2px #e8c547)
     drop-shadow(0 0 5px rgba(232, 197, 71, 0.75));
 }
-body.map-opt-on .map-opt-toggle {
-  left: calc(13.4rem + var(--rail-gap));
-}
 body.map-opt-on .map-opt-toggle__arr {
   border-left: 0;
   border-right: 6px solid var(--foam);
 }
 .map-opt {
-  position: absolute;
-  left: var(--rail-gap);
-  top: 50%;
+  position: relative;
+  left: auto;
+  top: auto;
   z-index: 20;
-  width: 15.2rem;
-  transform: translateY(-50%);
-  padding: 0.55rem 0.65rem 0.7rem;
+  width: max-content;
+  max-width: min(28rem, calc(100vw - 4rem));
+  min-width: 14rem;
+  transform: none;
+  padding: 0.5rem 0.7rem 0.6rem;
   background: rgba(10, 22, 36, 0.94);
   border: 1px solid var(--line);
-  border-radius: var(--rail-radius);
+  border-radius: var(--rail-radius) 0 0 var(--rail-radius);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 .map-opt[hidden] { display: none; }
 .map-opt__title {
-  margin: 0 0 0.45rem;
+  margin: 0 0 0.4rem;
   font-size: 0.78rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -351,17 +398,55 @@ body.map-opt-on .map-opt-toggle__arr {
 }
 .map-opt__row {
   display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  margin: 0.28rem 0 0;
-  font-size: 0.82rem;
-  line-height: 1.3;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.22rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.25;
   color: var(--foam);
   cursor: pointer;
+  white-space: nowrap;
+}
+.map-opt__row--split {
+  cursor: default;
+  flex-wrap: nowrap;
+  gap: 0.2rem;
+}
+.map-opt__main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+.map-opt__sep {
+  flex: 0 0 auto;
+  color: var(--muted);
+  user-select: none;
+  margin: 0 0.05rem 0 0;
+}
+.map-opt__side--check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--foam);
+  font-size: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.map-opt__side--check input {
+  accent-color: var(--brass);
+  margin: 0;
 }
 .map-opt__row input {
   accent-color: var(--brass);
-  margin-top: 0.12rem;
+  margin: 0;
   flex: 0 0 auto;
 }
 .ggr-sdr-pulse {
@@ -454,9 +539,11 @@ body.is-unavailable .globe-stage {
 }
 body.is-unavailable .kiwi-toggle,
 body.is-unavailable .globe-rail,
+body.is-unavailable .map-opt-dock,
 body.is-unavailable .map-opt-toggle,
 body.is-unavailable .map-opt,
 body.is-unavailable .map-mode,
+body.is-unavailable .map-zoom,
 body.is-unavailable .globe-rec,
 body.is-unavailable .globe-osm-copy,
 body.is-unavailable .globe-brand,
