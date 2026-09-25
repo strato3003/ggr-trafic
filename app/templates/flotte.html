@@ -21,40 +21,42 @@
       <button type="button" data-map-mode="2d" aria-pressed="false">2D</button>
       <button type="button" data-map-mode="3d" class="is-on" aria-pressed="true">3D</button>
     </div>
-    <button type="button" class="map-opt-toggle" id="map-opt-toggle" aria-expanded="false" aria-controls="map-opt" aria-label="{{ t('layers') }}" title="{{ t('layers') }}">
-      <span class="map-opt-toggle__arr" aria-hidden="true"></span>
-      <span class="map-opt-toggle__lab" aria-hidden="true">{{ t('layers') }}</span>
-    </button>
-    <aside class="map-opt" id="map-opt" hidden>
-      <p class="map-opt__title">{{ t('layers') }}</p>
-      <label class="map-opt__row"><input type="checkbox" data-layer="banner" checked> {{ t('layer_banner') }}</label>
-      <div class="map-opt__row map-opt__row--split" title="{{ t('layer_sdr_title') }}">
-        <label class="map-opt__main"><input type="checkbox" data-layer="sdrActive" checked> {{ t('layer_sdr') }}</label><span class="map-opt__sep" aria-hidden="true">,</span>
-        <label class="map-opt__side map-opt__side--check">
-          <input type="checkbox" data-layer="labelsSdr" checked>
-          {{ t('layer_labels') }}
-        </label><span class="map-opt__sep" aria-hidden="true">,</span>
-        <label class="map-opt__side map-opt__side--check">
-          <input type="checkbox" data-layer="sdrDistance" checked>
-          {{ t('layer_distance') }}
-        </label>
-      </div>
-      <label class="map-opt__row"><input type="checkbox" data-layer="sdrPotential"> {{ t('layer_potential') }}</label>
-      <div class="map-opt__row map-opt__row--split">
-        <label class="map-opt__main"><input type="checkbox" data-layer="boats" checked> {{ t('layer_boats') }}</label><span class="map-opt__sep" aria-hidden="true">,</span>
-        <label class="map-opt__side map-opt__side--check">
-          <input type="checkbox" data-layer="labelsBoats" checked>
-          {{ t('layer_labels') }}
-        </label>
-      </div>
-      <div class="map-opt__row map-opt__row--split">
-        <label class="map-opt__main"><input type="checkbox" data-layer="metarea" id="ggr-metarea" checked> {{ t('layer_metarea') }}</label><span class="map-opt__sep" aria-hidden="true">,</span>
-        <label class="map-opt__side map-opt__side--check" title="{{ t('layer_subzones') }}">
-          <input type="checkbox" data-layer="subzones" id="ggr-subzones" checked>
-          {{ t('layer_subzones') }}
-        </label>
-      </div>
-    </aside>
+    <div class="map-opt-dock" id="map-opt-dock">
+      <aside class="map-opt" id="map-opt" hidden>
+        <p class="map-opt__title">{{ t('layers') }}</p>
+        <label class="map-opt__row"><input type="checkbox" data-layer="banner" checked> {{ t('layer_banner') }}</label>
+        <div class="map-opt__row map-opt__row--split" title="{{ t('layer_sdr_title') }}">
+          <label class="map-opt__main"><input type="checkbox" data-layer="sdrActive" checked> {{ t('layer_sdr') }}</label><span class="map-opt__sep" aria-hidden="true">,</span>
+          <label class="map-opt__side map-opt__side--check">
+            <input type="checkbox" data-layer="labelsSdr" checked>
+            {{ t('layer_labels') }}
+          </label><span class="map-opt__sep" aria-hidden="true">,</span>
+          <label class="map-opt__side map-opt__side--check">
+            <input type="checkbox" data-layer="sdrDistance" checked>
+            {{ t('layer_distance') }}
+          </label>
+        </div>
+        <label class="map-opt__row"><input type="checkbox" data-layer="sdrPotential"> {{ t('layer_potential') }}</label>
+        <div class="map-opt__row map-opt__row--split">
+          <label class="map-opt__main"><input type="checkbox" data-layer="boats" checked> {{ t('layer_boats') }}</label><span class="map-opt__sep" aria-hidden="true">,</span>
+          <label class="map-opt__side map-opt__side--check">
+            <input type="checkbox" data-layer="labelsBoats" checked>
+            {{ t('layer_labels') }}
+          </label>
+        </div>
+        <div class="map-opt__row map-opt__row--split">
+          <label class="map-opt__main"><input type="checkbox" data-layer="metarea" id="ggr-metarea" checked> {{ t('layer_metarea') }}</label><span class="map-opt__sep" aria-hidden="true">,</span>
+          <label class="map-opt__side map-opt__side--check" title="{{ t('layer_subzones') }}">
+            <input type="checkbox" data-layer="subzones" id="ggr-subzones" checked>
+            {{ t('layer_subzones') }}
+          </label>
+        </div>
+      </aside>
+      <button type="button" class="map-opt-toggle" id="map-opt-toggle" aria-expanded="false" aria-controls="map-opt" aria-label="{{ t('layers') }}" title="{{ t('layers') }}">
+        <span class="map-opt-toggle__arr" aria-hidden="true"></span>
+        <span class="map-opt-toggle__lab" aria-hidden="true">{{ t('layers') }}</span>
+      </button>
+    </div>
     <div class="globe-rec">{% include "_recording.html" %}</div>
     <p class="globe-osm-copy">© <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a>
       · {{ t('osm_iho') }} <a href="https://iho.int" rel="noreferrer">IHO</a> / WMO</p>

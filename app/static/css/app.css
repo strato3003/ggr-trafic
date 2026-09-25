@@ -258,15 +258,34 @@ body.is-map-3d .ggr-map-2d {
   color: var(--bg);
   background: var(--brass);
 }
-.map-opt-toggle {
+.map-opt-dock {
   position: absolute;
   left: 0;
   top: 50%;
+  z-index: 20;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.map-opt-dock > * {
+  pointer-events: auto;
+}
+body.map-opt-on .map-opt-dock {
+  left: var(--rail-gap);
+}
+.map-opt-toggle {
+  position: relative;
+  left: auto;
+  top: auto;
   z-index: 21;
   width: 1.15rem;
   height: 2.55rem;
   margin: 0;
   padding: 0;
+  flex: 0 0 auto;
+  align-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -278,7 +297,7 @@ body.is-map-3d .ggr-map-2d {
   border-left: 0;
   border-radius: 0 8px 8px 0;
   cursor: pointer;
-  transform: translateY(-50%);
+  transform: none;
   overflow: visible;
 }
 .map-opt-toggle:hover { background: var(--kiwi-2); }
@@ -321,26 +340,23 @@ body:not(.map-opt-on) .map-opt-toggle__arr {
     drop-shadow(0 0 2px #e8c547)
     drop-shadow(0 0 5px rgba(232, 197, 71, 0.75));
 }
-body.map-opt-on .map-opt-toggle {
-  left: calc(13.4rem + var(--rail-gap));
-}
 body.map-opt-on .map-opt-toggle__arr {
   border-left: 0;
   border-right: 6px solid var(--foam);
 }
 .map-opt {
-  position: absolute;
-  left: var(--rail-gap);
-  top: 50%;
+  position: relative;
+  left: auto;
+  top: auto;
   z-index: 20;
   width: max-content;
-  max-width: min(28rem, calc(100vw - 2 * var(--rail-gap) - 1rem));
+  max-width: min(28rem, calc(100vw - 4rem));
   min-width: 14rem;
-  transform: translateY(-50%);
+  transform: none;
   padding: 0.5rem 0.7rem 0.6rem;
   background: rgba(10, 22, 36, 0.94);
   border: 1px solid var(--line);
-  border-radius: var(--rail-radius);
+  border-radius: var(--rail-radius) 0 0 var(--rail-radius);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 .map-opt[hidden] { display: none; }
@@ -494,6 +510,7 @@ body.is-unavailable .globe-stage {
 }
 body.is-unavailable .kiwi-toggle,
 body.is-unavailable .globe-rail,
+body.is-unavailable .map-opt-dock,
 body.is-unavailable .map-opt-toggle,
 body.is-unavailable .map-opt,
 body.is-unavailable .map-mode,
