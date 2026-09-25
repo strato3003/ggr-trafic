@@ -21,6 +21,10 @@
       <button type="button" data-map-mode="2d" aria-pressed="false">2D</button>
       <button type="button" data-map-mode="3d" class="is-on" aria-pressed="true">3D</button>
     </div>
+    <div class="map-zoom" role="group" aria-label="Zoom">
+      <button type="button" data-map-zoom="in" aria-label="Zoom +" title="Zoom +">+</button>
+      <button type="button" data-map-zoom="out" aria-label="Zoom −" title="Zoom −">−</button>
+    </div>
     <div class="map-opt-dock" id="map-opt-dock">
       <aside class="map-opt" id="map-opt" hidden>
         <p class="map-opt__title">{{ t('layers') }}</p>
@@ -259,5 +263,5 @@
 <script src="/static/js/mixer.js?v={{ version }}-kiwi76"></script>
 <script src="/static/js/reglages.js?v={{ version }}-kiwi81"></script>
 <script src="/static/js/wait.js?v={{ version }}-kiwi1"></script>
-<script src="/static/js/globe.js?v={{ version }}-kiwi81"></script>
+<script src="/static/js/globe.js?v={{ version }}-kiwi84"></script>
 {% endblock %}

@@ -2142,7 +2142,7 @@
         ? kept
         : fleetView();
     map = L.map(mapEl, {
-      zoomControl: true,
+      zoomControl: false,
       attributionControl: false,
       worldCopyJump: true,
     });
@@ -2557,6 +2557,32 @@
 
   document.querySelectorAll(".map-mode [data-map-mode]").forEach((btn) => {
     btn.addEventListener("click", () => applyMapMode(btn.getAttribute("data-map-mode")));
+  });
+  function mapZoomBy(dir) {
+    const inward = dir === "in";
+    if (mapMode === "2d") {
+      if (!map) initMap();
+      if (!map) return;
+      if (inward) map.zoomIn();
+      else map.zoomOut();
+      return;
+    }
+    if (!globe || typeof globe.pointOfView !== "function") return;
+    const pov = globe.pointOfView() || {};
+    const alt = Number(pov.altitude);
+    const cur = Number.isFinite(alt) ? alt : 1.6;
+    const next = Math.min(4.8, Math.max(0.28, inward ? cur * 0.72 : cur / 0.72));
+    globe.pointOfView(
+      {
+        lat: Number.isFinite(pov.lat) ? pov.lat : 0,
+        lng: Number.isFinite(pov.lng) ? pov.lng : 0,
+        altitude: next,
+      },
+      260
+    );
+  }
+  document.querySelectorAll(".map-zoom [data-map-zoom]").forEach((btn) => {
+    btn.addEventListener("click", () => mapZoomBy(btn.getAttribute("data-map-zoom")));
   });
   function lectureClass(text, inCoast) {
     const raw = String(text || "").trim();
