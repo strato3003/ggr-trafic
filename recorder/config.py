@@ -205,8 +205,9 @@ DISPLAY_KEYS = (
     ("banner", True),
     ("sdr_fleet", True),
     ("sdr_potential", False),
-    ("skippers", True),
+    ("labels_sdr", True),
     ("boats", True),
+    ("labels_boats", True),
     ("metarea", True),
     ("subzones", True),
 )
@@ -233,6 +234,9 @@ def parse_display(raw: Any, base: dict[str, bool] | None = None) -> dict[str, bo
     for key, _fallback in DISPLAY_KEYS:
         if key in raw:
             out[key] = bool(raw[key])
+    # Ancien calque « Skippers » → libellés voiliers.
+    if "labels_boats" not in raw and "skippers" in raw:
+        out["labels_boats"] = bool(raw["skippers"])
     return out
 
 

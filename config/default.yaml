@@ -177,8 +177,9 @@ web:
     banner: true
     sdr_fleet: true
     sdr_potential: false
-    skippers: true
+    labels_sdr: true
     boats: true
+    labels_boats: true
     metarea: true
     subzones: true
 

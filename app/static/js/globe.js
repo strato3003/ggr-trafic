@@ -126,8 +126,9 @@
     banner: prefOn("ggr-layer-banner", "banner", true),
     sdrActive: prefOn("ggr-layer-sdrActive", "sdr_fleet", true),
     sdrPotential: prefOn("ggr-layer-sdrPotential", "sdr_potential", false),
-    skippers: prefOn("ggr-layer-skippers", "skippers", true),
     boats: prefOn("ggr-layer-boats", "boats", true),
+    labelsSdr: prefOn("ggr-layer-labels-sdr", "labels_sdr", true),
+    labelsBoats: prefOn("ggr-layer-labels-boats", "labels_boats", true),
   };
   let panelOpenedOnce = false;
 
@@ -470,14 +471,12 @@
   function points() {
     const rows = [];
     boats.forEach((b) => {
-      const buddy = boatInBuddy(b.name);
-      if (buddy && !layers.skippers) return;
-      if (!buddy && !layers.boats) return;
+      if (!layers.boats) return;
       rows.push({
         ...b,
         lng: b.lon,
         kind: "boat",
-        inBuddy: buddy,
+        inBuddy: boatInBuddy(b.name),
       });
     });
     const seenSdr = new Set();
@@ -677,11 +676,17 @@
       icon.style.boxShadow = "0 0 8px #3dba7a";
     }
     wrap.appendChild(icon);
-    if ((d.kind === "boat" && d.inBuddy) || d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi" || d.kind === "tx") {
+    const sdrKinds = d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi" || d.kind === "tx";
+    const showLab =
+      (d.kind === "boat" && layers.labelsBoats) || (sdrKinds && layers.labelsSdr);
+    if (showLab) {
       const name = document.createElement("span");
       name.className = "globe-mark__name";
       name.style.cssText = "position:absolute;left:14px;top:50%;transform:translateY(-50%);white-space:nowrap;";
-      name.textContent = d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi" ? sdrLabel(d) : d.name || "";
+      name.textContent =
+        d.kind === "kiwi" || d.kind === "buddy_kiwi" || d.kind === "beam_kiwi" || d.kind === "mux_kiwi"
+          ? sdrLabel(d)
+          : d.name || "";
       wrap.appendChild(name);
     }
     if (d.kind !== "boat") {
@@ -704,9 +709,7 @@
   function paths() {
     return boats
       .map((b) => {
-        const buddy = boatInBuddy(b.name);
-        if (buddy && !layers.skippers) return null;
-        if (!buddy && !layers.boats) return null;
+        if (!layers.boats) return null;
         const pts = (b.track || [])
           .filter((p) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]))
           .map((p) => [p[0], p[1]]);
@@ -2779,19 +2782,52 @@
     refreshGlobe();
   }
 
+  function syncLabelButtons() {
+    document.querySelectorAll("#map-opt [data-labels]").forEach((btn) => {
+      const kind = btn.getAttribute("data-labels");
+      const on = kind === "sdr" ? layers.labelsSdr : kind === "boats" ? layers.labelsBoats : false;
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.classList.toggle("is-on", on);
+    });
+  }
+
+  function setLabels(kind, on) {
+    if (kind === "sdr") {
+      layers.labelsSdr = !!on;
+      try {
+        localStorage.setItem("ggr-layer-labels-sdr", on ? "on" : "off");
+      } catch {
+        /* ignore */
+      }
+    } else if (kind === "boats") {
+      layers.labelsBoats = !!on;
+      try {
+        localStorage.setItem("ggr-layer-labels-boats", on ? "on" : "off");
+      } catch {
+        /* ignore */
+      }
+    } else {
+      return;
+    }
+    syncLabelButtons();
+    refreshGlobe();
+  }
+
   function applyDisplay(d) {
     if (!d || typeof d !== "object") return;
     layers.banner = !!d.banner;
     layers.sdrActive = !!d.sdr_fleet;
     layers.sdrPotential = !!d.sdr_potential;
-    layers.skippers = !!d.skippers;
     layers.boats = !!d.boats;
+    layers.labelsSdr = d.labels_sdr != null ? !!d.labels_sdr : layers.labelsSdr;
+    layers.labelsBoats = d.labels_boats != null ? !!d.labels_boats : d.skippers != null ? !!d.skippers : layers.labelsBoats;
     try {
       localStorage.setItem("ggr-layer-banner", layers.banner ? "on" : "off");
       localStorage.setItem("ggr-layer-sdrActive", layers.sdrActive ? "on" : "off");
       localStorage.setItem("ggr-layer-sdrPotential", layers.sdrPotential ? "on" : "off");
-      localStorage.setItem("ggr-layer-skippers", layers.skippers ? "on" : "off");
       localStorage.setItem("ggr-layer-boats", layers.boats ? "on" : "off");
+      localStorage.setItem("ggr-layer-labels-sdr", layers.labelsSdr ? "on" : "off");
+      localStorage.setItem("ggr-layer-labels-boats", layers.labelsBoats ? "on" : "off");
     } catch {
       /* ignore */
     }
@@ -2805,6 +2841,7 @@
       else if (key === "subzones") inp.checked = subzonesOn;
       else if (Object.prototype.hasOwnProperty.call(layers, key)) inp.checked = !!layers[key];
     });
+    syncLabelButtons();
     if (layers.sdrPotential && !kiwisAll.length) loadKiwisAll();
     refreshGlobe();
   }
@@ -2817,6 +2854,14 @@
     else if (Object.prototype.hasOwnProperty.call(layers, key)) inp.checked = !!layers[key];
     inp.addEventListener("change", () => setLayer(key, inp.checked));
   });
+  document.querySelectorAll("#map-opt [data-labels]").forEach((btn) => {
+    const kind = btn.getAttribute("data-labels");
+    btn.addEventListener("click", () => {
+      const cur = kind === "sdr" ? layers.labelsSdr : layers.labelsBoats;
+      setLabels(kind, !cur);
+    });
+  });
+  syncLabelButtons();
   loadKiwisAll();
   fetch("/static/geo/metareas.json")
     .then((r) => (r.ok ? r.json() : null))
