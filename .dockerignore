@@ -8,6 +8,7 @@ recordings
 .github
 *.md
 !README.md
+!CHANGELOG.md
 tests
 .env
 .env.*
