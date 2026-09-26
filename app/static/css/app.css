@@ -864,6 +864,35 @@ body.kiwi-panel-off .kiwi-toggle__arr {
 .kiwi-status { margin: 0 0 0.55rem; font-size: 0.82rem; }
 .kiwi-about { font-size: 0.88rem; }
 .kiwi-about h1 { font-size: 1.12rem; margin-top: 0; }
+.kiwi-changelog {
+  max-height: min(42vh, 22rem);
+  overflow: auto;
+  margin: 0.35rem 0 0.6rem;
+  padding: 0.35rem 0.55rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(4, 12, 22, 0.55);
+}
+.kiwi-changelog__rel {
+  margin: 0 0 0.7rem;
+}
+.kiwi-changelog__rel:last-child { margin-bottom: 0.15rem; }
+.kiwi-changelog__rel h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--brass);
+  letter-spacing: 0.02em;
+}
+.kiwi-changelog__rel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.kiwi-changelog__rel li {
+  margin: 0.12rem 0;
+  line-height: 1.35;
+  color: var(--foam);
+}
 .kiwi-metarea { font-size: 0.88rem; }
 .kiwi-metarea h1 { font-size: 1.08rem; margin: 0 0 0.45rem; }
 .kiwi-metarea h2 { font-size: 0.92rem; margin: 0.95rem 0 0.35rem; }

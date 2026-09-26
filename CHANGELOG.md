@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.1.22 — 2026-09-26
+
+- À propos : journal des versions (`CHANGELOG.md`) affiché dans le panneau.
+
 ## 1.1.21 — 2026-09-25
 
 - Carte : calques (libellés SDR/voiliers, distance km, METAREA + sous-zones) ; bouton de fermeture collé au panneau ; zoom +/− au-dessus des calques.

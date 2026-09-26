@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import auth_email, auth_google, globe_tiles, i18n, metarea, operators, store, tts
+from app import auth_email, auth_google, changelog, globe_tiles, i18n, metarea, operators, store, tts
 from recorder.config import ack_label, display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import (
@@ -244,6 +244,7 @@ def _ctx(request: Request, **extra):
         "t": lambda key, **kwargs: i18n.t(lang, key, **kwargs),
         "i18n_json": i18n.dump(lang),
         "tts_voices": tts.voices_for(lang),
+        "changelog": changelog.load_entries(),
         "club": club,
         "club_callsign": club.get("callsign") or "F6KUF",
         "radio": cfg.get("radio") or {},

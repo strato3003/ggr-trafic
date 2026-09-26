@@ -29,4 +29,21 @@
   </ul>
   <p>{{ t('about_license') }}</p>
   <p>{{ t('about_author') }}</p>
+  {% if changelog %}
+  <h2>{{ t('about_h2_changelog') }}</h2>
+  <div class="kiwi-changelog">
+    {% for entry in changelog %}
+    <section class="kiwi-changelog__rel">
+      <h3>{{ entry.version }}{% if entry.date %} — {{ entry.date }}{% endif %}</h3>
+      {% if entry.bullets %}
+      <ul>
+        {% for bullet in entry.bullets %}
+        <li>{{ bullet }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+  {% endif %}
 </article>
