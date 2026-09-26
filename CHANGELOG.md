@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.23 — 2026-09-26
+
+- Mixeur : jauge de chargement honnête et monotone (plus de 100 % fantômes ni chute 90 % → 18 %).
+- À propos : journal des versions (`CHANGELOG.md`) dans le panneau (1.1.22).
+
 ## 1.1.22 — 2026-09-26
 
 - À propos : journal des versions (`CHANGELOG.md`) affiché dans le panneau.
