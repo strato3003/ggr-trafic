@@ -538,19 +538,16 @@ window.GgrMixer = (function () {
     }
   }
 
-  /** Portion utile autour de currentTime (deep-link / seek milieu). */
-  function bufferAroundPct(el) {
+  /** Secondes de buffer déjà présentes après la tête de lecture. */
+  function bufferAheadSec(el) {
     if (!el || !el.buffered || !el.buffered.length) return 0;
     const cur = Number.isFinite(el.currentTime) ? el.currentTime : 0;
-    const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
-    const need = Math.min(12, dur ? Math.max(4, dur * 0.02) : 12);
     try {
       for (let i = 0; i < el.buffered.length; i++) {
         const a = el.buffered.start(i);
         const b = el.buffered.end(i);
         if (cur + 0.35 < a || cur - 0.35 > b) continue;
-        const ahead = Math.max(0, b - cur);
-        return Math.min(100, Math.round((ahead / need) * 100));
+        return Math.max(0, b - cur);
       }
     } catch {
       /* ignore */
@@ -558,29 +555,34 @@ window.GgrMixer = (function () {
     return 0;
   }
 
+  /** Portion utile autour de currentTime (deep-link / seek milieu). */
+  function bufferAroundPct(el) {
+    if (!el) return 0;
+    const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+    const need = Math.min(12, dur ? Math.max(4, dur * 0.02) : 8);
+    const ahead = bufferAheadSec(el);
+    if (ahead <= 0) return 0;
+    return Math.min(100, Math.round((ahead / need) * 100));
+  }
+
   /**
-   * Jauge « prêt à jouer » autour de la tête (pas le % fichier entier).
-   * Monotone + creep réseau pour ne jamais rester figée.
+   * Jauge monotone : ne redescend jamais (sauf reset seek).
+   * 100 % uniquement si trackPlayable ; sinon plafond 99.
    */
   function trackLoadPct(tr) {
     const el = tr && tr.el;
-    if (!el) return Number(tr && tr.loadPct) || 0;
-    const prev = Number(tr.loadPct) || 0;
-    const around = bufferAroundPct(el);
-    const whole = bufferedPct(el);
+    if (!el) return 0;
+    if (trackPlayable(tr)) return 100;
+    const prev = Math.min(99, Number(tr.loadPct) || 0);
+    const needSec = 8;
+    const fromBuf = Math.min(99, Math.round((bufferAheadSec(el) / needSec) * 100));
+    let next = Math.max(prev, fromBuf);
     const rs = el.readyState || 0;
-    let next = prev;
-    if (around > 0) next = Math.max(next, around);
-    else if (whole > 0) next = Math.max(next, Math.min(85, whole));
-    if (rs >= 4) next = Math.max(next, 95);
-    else if (rs >= 3) next = Math.max(next, 70);
-    else if (rs >= 2) next = Math.max(next, 45);
-    else if (rs >= 1) next = Math.max(next, 12);
-    // Creep tant que le navigateur charge (évite 1 % / 12 % figés).
-    if (el.networkState === 2 && next < 92) next = Math.min(92, next + 1.2);
-    else if (rs < 2 && next < 18) next = Math.min(18, next + 0.6);
-    if (playheadCovered(tr)) next = Math.max(next, 100);
-    return next;
+    // Métadonnées seules : petit plancher, sans plafonner à 18 % plus bas.
+    if (rs >= 1 && next < 8) next = Math.max(next, Math.min(8, prev + 0.3));
+    // Creep uniquement pendant NETWORK_LOADING, sans jamais redescendre.
+    if (el.networkState === 2 && next < 95) next = Math.min(95, Math.max(next, prev) + 0.55);
+    return Math.min(99, Math.round(Math.max(prev, next)));
   }
 
   function bufferedAt(el, t) {
@@ -601,16 +603,22 @@ window.GgrMixer = (function () {
   function playheadCovered(tr) {
     const el = tr && tr.el;
     if (!el) return false;
-    if ((el.readyState || 0) >= 3 && bufferAroundPct(el) >= 50) return true;
-    if ((el.readyState || 0) >= 4) return true;
-    const cur = Number.isFinite(el.currentTime) ? el.currentTime : t0;
-    return bufferedAt(el, cur);
+    const ahead = bufferAheadSec(el);
+    // Prêt = vraie avance derrière la tête, pas un readyState optimiste.
+    return ahead >= 2.5;
   }
 
   function trackPlayable(tr) {
     const el = tr && tr.el;
     if (!el) return false;
-    return (el.readyState || 0) >= 2 && (playheadCovered(tr) || bufferAroundPct(el) >= 25);
+    if ((el.readyState || 0) < 2) return false;
+    return playheadCovered(tr);
+  }
+
+  function resetTrackLoad(tr) {
+    if (!tr) return;
+    tr.loadPct = 0;
+    if (!tr.extractBusy) setTrackLoad(tr, 1, { label: t("audio_load") });
   }
 
   function setAudioLoadPoll(on) {
@@ -648,25 +656,36 @@ window.GgrMixer = (function () {
     live.forEach((tr) => {
       // Extract waterfall : ne pas écraser sa jauge, mais garder le poll actif.
       if (tr.extractBusy) return;
-      if (!busy || trackPlayable(tr)) {
+      if (trackPlayable(tr) || tr.dead) {
         setTrackLoad(tr, 100, { done: true });
         return;
       }
       const pct = Math.max(1, Math.round(trackLoadPct(tr)));
       tr.loadPct = pct;
       const label = seekGap && !audioWarming ? t("audio_seek") : audioWarming && !playing ? t("audio_prep") : t("audio_load");
+      // Toujours afficher tant que non jouable (busy ou pas) — jamais redescendre à 0.
       setTrackLoad(tr, pct, { label: label });
     });
 
     if (!audioLoadEl) {
-      setAudioLoadPoll(busy || live.some((tr) => tr.extractBusy));
+      setAudioLoadPoll(busy || live.some((tr) => tr.extractBusy || !trackPlayable(tr)));
       return;
     }
-    if (!live.length || !busy) {
-      if (!busy) audioWarming = false;
+    if (!live.length) {
       hideGlobalAudioLoad();
-      // Extraire encore ? poll pour les overlays piste.
+      return;
+    }
+    if (!busy && live.every((tr) => trackPlayable(tr) || tr.extractBusy)) {
+      audioWarming = false;
+      hideGlobalAudioLoad();
       if (live.some((tr) => tr.extractBusy)) setAudioLoadPoll(true);
+      return;
+    }
+    // Encore en charge : garder le bandeau même si « busy » a brièvement basculé.
+    const stillLoading = live.some((tr) => !trackPlayable(tr));
+    if (!busy && !stillLoading) {
+      audioWarming = false;
+      hideGlobalAudioLoad();
       return;
     }
     const pcts = live.map((tr) => {
@@ -674,16 +693,16 @@ window.GgrMixer = (function () {
       return trackPlayable(tr) ? 100 : trackLoadPct(tr);
     });
     const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
+    const shown = canPlay >= live.length ? 100 : Math.min(99, Math.max(1, avg));
     let msg;
-    if (seekGap && !avg) msg = t("audio_seek");
-    else if (audioWarming && !playing) msg = t("audio_prep") + " " + avg + " % · " + canPlay + "/" + live.length;
-    else if (avg) msg = t("audio_buf", { pct: avg, ready: canPlay, n: live.length });
-    else msg = t("audio_load_n", { ready: canPlay, n: live.length });
+    if (seekGap && shown < 5) msg = t("audio_seek");
+    else if (audioWarming && !playing) msg = t("audio_prep") + " " + shown + " % · " + canPlay + "/" + live.length;
+    else msg = t("audio_buf", { pct: shown, ready: canPlay, n: live.length });
     audioLoadEl.hidden = false;
     if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = msg;
     else audioLoadEl.textContent = msg;
     if (audioLoadFill) {
-      audioLoadFill.style.width = Math.max(2, avg || Math.round((canPlay / Math.max(1, live.length)) * 100)) + "%";
+      audioLoadFill.style.width = Math.max(2, shown) + "%";
     }
     audioLoadEl.title = msg;
     setAudioLoadPoll(true);
@@ -694,7 +713,7 @@ window.GgrMixer = (function () {
     if (!live.length) return;
     audioWarming = true;
     live.forEach((tr) => {
-      tr.loadPct = 0;
+      resetTrackLoad(tr);
       try {
         tr.el.preload = "auto";
         if (!tr.el.getAttribute("src") && tr.src) tr.el.src = media(tr.src);
@@ -855,7 +874,8 @@ window.GgrMixer = (function () {
           window.setTimeout(kick, 400);
         });
       });
-      audioWarming = false;
+      // Garder le bandeau tant qu’une piste n’est pas réellement jouable.
+      audioWarming = all.some((tr) => !trackPlayable(tr));
       updateAudioLoad();
       tickTimer = setInterval(tick, 50);
       raf = requestAnimationFrame(function loop() {
@@ -908,7 +928,14 @@ window.GgrMixer = (function () {
     playing = false;
     tracks.forEach((tr) => {
       if (tr.el) tr.el.pause();
-      if (!tr.extractBusy) setTrackLoad(tr, 100, { done: true });
+      if (tr.extractBusy) return;
+      if (trackPlayable(tr) || tr.dead) setTrackLoad(tr, 100, { done: true });
+      else {
+        const pct = Math.round(trackLoadPct(tr));
+        tr.loadPct = pct;
+        if (pct > 0) setTrackLoad(tr, pct, { label: t("audio_load") });
+        else setTrackLoad(tr, 0, { done: true });
+      }
     });
     setPlayUi(false);
     cancelAnimationFrame(raf);
@@ -983,13 +1010,16 @@ window.GgrMixer = (function () {
     }
     tracks.forEach((tr) => {
       if (!tr.el) return;
+      resetTrackLoad(tr);
       try {
         tr.el.currentTime = t0;
       } catch {
         /* ignore */
       }
     });
+    audioWarming = true;
     updateHead();
+    updateAudioLoad();
   }
 
   function pointerTime(ev, canvas) {
@@ -1387,7 +1417,8 @@ window.GgrMixer = (function () {
     const done = !!(opts && opts.done);
     if (done || (tr && tr.dead)) {
       el.hidden = true;
-      tr.loadPct = 100;
+      if (tr.dead || trackPlayable(tr)) tr.loadPct = 100;
+      else if (tr) tr.loadPct = Math.min(99, Number(tr.loadPct) || 0);
       return;
     }
     const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
