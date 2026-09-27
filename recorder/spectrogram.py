@@ -1,8 +1,9 @@
-"""Waterfall USB (0–2,7 kHz) figé à la fin du WAV — même grille que mixer.js."""
+"""Waterfall USB (0–2,7 kHz) et peaks Audacity figés à la fin du WAV — même grille que mixer.js."""
 
 from __future__ import annotations
 
 import array
+import json
 import logging
 import math
 import wave
@@ -17,10 +18,15 @@ FREQ = 128
 FFT = 512
 FMAX_HZ = 2700.0
 SCALE = 1.0 / 32768.0
+PEAK_COLS = 1024
 
 
 def png_name(channel_id: str) -> str:
     return f"waterfall-{channel_id}.png"
+
+
+def peaks_name(channel_id: str) -> str:
+    return f"peaks-{channel_id}.json"
 
 
 def _kiwi_color(t: float) -> tuple[int, int, int]:
@@ -166,4 +172,58 @@ def write_channel_waterfall(session_dir: Path, channel_id: str, wav: Path) -> st
             return dest.name
     except Exception:
         log.exception("Waterfall USB %s", channel_id)
+    return None
+
+
+def _compute_peaks(samples: array.array, cols: int = PEAK_COLS) -> tuple[list[float], list[float]]:
+    """Min/max par colonne, même algo que mixer.js computePeaks (échantillons / 32768)."""
+    n = len(samples)
+    mins = [0.0] * cols
+    maxs = [0.0] * cols
+    if n < 2:
+        return mins, maxs
+    step = n / cols
+    for i in range(cols):
+        a = int(i * step)
+        b = min(n, int((i + 1) * step) + 1)
+        lo = 1.0
+        hi = -1.0
+        for j in range(a, b):
+            v = samples[j] / 32768.0
+            if v < lo:
+                lo = v
+            if v > hi:
+                hi = v
+        mins[i] = round(lo, 5)
+        maxs[i] = round(hi, 5)
+    return mins, maxs
+
+
+def write_peaks(wav: Path, dest: Path, cols: int = PEAK_COLS) -> bool:
+    """Écrit peaks-{id}.json (mins/maxs) pour la piste Audacity du mixer. Idempotent."""
+    if dest.is_file() and dest.stat().st_size > 64:
+        if (not wav.is_file()) or dest.stat().st_mtime >= wav.stat().st_mtime - 0.05:
+            return True
+    if not wav.is_file() or wav.stat().st_size <= 64:
+        return False
+    parsed = _read_mono16(wav)
+    if parsed is None:
+        return False
+    samples, sr = parsed
+    mins, maxs = _compute_peaks(samples, cols)
+    payload = {"cols": cols, "sr": int(sr), "n": len(samples), "mins": mins, "maxs": maxs}
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    tmp.replace(dest)
+    return dest.is_file() and dest.stat().st_size > 64
+
+
+def write_channel_peaks(session_dir: Path, channel_id: str, wav: Path) -> str | None:
+    dest = session_dir / peaks_name(str(channel_id or "tx"))
+    try:
+        if write_peaks(wav, dest):
+            return dest.name
+    except Exception:
+        log.exception("Peaks Audacity %s", channel_id)
     return None
