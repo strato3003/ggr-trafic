@@ -661,15 +661,11 @@ async def _globe_page(request: Request):
                 cover_hz=cover,
                 score_mode="buddy",
             )
-            tx_lat = float(beam_qth["lat"]) if beam_qth else None
-            tx_lon = float(beam_qth["lon"]) if beam_qth else None
             roles = assign_buddy_kiwis(
                 pool,
                 lat=float(aim["lat"]),
                 lon=float(aim["lon"]),
                 cfg=cfg,
-                tx_lat=tx_lat,
-                tx_lon=tx_lon,
             )
             buddy_kiwis = list(roles.values())
         except Exception:

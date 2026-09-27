@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.25 — 2026-09-27
+
+- Buddy / ACK : sélection Kiwi omni sur **360°** autour du centroïde (bateaux omni), selon les QRG — plus de filtre « prolongement TX ».
+- Bulletin : inchangé — Kiwi au plus près de la flotte pour mesurer la diffusion.
+
 ## 1.1.24 — 2026-09-27
 
 - Mixeur : waterfall PNG + peaks Audacity précalculés côté serveur après recording ; le navigateur ne charge plus que MP3 (+ JSON peaks) pour l’affichage.

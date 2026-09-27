@@ -354,7 +354,7 @@ _BEAM_MIN_PATH_KM = 1500.0
 _BEAM_MAX_TX_KM = 12000.0
 # Au-delà du milieu du trajet TX→flotte (pas l’Europe derrière les bateaux).
 _BEAM_MIN_ALONG = 0.75
-_OMNI_FORWARD_DEG = 110.0
+# Omni flotte (buddy / ACK) : répartition azimutale sur 360° (antennes bateau omni).
 _OMNI_MIN = 4
 _OMNI_MAX = 10
 _OMNI_DEFAULT = 5
@@ -715,10 +715,10 @@ def assign_vacation_kiwis(
     boats: list[dict[str, Any]] | None = None,
     when: datetime | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Bulletin : 1 Kiwi près du centroïde (14.135) + 4–5 omni ACK autour de la flotte.
+    """Bulletin : 1 Kiwi près du centroïde (14.135) + 4–5 omni ACK sur 360°.
 
-    Plus de faisceaux TX→flotte, ni QTH multiples (France/Cap/Tahiti), ni extrêmes
-    ouest/est : la diffusion se vérifie au centroïde ; les accusés sur le cercle omni.
+    La diffusion du bulletin se vérifie au plus près de la flotte. Les accusés
+    (comme le buddy) se répartissent autour du centroïde selon les QRG de retour.
     """
     sdr = cfg.get("sdr") or {}
     tx_slots = int(sdr.get("min_free_slots") or 2)
@@ -772,8 +772,7 @@ def assign_vacation_kiwis(
         fleet_tx.get("site_km") or 0,
     )
 
-    # Hint hémisphère pour les sauts ACK (émetteur → flotte), sans ouvrir de voie TX là-bas.
-    club = bulletin_tx_qth(cfg, fleet_lat, fleet_lon, when=when)
+    # ACK : omni 360° autour du centroïde (comme buddy), selon les QRG de retour.
     ack_freqs = [
         float(row.get("freq_khz") or 0)
         for row in ((cfg.get("radio") or {}).get("ack") or [])
@@ -789,8 +788,6 @@ def assign_vacation_kiwis(
         hour_utc=hour,
         section=("sdr", "ack_omni"),
         exclude=None,
-        tx_lat=float(club["lat"]),
-        tx_lon=float(club["lon"]),
     )
     for role, kiwi in omni.items():
         key = kiwi_key(kiwi)
@@ -846,14 +843,12 @@ def assign_omni_fleet_kiwis(
     hour_utc: float,
     section: tuple[str, str] = ("buddy", "kiwi"),
     exclude: set[str] | None = None,
-    tx_lat: float | None = None,
-    tx_lon: float | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """4 à 10 Kiwi autour du centroïde (omni flotte), répartis en azimut.
+    """4 à 10 Kiwi autour du centroïde, répartis sur **360°** (bateaux omni).
 
-    Cercle agrandi selon la QRG (NVIS + 1 saut). Zone morte pénalisée.
-    F10.7 / Kp NOAA si disponibles. Les sauts privilégient l’hémisphère
-    dans le prolongement émetteur → flotte (pas l’Europe à l’opposé).
+    Rayon selon les QRG (NVIS + 1 saut). Zone morte pénalisée. Score = prop HF
+    + SNR + places. Pas de filtre « vers le TX » : Canaries, Brésil, Bermudes
+    concurrencent à égalité azimutale.
     """
     want, sep = _omni_want(cfg, section)
     solar = solar_snapshot()
@@ -870,17 +865,9 @@ def assign_omni_fleet_kiwis(
     nvis_max = max(
         float(prop_rings(f, hour_utc=hour_utc, f107=f107, kp=kp)["nvis_km"]) for f in freqs
     )
+    # Un peu au-delà du 1er saut pour couvrir Brésil / Canaries selon l’heure.
+    radius = max(radius, hop_km * 1.5)
     skip = exclude or set()
-    forward_az = None
-    if tx_lat is not None and tx_lon is not None:
-        forward_az = (initial_bearing(lat, lon, float(tx_lat), float(tx_lon)) + 180.0) % 360.0
-        # 1,5 saut : Brésil dans le prolongement, pas seulement l’Europe au 1er saut.
-        radius = max(radius, hop_km * 1.7)
-
-    def in_forward(az: float) -> bool:
-        if forward_az is None:
-            return True
-        return azimuth_delta(az, forward_az) <= _OMNI_FORWARD_DEG
 
     cands: list[tuple[float, float, float, dict[str, Any]]] = []
     for kiwi in pool:
@@ -937,17 +924,12 @@ def assign_omni_fleet_kiwis(
 
     remaining = want - len(picked)
     if remaining > 0:
-        # Secteurs dans le demi-espace « cap course » (prolongement TX→flotte).
-        span = 2.0 * _OMNI_FORWARD_DEG if forward_az is not None else 360.0
-        width = span / remaining
-        if forward_az is not None:
-            offset = (forward_az - span / 2.0) % 360.0
-        else:
-            offset = (
-                0.0
-                if not picked
-                else (initial_bearing(lat, lon, float(picked[0]["lat"]), float(picked[0]["lon"])) + width / 2.0) % 360.0
-            )
+        width = 360.0 / remaining
+        offset = (
+            0.0
+            if not picked
+            else (initial_bearing(lat, lon, float(picked[0]["lat"]), float(picked[0]["lon"])) + width / 2.0) % 360.0
+        )
 
         def best_in(pred) -> tuple[float, float, float, dict[str, Any]] | None:
             hit = None
@@ -968,17 +950,15 @@ def assign_omni_fleet_kiwis(
             def in_sec(az: float, lo=a0, hi=a1) -> bool:
                 return lo <= az < hi if lo < hi else az >= lo or az < hi
 
-            best = best_in(lambda az: in_sec(az) and in_forward(az))
+            best = best_in(in_sec)
             if best is None:
-                best = best_in(in_forward)
-            if best is None:
+                # Secteur vide : meilleur score restant (toutes directions).
                 hit = None
                 best_key = None
                 for az, dist, sc, kiwi in cands:
                     if kiwi_key(kiwi) in picked_keys or not far_enough(kiwi):
                         continue
-                    daz = 0.0 if forward_az is None else azimuth_delta(az, forward_az)
-                    key = (daz, -sc)
+                    key = (-sc, dist)
                     if best_key is None or key < best_key:
                         hit, best_key = (az, dist, sc, kiwi), key
                 best = hit
@@ -1011,10 +991,8 @@ def assign_buddy_kiwis(
     lat: float,
     lon: float,
     cfg: dict[str, Any],
-    tx_lat: float | None = None,
-    tx_lon: float | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Buddy 4483 / 6516 / 8294 / 12353 : Kiwi omni, ≤2 QRG / SDR (anti multi-IP)."""
+    """Buddy 4483 / 6516 / 8294 / 12353 : Kiwi omni 360° autour du centroïde."""
     freqs = _buddy_freqs_khz(cfg)
     # Au plus 2 voies par Kiwi → au moins ceil(n_qrg/2) SDR distincts.
     buddy_kiwi = dict(((cfg.get("buddy") or {}).get("kiwi") or {}))
@@ -1032,8 +1010,6 @@ def assign_buddy_kiwis(
         cfg=patched,
         hour_utc=12.0,
         section=("buddy", "kiwi"),
-        tx_lat=tx_lat,
-        tx_lon=tx_lon,
     )
 
 

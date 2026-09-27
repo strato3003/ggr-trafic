@@ -1381,12 +1381,41 @@ def test_assign_buddy_kiwis_nvis_and_hop_not_just_nearest():
     assert "hop-east" in names or "hop-west" in names
     assert 4 <= len(roles) <= 10
     assert roles["nvis"]["name"] == "nvis"
-    roles_fwd = assign_buddy_kiwis(
-        pool, lat=40.0, lon=-20.0, cfg=cfg, tx_lat=46.46806, tx_lon=-1.61694
-    )
-    names_fwd = {k.get("name") for k in roles_fwd.values()}
-    assert "nvis" in names_fwd
-    assert "hop-west" in names_fwd
+    # 360° : est et ouest doivent pouvoir coexister (bateaux omni).
+    assert "hop-east" in names
+    assert "hop-west" in names
+
+
+def test_assign_buddy_360_includes_canaries():
+    """Cap-Vert : Fuerteventura entre dans la sélection 360° (plus de filtre forward)."""
+    from recorder.kiwi_list import assign_buddy_kiwis
+
+    def kiwi(kid, name, lat, lon, snr=20, free=4):
+        return {
+            "id": kid,
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "snr_hf": snr,
+            "free_slots": free,
+            "bands_hz": [0, 30_000_000],
+            "url": f"http://{kid}.invalid:8073",
+        }
+
+    lat, lon = 14.865, -23.137
+    pool = [
+        kiwi("ea8", "EA8-DF4UE Fuerteventura", 28.3, -16.6, snr=24, free=20),
+        kiwi("belp", "HB9BG Belp", 46.89, 7.5, snr=18, free=3),
+        kiwi("bermuda", "VP9NI Bermuda", 32.3, -64.7, snr=19, free=3),
+        kiwi("brasilia", "PT2FHC Brasilia", -15.8, -47.9, snr=16, free=7),
+        kiwi("pardinho", "Pardinho SP", -23.0, -48.4, snr=15, free=3),
+    ]
+    cfg = {"buddy": {"kiwi": {"count": 6, "min_separation_km": 400}}}
+    roles = assign_buddy_kiwis(pool, lat=lat, lon=lon, cfg=cfg)
+    names = {k.get("name") for k in roles.values()}
+    assert any("Fuerteventura" in n for n in names), names
+    # Belp (Suisse, trop loin / moins bon) ne doit pas évincer les Canaries.
+    assert any("Fuerteventura" in n for n in names)
 
 
 def test_pick_near_fleet_ignores_loud_europe():
