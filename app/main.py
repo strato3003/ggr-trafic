@@ -798,6 +798,8 @@ async def media(trafic_id: str, filename: str):
         return FileResponse(path, media_type="audio/mp4", headers=headers)
     if path.suffix.lower() == ".png":
         return FileResponse(path, media_type="image/png", headers=headers)
+    if path.suffix.lower() == ".json":
+        return FileResponse(path, media_type="application/json", headers=headers)
     return FileResponse(path, headers=headers)
 
 

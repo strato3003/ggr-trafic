@@ -26,7 +26,7 @@ from recorder.kiwi_list import (
 )
 from recorder.postprocess import encode_mixer_play, mux_screencast, thumbnail
 from recorder.screencast import record_screencast
-from recorder.spectrogram import write_channel_waterfall
+from recorder.spectrogram import write_channel_peaks, write_channel_waterfall
 from recorder.kiwi_wf import HUNT_CF_KHZ, HUNT_HI_KHZ, HUNT_LO_KHZ, HUNT_ZOOM, hunt_usb_signal
 
 log = logging.getLogger(__name__)
@@ -110,15 +110,20 @@ async def _await_recording_jobs(
 
 
 async def _with_waterfall(job: Any, session_dir: Path, channel_id: str, wav: Path) -> Any:
-    """Calcule le PNG waterfall USB dès que le WAV de cette voie est fermé."""
+    """Calcule PNG waterfall + peaks Audacity dès que le WAV de cette voie est fermé."""
     try:
         result = await job
     except Exception as exc:
         result = exc
+    cid = str(channel_id)
     try:
-        await asyncio.to_thread(write_channel_waterfall, session_dir, str(channel_id), wav)
+        await asyncio.to_thread(write_channel_waterfall, session_dir, cid, wav)
     except Exception:
         log.exception("Waterfall USB %s", channel_id)
+    try:
+        await asyncio.to_thread(write_channel_peaks, session_dir, cid, wav)
+    except Exception:
+        log.exception("Peaks Audacity %s", channel_id)
     return result
 
 
@@ -1310,7 +1315,7 @@ def recover_orphaned(cfg: dict[str, Any] | None = None) -> int:
 
 
 def finalize_pending_sessions(cfg: dict[str, Any] | None = None) -> int:
-    """Mux WAV/WebM restants, backfill waterfalls USB et MP3 mixer, une fois l’UI déjà joignable."""
+    """Mux WAV/WebM restants, backfill waterfall/peaks/MP3, une fois l’UI déjà joignable."""
     cfg = cfg or load_config()
     vac_root = data_dir(cfg) / "vacations"
     if not vac_root.exists():
@@ -1389,6 +1394,28 @@ def _apply_waterfalls(session_dir: Path, jobs: list[tuple[dict[str, Any], Path]]
                 ch.pop("waterfall", None)
 
 
+def _apply_peaks(session_dir: Path, jobs: list[tuple[dict[str, Any], Path]]) -> None:
+    """Calcule en parallèle les peaks Audacity manquants (idempotent)."""
+    if not jobs:
+        return
+    workers = min(2, len(jobs))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = {
+            pool.submit(write_channel_peaks, session_dir, str(ch.get("id") or "tx"), wav): ch
+            for ch, wav in jobs
+        }
+        for fut, ch in futs.items():
+            name = None
+            try:
+                name = fut.result()
+            except Exception:
+                log.exception("Peaks Audacity %s", ch.get("id"))
+            if name:
+                ch["peaks"] = name
+            else:
+                ch.pop("peaks", None)
+
+
 def _apply_mixer_play(jobs: list[tuple[dict[str, Any], Path]]) -> None:
     """MP3/M4A mixer en arrière-plan (idempotent). Le WAV reste sur le disque."""
     if not jobs:
@@ -1398,7 +1425,7 @@ def _apply_mixer_play(jobs: list[tuple[dict[str, Any], Path]]) -> None:
 
 
 def _finalize_media(session_dir: Path, meta: dict[str, Any]) -> None:
-    """Mux WAV/WebM restants, waterfall USB, puis MP3 mixer."""
+    """Mux WAV/WebM restants, waterfall USB, peaks Audacity, puis MP3 mixer."""
     channels = meta.setdefault("channels", [])
     wav_jobs: list[tuple[dict[str, Any], Path]] = []
     for ch in channels:
@@ -1409,6 +1436,7 @@ def _finalize_media(session_dir: Path, meta: dict[str, Any]) -> None:
         else:
             ch.pop("audio", None)
             ch.pop("waterfall", None)
+            ch.pop("peaks", None)
         ch.pop("audio_file", None)
         raw_name = ch.get("screencast_raw")
         raw = session_dir / raw_name if raw_name else session_dir / f"screencast-{ch['id']}.webm"
@@ -1434,6 +1462,7 @@ def _finalize_media(session_dir: Path, meta: dict[str, Any]) -> None:
             _mux_channel(session_dir, host, max(leftovers, key=lambda p: p.stat().st_size))
 
     _apply_waterfalls(session_dir, wav_jobs)
+    _apply_peaks(session_dir, wav_jobs)
     _apply_mixer_play(wav_jobs)
 
 

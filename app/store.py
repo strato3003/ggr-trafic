@@ -74,6 +74,23 @@ def _wav_name(audio: str) -> str:
     return raw
 
 
+def _media_sidecar(folder: Path | None, channel_id: str, kind: str, existing: str = "") -> str:
+    """waterfall-*.png / peaks-*.json : métadonnée ou fichier déjà sur disque."""
+    kept = (existing or "").strip()
+    if folder is None:
+        return kept
+    cid = str(channel_id or "").strip() or "tx"
+    name = f"{kind}-{cid}.{'png' if kind == 'waterfall' else 'json'}"
+    path = folder / name
+    if path.is_file() and path.stat().st_size > 64:
+        return name
+    if kept:
+        alt = folder / kept
+        if alt.is_file() and alt.stat().st_size > 64:
+            return kept
+    return kept
+
+
 def _sdr_key(ch: dict[str, Any], index: int = 0) -> str:
     kiwi = ch.get("kiwi")
     if isinstance(kiwi, dict):
@@ -90,6 +107,9 @@ def _decorate(meta: dict[str, Any], folder: Path | None = None) -> dict[str, Any
         ch["place"] = channel_place(ch)
         ch["has_audio"] = bool(ch.get("audio"))
         ch["play"] = _play_name(folder, str(ch.get("audio") or ""), str(ch.get("play") or ""))
+        cid = str(ch.get("id") or "")
+        ch["waterfall"] = _media_sidecar(folder, cid, "waterfall", str(ch.get("waterfall") or ""))
+        ch["peaks"] = _media_sidecar(folder, cid, "peaks", str(ch.get("peaks") or ""))
         if ch.get("id") == "tx":
             tx = ch
         if ch.get("thumb") and not thumb:
@@ -111,6 +131,7 @@ def _decorate(meta: dict[str, Any], folder: Path | None = None) -> dict[str, Any
             "label": ch.get("label"),
             "has_audio": bool(ch.get("audio")),
             "waterfall": ch.get("waterfall") or "",
+            "peaks": ch.get("peaks") or "",
         }
         for ch in (meta.get("channels") or [])
     ]
@@ -197,6 +218,7 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
                 "site_km": kiwi.get("site_km") if kiwi.get("site_km") is not None else kiwi.get("distance_km"),
                 "prop_zone": kiwi.get("prop_zone") or ch.get("prop_zone"),
                 "waterfall": ch.get("waterfall") or "",
+                "peaks": ch.get("peaks") or "",
             }
         )
     tx = decorated.get("tx") or {}

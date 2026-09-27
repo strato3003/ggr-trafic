@@ -1182,6 +1182,7 @@
       label: c.label,
       has_audio: !!(c.has_audio || c.audio),
       waterfall: c.waterfall || "",
+      peaks: c.peaks || "",
     }));
   }
 

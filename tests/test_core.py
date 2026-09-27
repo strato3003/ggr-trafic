@@ -596,6 +596,31 @@ def test_mixer_tracks_include_silent_channels():
     assert meta["sdrs"] == 1
 
 
+def test_mixer_tracks_include_peaks(tmp_path):
+    from app.store import _decorate
+
+    (tmp_path / "peaks-nvis-main.json").write_text(
+        '{"cols":4,"sr":12000,"n":100,"mins":[0,0,0,0],"maxs":[0.1,0.2,0.1,0]}',
+        encoding="utf-8",
+    )
+    meta = _decorate(
+        {
+            "channels": [
+                {
+                    "id": "nvis-main",
+                    "audio": "audio-nvis-main.wav",
+                    "freq_khz": 4483.0,
+                    "kiwi": {"loc": "Amarante, Portugal"},
+                    "waterfall": "waterfall-nvis-main.png",
+                }
+            ]
+        },
+        tmp_path,
+    )
+    assert meta["mixer_tracks"][0]["peaks"] == "peaks-nvis-main.json"
+    assert meta["channels"][0]["peaks"] == "peaks-nvis-main.json"
+
+
 def test_mixer_tracks_prefers_mp3(tmp_path):
     from app.store import _decorate
 
@@ -703,6 +728,25 @@ def test_waterfall_png_from_usb_tone(tmp_path):
     assert png.stat().st_mtime == mtime
 
 
+def test_peaks_json_from_usb_tone(tmp_path):
+    import json
+
+    from recorder.spectrogram import PEAK_COLS, write_channel_peaks, write_peaks
+
+    wav = tmp_path / "audio-tx.wav"
+    _write_tone_wav(wav)
+    name = write_channel_peaks(tmp_path, "tx", wav)
+    assert name == "peaks-tx.json"
+    data = json.loads((tmp_path / name).read_text(encoding="utf-8"))
+    assert data["cols"] == PEAK_COLS
+    assert len(data["mins"]) == PEAK_COLS
+    assert len(data["maxs"]) == PEAK_COLS
+    assert max(data["maxs"]) > 0.1
+    mtime = (tmp_path / name).stat().st_mtime
+    assert write_peaks(wav, tmp_path / name) is True
+    assert (tmp_path / name).stat().st_mtime == mtime
+
+
 def test_waterfall_rejects_stub_wav(tmp_path):
     from recorder.spectrogram import write_channel_waterfall
 
@@ -734,7 +778,9 @@ def test_finalize_pending_writes_waterfall(tmp_path):
     assert finalize_pending_sessions(cfg) >= 1
     saved = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
     assert saved["channels"][0]["waterfall"] == "waterfall-tx.png"
+    assert saved["channels"][0]["peaks"] == "peaks-tx.json"
     assert (folder / "waterfall-tx.png").is_file()
+    assert (folder / "peaks-tx.json").is_file()
 
 
 def test_hold_page_stops_if_chromium_frozen(monkeypatch):

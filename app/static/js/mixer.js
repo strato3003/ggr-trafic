@@ -63,6 +63,9 @@ window.GgrMixer = (function () {
   const audioLoadFill = document.getElementById("mix-audio-load-fill");
   let audioWarming = false;
   let audioLoadPoll = 0;
+  let readyFlashUntil = 0;
+  let readyFlashTid = 0;
+  let readyAnnounced = false;
   const seekEl = document.getElementById("mix-seek");
   const loopBtn = document.getElementById("mix-loop");
   const loopLab = document.getElementById("mix-loop-lab");
@@ -641,6 +644,27 @@ window.GgrMixer = (function () {
     setAudioLoadPoll(false);
   }
 
+  function flashReady(ready, n) {
+    if (!audioLoadEl || readyAnnounced) {
+      hideGlobalAudioLoad();
+      return;
+    }
+    readyAnnounced = true;
+    readyFlashUntil = Date.now() + 900;
+    if (readyFlashTid) clearTimeout(readyFlashTid);
+    const msg = t("audio_ready", { ready: ready, n: n });
+    audioLoadEl.hidden = false;
+    if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = msg;
+    else audioLoadEl.textContent = msg;
+    if (audioLoadFill) audioLoadFill.style.width = "100%";
+    audioLoadEl.title = msg;
+    readyFlashTid = window.setTimeout(() => {
+      readyFlashTid = 0;
+      readyFlashUntil = 0;
+      hideGlobalAudioLoad();
+    }, 950);
+  }
+
   function updateAudioLoad() {
     const live = tracks.filter((tr) => tr.el && !tr.dead && liveForPlay(tr));
     const canPlay = live.filter((tr) => trackPlayable(tr)).length;
@@ -648,8 +672,9 @@ window.GgrMixer = (function () {
     const starving = playing && live.some((tr) => !trackPlayable(tr));
     const warmingGap = audioWarming && live.some((tr) => !trackPlayable(tr));
     const busy = !!(live.length && (audioWarming || seekGap || starving || warmingGap));
+    const allReady = !!(live.length && live.every((tr) => trackPlayable(tr)));
 
-    if (audioWarming && !playing && live.length && live.every((tr) => trackPlayable(tr))) {
+    if (audioWarming && !playing && allReady) {
       audioWarming = false;
     }
 
@@ -675,9 +700,13 @@ window.GgrMixer = (function () {
       hideGlobalAudioLoad();
       return;
     }
-    if (!busy && live.every((tr) => trackPlayable(tr) || tr.extractBusy)) {
+    if (allReady && !busy) {
       audioWarming = false;
-      hideGlobalAudioLoad();
+      if (Date.now() < readyFlashUntil) {
+        setAudioLoadPoll(false);
+        return;
+      }
+      flashReady(canPlay, live.length);
       if (live.some((tr) => tr.extractBusy)) setAudioLoadPoll(true);
       return;
     }
@@ -685,9 +714,11 @@ window.GgrMixer = (function () {
     const stillLoading = live.some((tr) => !trackPlayable(tr));
     if (!busy && !stillLoading) {
       audioWarming = false;
-      hideGlobalAudioLoad();
+      flashReady(canPlay, live.length);
       return;
     }
+    // Nouveau cycle de buffer (seek / warm) : réautoriser le flash « Prêt ».
+    if (busy || stillLoading) readyAnnounced = false;
     const pcts = live.map((tr) => {
       if (tr.extractBusy) return Number(tr.loadPct) || 0;
       return trackPlayable(tr) ? 100 : trackLoadPct(tr);
@@ -712,6 +743,7 @@ window.GgrMixer = (function () {
     const live = tracks.filter((tr) => tr.el && !tr.dead);
     if (!live.length) return;
     audioWarming = true;
+    readyAnnounced = false;
     live.forEach((tr) => {
       resetTrackLoad(tr);
       try {
@@ -1551,10 +1583,42 @@ window.GgrMixer = (function () {
     }
   }
 
+  async function loadPeaks(tr) {
+    if (!tr || tr.dead || tr.peaks) return true;
+    const name = tr.peaksFile || (tr.id ? "peaks-" + tr.id + ".json" : "");
+    if (!name || !vacId) return false;
+    tr.peaksFile = name;
+    try {
+      const bag = (window.GgrPeaksCache = window.GgrPeaksCache || {});
+      const url = media(name);
+      let data = bag[url] || null;
+      if (!data) {
+        const res = await fetch(url, { cache: "force-cache" });
+        if (!res.ok) return false;
+        data = await res.json();
+        if (data && Array.isArray(data.mins) && Array.isArray(data.maxs)) bag[url] = data;
+      }
+      if (!data || !Array.isArray(data.mins) || !Array.isArray(data.maxs)) return false;
+      tr.peaks = {
+        mins: Float32Array.from(data.mins),
+        maxs: Float32Array.from(data.maxs),
+      };
+      if (Number.isFinite(data.n) && Number.isFinite(data.sr) && data.sr > 0) {
+        noteDuration(data.n / data.sr);
+      }
+      if (focusId === tr.id) drawWave(tr);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function loadWave(tr) {
     if (!tr || tr.dead || tr.peaks || tr.waveBusy) return;
     tr.waveBusy = true;
     try {
+      if (await loadPeaks(tr)) return;
+      // Fallback anciennes sessions sans peaks-*.json : un seul téléchargement WAV.
       let wav = await fetchWav(tr, true);
       if (!wav) wav = await fetchWav(tr, true);
       if (!wav) return;
@@ -1712,6 +1776,7 @@ window.GgrMixer = (function () {
         loadEl: null,
         specDb: false,
         waterfall: row.waterfall || (row.id ? "waterfall-" + row.id + ".png" : ""),
+        peaksFile: row.peaks || (row.id ? "peaks-" + row.id + ".json" : ""),
         storedWf: false,
         extractBusy: false,
         loadPct: 0,
@@ -1731,10 +1796,16 @@ window.GgrMixer = (function () {
     });
     if (statusEl) statusEl.textContent = t("wf_loading");
     playBtn.disabled = true;
-    await Promise.all(tracks.map((tr) => loadStoredWf(tr)));
+    // Affichage : PNG waterfall + peaks JSON précalculés serveur (pas de WAV).
+    await Promise.all(
+      tracks.map(async (tr) => {
+        await Promise.all([loadStoredWf(tr), loadPeaks(tr)]);
+      })
+    );
     const painted = tracks.filter((tr) => tr.storedWf).length;
     tracks.forEach(attachAudio);
     audioWarming = true;
+    readyAnnounced = false;
     updateAudioLoad();
     void Promise.all(tracks.map((tr) => waitDuration(tr, deepTimePending ? 12000 : 20000))).then(() => {
       if (deepTimePending) applyDeepTime();
@@ -1743,6 +1814,7 @@ window.GgrMixer = (function () {
         updateAudioLoad();
       }
     });
+    // Fallback : sessions sans PNG — calcul client une seule fois.
     tracks.forEach((tr) => {
       if (tr.storedWf || tr.dead) return;
       fetchWav(tr).then((wav) => paintSpec(tr, wav));
@@ -1766,6 +1838,10 @@ window.GgrMixer = (function () {
   function destroy() {
     playing = false;
     audioWarming = false;
+    readyAnnounced = false;
+    if (readyFlashTid) clearTimeout(readyFlashTid);
+    readyFlashTid = 0;
+    readyFlashUntil = 0;
     setAudioLoadPoll(false);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);

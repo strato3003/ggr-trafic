@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.24 — 2026-09-27
+
+- Mixeur : waterfall PNG + peaks Audacity précalculés côté serveur après recording ; le navigateur ne charge plus que MP3 (+ JSON peaks) pour l’affichage.
+- Jauge : flash « Prêt · n/n » à 100 % quand les pistes sont jouables.
+
 ## 1.1.23 — 2026-09-26
 
 - Mixeur : jauge de chargement honnête et monotone (plus de 100 % fantômes ni chute 90 % → 18 %).
