@@ -1,5 +1,5 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "1.1.24"
+version: "1.1.25"
 
 club:
   callsign: F6KUF
@@ -87,7 +87,7 @@ buddy:
       - "Louis Kerdelhue"
   kiwi:
     # ≤2 QRG / Kiwi ; 4/6 MHz sur NVIS (proche flotte), 8/12 MHz sur saut.
-    # 4–10 omni autour du centroïde (azimuts répartis).
+    # 4–10 omni répartis sur 360° autour du centroïde (bateaux omni).
     count: 6
     min_separation_km: 400
     min_free_slots: 2
