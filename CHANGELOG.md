@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.1.29 — 2026-09-28
+
+- Globe : cercle AEZ 48° S et axe polaire affinés (1 px).
+
 ## 1.1.28 — 2026-09-28
 
 - Globe : axe polaire 3D (~10 % du diamètre qui dépasse N/S), sans légendes sur les pôles.

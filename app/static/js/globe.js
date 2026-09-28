@@ -769,8 +769,8 @@
           [AEZ_LAT, a, 0.0012],
           [AEZ_LAT, b, 0.0012],
         ],
-        color: "rgba(190, 220, 255, 0.85)",
-        stroke: 1.35,
+        color: "rgba(190, 220, 255, 0.7)",
+        stroke: 1,
         dash: true,
       });
       lon = b + AEZ_GAP_DEG;
@@ -1808,7 +1808,27 @@
     // 10 % du diamètre = 0,2 R de dépassement à chaque pôle.
     const stick = R * 0.2;
     const halfLen = R + stick;
-    const rodR = Math.max(0.28, R * 0.0035);
+    const THREE = window.THREE;
+    // Trait 1 px écran si Line disponible, sinon tige quasi filaire.
+    if (THREE && THREE.BufferGeometry && THREE.Line && THREE.LineBasicMaterial && THREE.Vector3) {
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, -halfLen, 0),
+        new THREE.Vector3(0, halfLen, 0),
+      ]);
+      const mat = new THREE.LineBasicMaterial({
+        color: 0xf4e6c3,
+        linewidth: 1,
+        depthTest: true,
+        transparent: false,
+      });
+      const line = new THREE.Line(geo, mat);
+      line.name = "ggr-pole-axis";
+      line.renderOrder = 3;
+      line.frustumCulled = false;
+      scene.add(line);
+      return line;
+    }
+    const rodR = Math.max(0.04, R * 0.0004);
     let mat = null;
     if (gfx.sampleMat && typeof gfx.sampleMat.clone === "function") {
       try {
