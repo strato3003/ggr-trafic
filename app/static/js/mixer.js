@@ -463,7 +463,28 @@ window.GgrMixer = (function () {
     ctx2d.fillStyle = "#000";
     ctx2d.fillRect(0, 0, w, h);
     if (tr.specBmp) ctx2d.drawImage(tr.specBmp, 0, 0, w, h);
+    drawPeaksOverlay(tr, ctx2d, w, h);
     drawWave(tr);
+  }
+
+  /** Pics Audacity toujours visibles (bande basse), pas seulement en zoom. */
+  function drawPeaksOverlay(tr, ctx, w, h) {
+    const peaks = tr && tr.peaks;
+    if (!peaks || !peaks.mins || !peaks.maxs || !w || !h) return;
+    const band = Math.max(10, Math.floor(h * 0.28));
+    const top = h - band;
+    ctx.fillStyle = "rgba(8, 14, 20, 0.55)";
+    ctx.fillRect(0, top, w, band);
+    const mid = top + band / 2;
+    const amp = (band / 2) * 0.9;
+    ctx.fillStyle = "rgba(74, 168, 224, 0.9)";
+    const cols = peaks.mins.length;
+    for (let x = 0; x < w; x++) {
+      const i = Math.min(cols - 1, Math.floor((x / w) * cols));
+      const y1 = mid - peaks.maxs[i] * amp;
+      const y2 = mid - peaks.mins[i] * amp;
+      ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+    }
   }
 
   function computePeaks(samples, cols) {
@@ -571,6 +592,7 @@ window.GgrMixer = (function () {
   /**
    * Jauge monotone : ne redescend jamais (sauf reset seek).
    * 100 % uniquement si trackPlayable ; sinon plafond 99.
+   * Progression = max(buffer autour de la tête, % durée déjà reçue).
    */
   function trackLoadPct(tr) {
     const el = tr && tr.el;
@@ -579,13 +601,48 @@ window.GgrMixer = (function () {
     const prev = Math.min(99, Number(tr.loadPct) || 0);
     const needSec = 8;
     const fromBuf = Math.min(99, Math.round((bufferAheadSec(el) / needSec) * 100));
-    let next = Math.max(prev, fromBuf);
+    const fromDur = Math.min(99, Math.round(bufferedPct(el)));
+    let next = Math.max(prev, fromBuf, fromDur > 0 ? Math.max(fromDur, 5) : 0);
     const rs = el.readyState || 0;
-    // Métadonnées seules : petit plancher, sans plafonner à 18 % plus bas.
     if (rs >= 1 && next < 8) next = Math.max(next, Math.min(8, prev + 0.3));
-    // Creep uniquement pendant NETWORK_LOADING, sans jamais redescendre.
     if (el.networkState === 2 && next < 95) next = Math.min(95, Math.max(next, prev) + 0.55);
     return Math.min(99, Math.round(Math.max(prev, next)));
+  }
+
+  /** Estimation secondes restantes avant piste jouable (tampon navigateur). */
+  function bufferEtaSec(tr) {
+    const el = tr && tr.el;
+    if (!el || trackPlayable(tr)) return 0;
+    const need = 2.5;
+    const ahead = bufferAheadSec(el);
+    const left = Math.max(0.2, need - ahead);
+    const now = Date.now();
+    if (!tr._bufHist) tr._bufHist = [];
+    tr._bufHist.push({ t: now, ahead: ahead });
+    while (tr._bufHist.length > 25) tr._bufHist.shift();
+    let rate = 0;
+    if (tr._bufHist.length >= 3) {
+      const a = tr._bufHist[0];
+      const b = tr._bufHist[tr._bufHist.length - 1];
+      const dt = (b.t - a.t) / 1000;
+      if (dt >= 0.4) rate = (b.ahead - a.ahead) / dt;
+    }
+    if (rate > 0.08) return Math.max(1, Math.ceil(left / rate));
+    if (el.networkState === 2) return Math.max(2, Math.ceil(left / 0.6));
+    const pct = bufferedPct(el);
+    if (pct > 2 && pct < 100) {
+      const remainFrac = Math.max(0.05, (100 - pct) / 100);
+      return Math.max(2, Math.ceil(remainFrac * 25));
+    }
+    return Math.max(3, Math.ceil(left * 3));
+  }
+
+  function maxBufferEtaSec(rows) {
+    let m = 0;
+    rows.forEach((tr) => {
+      if (!trackPlayable(tr)) m = Math.max(m, bufferEtaSec(tr));
+    });
+    return m;
   }
 
   function bufferedAt(el, t) {
@@ -673,13 +730,14 @@ window.GgrMixer = (function () {
     const warmingGap = audioWarming && live.some((tr) => !trackPlayable(tr));
     const busy = !!(live.length && (audioWarming || seekGap || starving || warmingGap));
     const allReady = !!(live.length && live.every((tr) => trackPlayable(tr)));
+    const waiting = live.filter((tr) => !trackPlayable(tr));
+    const eta = maxBufferEtaSec(waiting);
 
     if (audioWarming && !playing && allReady) {
       audioWarming = false;
     }
 
     live.forEach((tr) => {
-      // Extract waterfall : ne pas écraser sa jauge, mais garder le poll actif.
       if (tr.extractBusy) return;
       if (trackPlayable(tr) || tr.dead) {
         setTrackLoad(tr, 100, { done: true });
@@ -687,8 +745,10 @@ window.GgrMixer = (function () {
       }
       const pct = Math.max(1, Math.round(trackLoadPct(tr)));
       tr.loadPct = pct;
-      const label = seekGap && !audioWarming ? t("audio_seek") : audioWarming && !playing ? t("audio_prep") : t("audio_load");
-      // Toujours afficher tant que non jouable (busy ou pas) — jamais redescendre à 0.
+      const sec = bufferEtaSec(tr);
+      const label = seekGap && !audioWarming
+        ? t("audio_seek")
+        : t("audio_buf_track", { sec: sec });
       setTrackLoad(tr, pct, { label: label });
     });
 
@@ -710,14 +770,12 @@ window.GgrMixer = (function () {
       if (live.some((tr) => tr.extractBusy)) setAudioLoadPoll(true);
       return;
     }
-    // Encore en charge : garder le bandeau même si « busy » a brièvement basculé.
-    const stillLoading = live.some((tr) => !trackPlayable(tr));
+    const stillLoading = waiting.length > 0;
     if (!busy && !stillLoading) {
       audioWarming = false;
       flashReady(canPlay, live.length);
       return;
     }
-    // Nouveau cycle de buffer (seek / warm) : réautoriser le flash « Prêt ».
     if (busy || stillLoading) readyAnnounced = false;
     const pcts = live.map((tr) => {
       if (tr.extractBusy) return Number(tr.loadPct) || 0;
@@ -727,15 +785,17 @@ window.GgrMixer = (function () {
     const shown = canPlay >= live.length ? 100 : Math.min(99, Math.max(1, avg));
     let msg;
     if (seekGap && shown < 5) msg = t("audio_seek");
-    else if (audioWarming && !playing) msg = t("audio_prep") + " " + shown + " % · " + canPlay + "/" + live.length;
-    else msg = t("audio_buf", { pct: shown, ready: canPlay, n: live.length });
+    else {
+      msg = t("audio_buf_eta", { pct: shown, ready: canPlay, n: live.length, sec: Math.max(1, eta) });
+      audioLoadEl.title = t("audio_why_browser");
+    }
     audioLoadEl.hidden = false;
     if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = msg;
     else audioLoadEl.textContent = msg;
     if (audioLoadFill) {
       audioLoadFill.style.width = Math.max(2, shown) + "%";
     }
-    audioLoadEl.title = msg;
+    if (!audioLoadEl.title) audioLoadEl.title = msg;
     setAudioLoadPoll(true);
   }
 
@@ -1389,8 +1449,18 @@ window.GgrMixer = (function () {
   }
 
   function playToggle() {
-    if (playing) pauseAt(nowT());
-    else startSources(clampLoopTime(duration && duration - t0 < 0.08 ? 0 : t0));
+    if (playing) {
+      pauseAt(nowT());
+      return;
+    }
+    const live = tracks.filter((tr) => tr.el && !tr.dead && liveForPlay(tr));
+    const waiting = live.filter((tr) => !trackPlayable(tr));
+    if (waiting.length) {
+      audioWarming = true;
+      readyAnnounced = false;
+      updateAudioLoad();
+    }
+    startSources(clampLoopTime(duration && duration - t0 < 0.08 ? 0 : t0));
   }
 
   playBtn.addEventListener("click", playToggle, sig);
@@ -1606,6 +1676,7 @@ window.GgrMixer = (function () {
       if (Number.isFinite(data.n) && Number.isFinite(data.sr) && data.sr > 0) {
         noteDuration(data.n / data.sr);
       }
+      drawTrack(tr);
       if (focusId === tr.id) drawWave(tr);
       return true;
     } catch {
@@ -1623,6 +1694,7 @@ window.GgrMixer = (function () {
       if (!wav) wav = await fetchWav(tr, true);
       if (!wav) return;
       tr.peaks = computePeaks(wav.samples, 1024);
+      drawTrack(tr);
       if (focusId === tr.id) drawWave(tr);
     } finally {
       tr.waveBusy = false;
@@ -1820,10 +1892,17 @@ window.GgrMixer = (function () {
       fetchWav(tr).then((wav) => paintSpec(tr, wav));
     });
     const live = tracks.filter((tr) => !tr.dead).length;
+    const withPeaks = tracks.filter((tr) => tr.peaks).length;
+    const withWf = tracks.filter((tr) => tr.storedWf).length;
     if (painted || live) {
       playBtn.disabled = live === 0;
-      if (statusEl)
-        statusEl.textContent = t("mix_ready", { live: live, n: tracks.length });
+      if (statusEl) {
+        if (withWf || withPeaks) {
+          statusEl.textContent = t("mix_visual_ready", { live: live, n: tracks.length });
+        } else {
+          statusEl.textContent = t("mix_ready", { live: live, n: tracks.length });
+        }
+      }
       updateHead();
       applyDeepFocus();
       if (!deepTimePending) applyDeepTime();
