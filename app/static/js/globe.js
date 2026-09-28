@@ -530,17 +530,8 @@
     htmlBannerPoints().forEach((p) => rows.push(p));
     metareaLabelPoints().forEach((p) => rows.push(p));
     subzoneLabelPoints().forEach((p) => rows.push(p));
-    polePoints().forEach((p) => rows.push(p));
     aezLabelPoints().forEach((p) => rows.push(p));
     return rows;
-  }
-
-  /** Marqueurs axes pôle Nord / pôle Sud (croix). */
-  function polePoints() {
-    return [
-      { lat: 90, lon: 0, lng: 0, kind: "pole", name: t("pole_north") },
-      { lat: -90, lon: 0, lng: 0, kind: "pole", name: t("pole_south") },
-    ];
   }
 
   /** Libellé Ice Antarctic Exclusion Zone sur le parallèle 48° S. */
@@ -687,21 +678,6 @@
       lab.className = "globe-mark__aez";
       lab.textContent = d.name || "Ice Antarctic Exclusion Zone";
       wrap.appendChild(lab);
-      wrap.title = d.name || "";
-      return wrap;
-    }
-    if (d.kind === "pole") {
-      wrap.style.width = "18px";
-      wrap.style.height = "18px";
-      wrap.style.pointerEvents = "none";
-      const icon = document.createElement("span");
-      icon.className = "globe-mark__icon globe-mark__axis";
-      wrap.appendChild(icon);
-      const name = document.createElement("span");
-      name.className = "globe-mark__name";
-      name.style.cssText = "position:absolute;left:16px;top:50%;transform:translateY(-50%);white-space:nowrap;";
-      name.textContent = d.name || "";
-      wrap.appendChild(name);
       wrap.title = d.name || "";
       return wrap;
     }
@@ -1793,6 +1769,95 @@
     attempt();
   }
 
+  /** Axe polaire : tige Y dépassant chaque pôle de ~10 % du diamètre terrestre. */
+  function makePoleRodGeometry(gfx, halfLen, radius) {
+    const geo = new gfx.Geo();
+    const hx = radius;
+    const hz = radius;
+    const hy = halfLen;
+    // Boîte fine alignée sur Y (8 sommets).
+    const pos = new Float32Array([
+      -hx, -hy, -hz, hx, -hy, -hz, hx, hy, -hz, -hx, hy, -hz,
+      -hx, -hy, hz, hx, -hy, hz, hx, hy, hz, -hx, hy, hz,
+    ]);
+    const idx = [
+      0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 2, 6, 7, 2, 7, 3, 0, 3, 7, 0, 7, 4, 1, 5, 6, 1, 6, 2,
+    ];
+    geo.setAttribute("position", new gfx.Attr(pos, 3));
+    if (typeof geo.setIndex === "function") geo.setIndex(idx);
+    if (typeof geo.computeVertexNormals === "function") geo.computeVertexNormals();
+    if (typeof geo.computeBoundingSphere === "function") geo.computeBoundingSphere();
+    return geo;
+  }
+
+  function makePoleAxisMesh(g) {
+    const gfx = stealGlobeGfx(g);
+    const scene = typeof g.scene === "function" ? g.scene() : null;
+    if (!gfx || !scene) return null;
+    const old = scene.getObjectByName("ggr-pole-axis");
+    if (old) {
+      scene.remove(old);
+      try {
+        if (old.geometry && old.geometry.dispose) old.geometry.dispose();
+        if (old.material && old.material.dispose) old.material.dispose();
+      } catch {
+        /* dispose optionnel */
+      }
+    }
+    const R = typeof g.getGlobeRadius === "function" ? g.getGlobeRadius() : 100;
+    // 10 % du diamètre = 0,2 R de dépassement à chaque pôle.
+    const stick = R * 0.2;
+    const halfLen = R + stick;
+    const rodR = Math.max(0.28, R * 0.0035);
+    let mat = null;
+    if (gfx.sampleMat && typeof gfx.sampleMat.clone === "function") {
+      try {
+        mat = gfx.sampleMat.clone();
+      } catch {
+        mat = null;
+      }
+    }
+    if (!mat && typeof g.globeMaterial === "function") {
+      try {
+        mat = g.globeMaterial().clone();
+      } catch {
+        mat = null;
+      }
+    }
+    if (!mat) return null;
+    mat.map = null;
+    if ("emissiveMap" in mat) mat.emissiveMap = null;
+    if (mat.color && typeof mat.color.setHex === "function") mat.color.setHex(0xf4e6c3);
+    if (mat.emissive && typeof mat.emissive.setHex === "function") mat.emissive.setHex(0xf4e6c3);
+    if ("emissiveIntensity" in mat) mat.emissiveIntensity = 0.55;
+    mat.transparent = false;
+    mat.opacity = 1;
+    mat.depthWrite = true;
+    mat.side = 2;
+    if ("needsUpdate" in mat) mat.needsUpdate = true;
+    const mesh = new gfx.Mesh(makePoleRodGeometry(gfx, halfLen, rodR), mat);
+    mesh.name = "ggr-pole-axis";
+    mesh.renderOrder = 3;
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    return mesh;
+  }
+
+  function ensurePoleAxis(g) {
+    if (!g) return;
+    let tries = 0;
+    const attempt = () => {
+      try {
+        if (makePoleAxisMesh(g)) return;
+      } catch {
+        /* THREE pas prêt */
+      }
+      tries += 1;
+      if (tries < 25) window.setTimeout(attempt, 100);
+    };
+    attempt();
+  }
+
   function oceanImageUrl() {
     const c = document.createElement("canvas");
     c.width = 16;
@@ -2120,17 +2185,16 @@
         const lon = Number.isFinite(d.lon) ? d.lon : d.lng;
         if (!Number.isFinite(lon)) return;
         const boat = d.kind === "boat";
-        const pole = d.kind === "pole";
         const aez = d.kind === "aez";
         const node = markerEl(d);
         const m = L.marker([d.lat, lon], {
           icon: L.divIcon({
             className: "ggr-leaflet-icon",
             html: "",
-            iconSize: boat ? [22, 22] : d.kind === "kiwi_all" ? [4, 4] : pole ? [18, 18] : aez ? [1, 1] : [12, 12],
-            iconAnchor: boat ? [11, 11] : d.kind === "kiwi_all" ? [2, 2] : pole ? [9, 9] : aez ? [0, 0] : [6, 6],
+            iconSize: boat ? [22, 22] : d.kind === "kiwi_all" ? [4, 4] : aez ? [1, 1] : [12, 12],
+            iconAnchor: boat ? [11, 11] : d.kind === "kiwi_all" ? [2, 2] : aez ? [0, 0] : [6, 6],
           }),
-          interactive: d.kind !== "link_km" && d.kind !== "tx_km" && !pole && !aez,
+          interactive: d.kind !== "link_km" && d.kind !== "tx_km" && !aez,
           keyboard: false,
         }).addTo(mapLayers);
         const mount = () => {
@@ -2430,6 +2494,7 @@
     bindKmAlign();
     el.addEventListener("wheel", scheduleKmAlign, { passive: true });
     tuneOsmTiles(globe);
+    ensurePoleAxis(globe);
     if (intro && !kept && layers.banner && !waiting) {
       const bootBanner = () => startGgrEquatorBanner(globe);
       if (typeof globe.onGlobeReady === "function") globe.onGlobeReady(bootBanner);

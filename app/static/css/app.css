@@ -1086,44 +1086,6 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   border-color: #c9a227;
   background: #c9a227;
 }
-.globe-mark--pole {
-  pointer-events: none;
-}
-.globe-mark--pole .globe-mark__axis {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  transform: translate(-50%, -50%);
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-.globe-mark--pole .globe-mark__axis::before,
-.globe-mark--pole .globe-mark__axis::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  background: #f4e6c3;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
-}
-.globe-mark--pole .globe-mark__axis::before {
-  width: 14px;
-  height: 2px;
-  margin: -1px 0 0 -7px;
-}
-.globe-mark--pole .globe-mark__axis::after {
-  width: 2px;
-  height: 14px;
-  margin: -7px 0 0 -1px;
-}
-.globe-mark--pole .globe-mark__name {
-  border-left: 3px solid #f4e6c3;
-}
 .globe-mark--aez {
   pointer-events: none;
 }

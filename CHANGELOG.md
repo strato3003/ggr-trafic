@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.28 — 2026-09-28
+
+- Globe : axe polaire 3D (~10 % du diamètre qui dépasse N/S), sans légendes sur les pôles.
+- Preview : les archives audio manquantes venaient du PVC preview (sessions obsolètes).
+
 ## 1.1.27 — 2026-09-28
 
 - Mixeur : une seule piste Audacity sous le waterfall (plus d’overlay doublon sur le spectrogramme).
