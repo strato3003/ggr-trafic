@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.26 — 2026-09-28
+
+- Mixeur : pics Audacity visibles dès l’ouverture (bande basse sur le waterfall).
+- Jauge : « tampon navigateur · encore ~Ns » (fichiers serveur déjà prêts : PNG + peaks + MP3).
+
 ## 1.1.25 — 2026-09-27
 
 - Buddy / ACK : sélection Kiwi omni sur **360°** autour du centroïde (bateaux omni), selon les QRG — plus de filtre « prolongement TX ».
