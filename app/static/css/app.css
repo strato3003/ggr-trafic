@@ -1086,6 +1086,23 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   border-color: #c9a227;
   background: #c9a227;
 }
+.globe-mark--aez {
+  pointer-events: none;
+}
+.globe-mark__aez {
+  display: block;
+  pointer-events: none;
+  background: rgba(8, 16, 24, 0.88);
+  color: #d8e8ff;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  border-radius: 2px;
+  border-left: 3px solid rgba(190, 220, 255, 0.95);
+  white-space: nowrap;
+  transform: translate(-50%, -120%);
+}
 .globe-mark__name {
   position: absolute;
   left: 14px;

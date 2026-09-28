@@ -463,28 +463,7 @@ window.GgrMixer = (function () {
     ctx2d.fillStyle = "#000";
     ctx2d.fillRect(0, 0, w, h);
     if (tr.specBmp) ctx2d.drawImage(tr.specBmp, 0, 0, w, h);
-    drawPeaksOverlay(tr, ctx2d, w, h);
     drawWave(tr);
-  }
-
-  /** Pics Audacity toujours visibles (bande basse), pas seulement en zoom. */
-  function drawPeaksOverlay(tr, ctx, w, h) {
-    const peaks = tr && tr.peaks;
-    if (!peaks || !peaks.mins || !peaks.maxs || !w || !h) return;
-    const band = Math.max(10, Math.floor(h * 0.28));
-    const top = h - band;
-    ctx.fillStyle = "rgba(8, 14, 20, 0.55)";
-    ctx.fillRect(0, top, w, band);
-    const mid = top + band / 2;
-    const amp = (band / 2) * 0.9;
-    ctx.fillStyle = "rgba(74, 168, 224, 0.9)";
-    const cols = peaks.mins.length;
-    for (let x = 0; x < w; x++) {
-      const i = Math.min(cols - 1, Math.floor((x / w) * cols));
-      const y1 = mid - peaks.maxs[i] * amp;
-      const y2 = mid - peaks.mins[i] * amp;
-      ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1));
-    }
   }
 
   function computePeaks(samples, cols) {
