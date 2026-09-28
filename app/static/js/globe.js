@@ -530,7 +530,23 @@
     htmlBannerPoints().forEach((p) => rows.push(p));
     metareaLabelPoints().forEach((p) => rows.push(p));
     subzoneLabelPoints().forEach((p) => rows.push(p));
+    polePoints().forEach((p) => rows.push(p));
+    aezLabelPoints().forEach((p) => rows.push(p));
     return rows;
+  }
+
+  /** Marqueurs axes pôle Nord / pôle Sud (croix). */
+  function polePoints() {
+    return [
+      { lat: 90, lon: 0, lng: 0, kind: "pole", name: t("pole_north") },
+      { lat: -90, lon: 0, lng: 0, kind: "pole", name: t("pole_south") },
+    ];
+  }
+
+  /** Libellé Ice Antarctic Exclusion Zone sur le parallèle 48° S. */
+  function aezLabelPoints() {
+    // Atlantique sud : lisible face à la flotte GGR actuelle.
+    return [{ lat: AEZ_LAT, lon: -20, lng: -20, kind: "aez", name: t("aez_label") }];
   }
 
   function fmtLatLon(lat, lon) {
@@ -663,6 +679,32 @@
       wrap.appendChild(lab);
       return wrap;
     }
+    if (d.kind === "aez") {
+      wrap.style.width = "auto";
+      wrap.style.height = "auto";
+      wrap.style.pointerEvents = "none";
+      const lab = document.createElement("span");
+      lab.className = "globe-mark__aez";
+      lab.textContent = d.name || "Ice Antarctic Exclusion Zone";
+      wrap.appendChild(lab);
+      wrap.title = d.name || "";
+      return wrap;
+    }
+    if (d.kind === "pole") {
+      wrap.style.width = "18px";
+      wrap.style.height = "18px";
+      wrap.style.pointerEvents = "none";
+      const icon = document.createElement("span");
+      icon.className = "globe-mark__icon globe-mark__axis";
+      wrap.appendChild(icon);
+      const name = document.createElement("span");
+      name.className = "globe-mark__name";
+      name.style.cssText = "position:absolute;left:16px;top:50%;transform:translateY(-50%);white-space:nowrap;";
+      name.textContent = d.name || "";
+      wrap.appendChild(name);
+      wrap.title = d.name || "";
+      return wrap;
+    }
     const icon = document.createElement("span");
     icon.className = "globe-mark__icon";
     if (d.kind === "boat") {
@@ -730,8 +772,34 @@
       })
       .filter(Boolean)
       .concat(fleetRingPaths())
+      .concat(aezPaths())
       .concat(kiwiLinkPaths())
       .concat(txLinkPaths());
+  }
+
+  // Ice Antarctic Exclusion Zone GGR : parallèle 48° S (cercle pointillé).
+  const AEZ_LAT = -48;
+  const AEZ_DASH_DEG = 2.8;
+  const AEZ_GAP_DEG = 1.6;
+
+  function aezPaths() {
+    const out = [];
+    let lon = -180;
+    while (lon < 180 - 0.01) {
+      const a = lon;
+      const b = Math.min(lon + AEZ_DASH_DEG, 180);
+      out.push({
+        coords: [
+          [AEZ_LAT, a, 0.0012],
+          [AEZ_LAT, b, 0.0012],
+        ],
+        color: "rgba(190, 220, 255, 0.85)",
+        stroke: 1.35,
+        dash: true,
+      });
+      lon = b + AEZ_GAP_DEG;
+    }
+    return out;
   }
 
   function sdrCity(d) {
@@ -2052,15 +2120,17 @@
         const lon = Number.isFinite(d.lon) ? d.lon : d.lng;
         if (!Number.isFinite(lon)) return;
         const boat = d.kind === "boat";
+        const pole = d.kind === "pole";
+        const aez = d.kind === "aez";
         const node = markerEl(d);
         const m = L.marker([d.lat, lon], {
           icon: L.divIcon({
             className: "ggr-leaflet-icon",
             html: "",
-            iconSize: boat ? [22, 22] : d.kind === "kiwi_all" ? [4, 4] : [12, 12],
-            iconAnchor: boat ? [11, 11] : d.kind === "kiwi_all" ? [2, 2] : [6, 6],
+            iconSize: boat ? [22, 22] : d.kind === "kiwi_all" ? [4, 4] : pole ? [18, 18] : aez ? [1, 1] : [12, 12],
+            iconAnchor: boat ? [11, 11] : d.kind === "kiwi_all" ? [2, 2] : pole ? [9, 9] : aez ? [0, 0] : [6, 6],
           }),
-          interactive: d.kind !== "link_km" && d.kind !== "tx_km",
+          interactive: d.kind !== "link_km" && d.kind !== "tx_km" && !pole && !aez,
           keyboard: false,
         }).addTo(mapLayers);
         const mount = () => {

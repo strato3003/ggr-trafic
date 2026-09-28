@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.1.27 — 2026-09-28
+
+- Mixeur : une seule piste Audacity sous le waterfall (plus d’overlay doublon sur le spectrogramme).
+- Globe : axes Pôle Nord / Pôle Sud + cercle pointillé « Ice Antarctic Exclusion Zone » à 48° S.
+
 ## 1.1.26 — 2026-09-28
 
 - Mixeur : pics Audacity visibles dès l’ouverture (bande basse sur le waterfall).

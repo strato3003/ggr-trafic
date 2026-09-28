@@ -1086,6 +1086,61 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   border-color: #c9a227;
   background: #c9a227;
 }
+.globe-mark--pole {
+  pointer-events: none;
+}
+.globe-mark--pole .globe-mark__axis {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.globe-mark--pole .globe-mark__axis::before,
+.globe-mark--pole .globe-mark__axis::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #f4e6c3;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+.globe-mark--pole .globe-mark__axis::before {
+  width: 14px;
+  height: 2px;
+  margin: -1px 0 0 -7px;
+}
+.globe-mark--pole .globe-mark__axis::after {
+  width: 2px;
+  height: 14px;
+  margin: -7px 0 0 -1px;
+}
+.globe-mark--pole .globe-mark__name {
+  border-left: 3px solid #f4e6c3;
+}
+.globe-mark--aez {
+  pointer-events: none;
+}
+.globe-mark__aez {
+  display: block;
+  pointer-events: none;
+  background: rgba(8, 16, 24, 0.88);
+  color: #d8e8ff;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  border-radius: 2px;
+  border-left: 3px solid rgba(190, 220, 255, 0.95);
+  white-space: nowrap;
+  transform: translate(-50%, -120%);
+}
 .globe-mark__name {
   position: absolute;
   left: 14px;
