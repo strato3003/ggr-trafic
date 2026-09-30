@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.1.30 — 2026-09-30
+
+- Suppression du **buddy call** (QRG 4483/6516/8294/12353, planning 12:00 TU, SDR dédiés, UI).
+- Centroïde : skippers suivis sous `fleet.skippers` (réglages conservés).
+- CLI : `python -m app.store purge-buddy` pour effacer les archives `*-buddy` sur le serveur.
+
 ## 1.1.29 — 2026-09-28
 
 - Globe : cercle AEZ 48° S et axe polaire affinés (1 px).

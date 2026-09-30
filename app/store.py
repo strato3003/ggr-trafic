@@ -241,7 +241,7 @@ def globe_vacation(meta: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def list_vacations(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def list_vacations(cfg: dict[str, Any] | None = None, *, include_buddy: bool = False) -> list[dict[str, Any]]:
     root = vacations_root(cfg)
     if not root.exists():
         return []
@@ -255,7 +255,10 @@ def list_vacations(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
         meta["id"] = meta.get("id") or folder.name
-        items.append(_decorate(meta, folder))
+        row = _decorate(meta, folder)
+        if not include_buddy and (row.get("is_buddy") or str(folder.name).endswith("-buddy")):
+            continue
+        items.append(row)
     return items
 
 
@@ -423,11 +426,11 @@ def _kind_label(meta: dict[str, Any]) -> str:
     return "bulletin"
 
 
-def vacation_summaries(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def vacation_summaries(cfg: dict[str, Any] | None = None, *, include_buddy: bool = True) -> list[dict[str, Any]]:
     """Liste compacte (id, heure d’antenne, taille) pour purge manuelle."""
     cfg = cfg or load_config()
     rows: list[dict[str, Any]] = []
-    for meta in list_vacations(cfg):
+    for meta in list_vacations(cfg, include_buddy=include_buddy):
         vid = str(meta.get("id") or "")
         folder = vacations_root(cfg) / vid
         rows.append(
@@ -441,6 +444,31 @@ def vacation_summaries(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]
             }
         )
     return rows
+
+
+def purge_buddy_sessions(
+    cfg: dict[str, Any] | None = None,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Supprime tous les dossiers `*-buddy` (et métadonnées reason buddy*)."""
+    cfg = cfg or load_config()
+    targets: list[str] = []
+    for meta in list_vacations(cfg, include_buddy=True):
+        vid = str(meta.get("id") or "")
+        if meta.get("is_buddy") or vid.endswith("-buddy"):
+            targets.append(vid)
+    deleted: list[str] = []
+    errors: list[tuple[str, str]] = []
+    if dry_run:
+        return {"dry_run": True, "targets": targets, "deleted": [], "errors": []}
+    for vid in targets:
+        err = delete_vacation(vid, cfg)
+        if err:
+            errors.append((vid, err))
+        else:
+            deleted.append(vid)
+    return {"dry_run": False, "targets": targets, "deleted": deleted, "errors": errors}
 
 
 def purge_older_than(
@@ -519,6 +547,11 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("list", help="Lister id, type, heure d’antenne TU, taille")
     p_del = sub.add_parser("delete", help="Supprimer un ou plusieurs identifiants")
     p_del.add_argument("ids", nargs="+", help="ex. 2026-09-11T1759Z")
+    p_buddy = sub.add_parser(
+        "purge-buddy",
+        help="Supprimer toutes les sessions buddy call (*-buddy)",
+    )
+    p_buddy.add_argument("--dry-run", action="store_true", help="lister sans supprimer")
     p_purge = sub.add_parser(
         "purge",
         help="Supprimer les vacations plus anciennes que N jours, ou avant une date TU",
@@ -535,7 +568,7 @@ def main(argv: list[str] | None = None) -> None:
     cfg = load_config()
 
     if args.cmd == "list":
-        rows = vacation_summaries(cfg)
+        rows = vacation_summaries(cfg, include_buddy=True)
         if not rows:
             print("Aucune vacation.")
             return
@@ -548,6 +581,22 @@ def main(argv: list[str] | None = None) -> None:
                 f"{_fmt_size(int(row['bytes'] or 0)):>8}  {row.get('status') or '—'}"
             )
         print(f"{len(rows)} vacation(s) · {_fmt_size(total)}")
+        return
+
+    if args.cmd == "purge-buddy":
+        result = purge_buddy_sessions(cfg, dry_run=args.dry_run)
+        verb = "à supprimer" if result["dry_run"] else "supprimé"
+        if not result["targets"]:
+            print("Aucune session buddy.")
+            return
+        for vid in result["targets"]:
+            mark = vid if result["dry_run"] or vid in result["deleted"] else f"{vid} (échec)"
+            print(f"{verb} {mark}")
+        for vid, err in result["errors"]:
+            print(f"{vid} : {err}", file=sys.stderr)
+        print(f"{len(result['targets'])} buddy(s)")
+        if result["errors"]:
+            raise SystemExit(1)
         return
 
     if args.cmd == "delete":

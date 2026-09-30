@@ -1,5 +1,5 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "1.1.29"
+version: "1.1.30"
 
 club:
   callsign: F6KUF
@@ -54,44 +54,6 @@ radio:
       label: "Accusé 12,418 MHz"
       zoom: 10
 
-# Buddy call quotidien (skippers entre eux, pas le bulletin F6KUF)
-buddy:
-  enabled: true
-  time_utc: "12:00"
-  lead_minutes: 1
-  duration_minutes: 15
-  mode: usb
-  main:
-    freq_khz: 4483.0
-    label: "Buddy call 4483 kHz"
-    # Zoom 12 → ~7,3 kHz : la USB 2,4 kHz reste lisible (z10 ≈ 29 kHz la noie).
-    zoom: 12
-  alternate:
-    freq_khz: 6516.0
-    label: "Buddy call 6516 kHz (secours)"
-    zoom: 12
-  # QRG d’écoute supplémentaires (réparties sur les Kiwi selon places libres).
-  extras:
-    - freq_khz: 8294.0
-      label: "Buddy call 8294 kHz"
-      zoom: 12
-    - freq_khz: 12353.0
-      label: "Buddy call 12353 kHz"
-      zoom: 12
-  centroid:
-    # Noms Yellowbrick RaceSetup (ggr2026). Le centroïde (bulletin et buddy)
-    # est uniquement celui de ces skippers, jamais le reste de la flotte.
-    skippers:
-      - "Damien Guillou"
-      - "Etienne Messikommer"
-      - "Louis Kerdelhue"
-  kiwi:
-    # ≤2 QRG / Kiwi ; 4/6 MHz sur NVIS (proche flotte), 8/12 MHz sur saut.
-    # 4–10 omni répartis sur 360° autour du centroïde (bateaux omni).
-    count: 6
-    min_separation_km: 400
-    min_free_slots: 2
-
 # Position moyenne de la flotte GGR (Yellowbrick)
 fleet:
   source: yellowbrick
@@ -99,6 +61,11 @@ fleet:
   tracker_host: cf.yb.tl
   # Ignorer les traces « fantômes » historiques (Moitessier, RKJ, etc.)
   skip_team_id_from: 900
+  # Skippers suivis pour le centroïde d’écoute (bulletin) — noms Yellowbrick RaceSetup.
+  skippers:
+    - "Damien Guillou"
+    - "Etienne Messikommer"
+    - "Louis Kerdelhue"
   # Repli si le tracker est indisponible (Les Sables-d'Olonne)
   fallback:
     lat: 46.5025

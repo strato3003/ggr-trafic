@@ -458,14 +458,25 @@ def skipper_matches(boat: dict[str, Any], names: list[str], team_ids: list[int])
     return False
 
 
+def fleet_skippers(cfg: dict[str, Any] | None = None) -> list[str]:
+    """Noms Yellowbrick des skippers du centroïde (config `fleet.skippers`)."""
+    cfg = cfg or {}
+    fleet = cfg.get("fleet") or {}
+    names = [str(x).strip() for x in (fleet.get("skippers") or []) if str(x).strip()]
+    if names:
+        return names
+    # Ancienne clé (buddy.centroid.skippers) — migration douce des settings runtime.
+    legacy = ((cfg.get("buddy") or {}).get("centroid") or {}).get("skippers") or []
+    return [str(x).strip() for x in legacy if str(x).strip()]
+
+
 def buddy_aim(fleet: dict[str, Any], cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     """Centroïde d’écoute : uniquement les skippers listés (jamais le reste de la flotte)."""
     cfg = cfg or {}
-    buddy = cfg.get("buddy") or {}
-    cent = buddy.get("centroid") or {}
-    names = [str(x).strip() for x in (cent.get("skippers") or []) if str(x).strip()]
+    names = fleet_skippers(cfg)
+    fleet_cfg = cfg.get("fleet") or {}
     try:
-        team_ids = [int(x) for x in (cent.get("team_ids") or [])]
+        team_ids = [int(x) for x in (fleet_cfg.get("team_ids") or [])]
     except (TypeError, ValueError):
         team_ids = []
     boats = [b for b in (fleet.get("boats") or []) if isinstance(b, dict)]
@@ -487,7 +498,7 @@ def buddy_aim(fleet: dict[str, Any], cfg: dict[str, Any] | None = None) -> dict[
             "skippers": core,
             "skipper_names": core_names,
             "include_fleet": False,
-            "source": fleet.get("source") or "buddy",
+            "source": fleet.get("source") or "fleet",
         }
     out = {
         "lat": float(fleet.get("lat") or 46.5025),

@@ -1149,7 +1149,7 @@
 
   function renderSkippers() {
     if (!skipEl) return;
-    skipEl.querySelectorAll('input[name="buddy_skipper"], input[data-skipper]').forEach((inp) => {
+    skipEl.querySelectorAll('input[name="fleet_skipper"], input[name="buddy_skipper"], input[data-skipper]').forEach((inp) => {
       const name = inp.value || inp.getAttribute("data-skipper");
       if (name) inp.checked = boatInBuddy(name);
     });
@@ -1187,7 +1187,7 @@
       .map((v) => {
         let when = (v.air_at || v.started_at || "").replace("T", " ").slice(0, 16);
         if (when) when += " TU";
-        const tag = v.is_buddy ? "Buddy call" : v.is_test ? t("vac_test") : t("vac_bulletin");
+        const tag = v.is_test ? t("vac_test") : t("vac_bulletin");
         const n = audioSdrs(v);
         const title = v.title && v.title !== v.id ? " · " + esc(v.title) : "";
         return (
@@ -2580,7 +2580,7 @@
     }
   });
 
-  const saveBtn = document.getElementById("globe-save-buddy");
+  const saveBtn = document.getElementById("save-centroid") || document.getElementById("globe-save-buddy");
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
       const tok = token();
@@ -2602,16 +2602,8 @@
             qrg_tolerance_khz: cur.qrg_tolerance_khz,
             lead_minutes: cur.schedule_lead,
             duration_minutes: cur.duration_minutes,
-            buddy_enabled: cur.buddy_enabled,
-            buddy_main_khz: cur.buddy_main_khz,
-            buddy_alt_khz: cur.buddy_alt_khz,
-            buddy_extra1_khz: cur.buddy_extra1_khz,
-            buddy_extra2_khz: cur.buddy_extra2_khz,
-            buddy_time_utc: cur.buddy_time_utc,
-            buddy_lead: cur.buddy_lead,
-            buddy_duration_minutes: cur.buddy_duration_minutes,
-            buddy_kiwi_count: 4,
             buddy_skippers: [...skippers],
+            skippers: [...skippers],
           }),
         });
         const body = await res.json().catch(() => ({}));

@@ -7,10 +7,6 @@
     <strong>{{ schedule_days_label | capitalize }}</strong> à <strong>{{ time_utc }} TU</strong>, le radio-club <strong>{{ club_callsign }}</strong>
     émet le bulletin météo (cette semaine : Philippe F4HWM depuis Talmont-Saint-Hilaire).
     <strong>Michel FO5QB</strong> émet <strong>tous les jours</strong> à la même heure depuis Tahiti.
-    À <strong>{{ buddy_time_utc }} TU</strong>, l’écoute <strong>buddy call</strong> capte
-    <strong>{{ buddy_qrgs_label }} kHz</strong> depuis plusieurs KiwiSDR
-    choisis pour la propagation vers le centroïde
-    de {{ buddy_skippers_short }}.
     L’application capture aussi le waterfall du bulletin (Kiwi le plus proche de la flotte)
     et les deux QRG d’accusé depuis la flotte, la France et Tahiti.
     <a href="/reglages#record-test">Record test</a> sur n’importe quelle QRG.
@@ -30,7 +26,6 @@
       <div class="card__body">
         <h2>{{ v.started_at | when }}</h2>
         <p class="meta">
-          {% if v.is_buddy %}<span class="badge">Buddy call</span>{% endif %}
           {% if v.is_test %}<span class="badge">{{ v.title or 'Test' }}</span>{% endif %}
           {{ v.title or (v.club.callsign if v.club else club_callsign) }}
           · {{ v.fleet_fmt or (v.fleet.fmt if v.fleet else '') }}
