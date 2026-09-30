@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 2.0.0 — 2026-09-30
+
+- **Breaking** : suppression complète du buddy call (QRG, planning 12:00 TU, SDR, UI, enregistrement).
+- Centroïde : skippers suivis sous `fleet.skippers`.
+- À propos : plus de journal des versions dans le panneau.
+- CLI : `python -m app.store purge-buddy` pour purger les archives `*-buddy`.
+
 ## 1.1.30 — 2026-09-30
 
 - Suppression du **buddy call** (QRG 4483/6516/8294/12353, planning 12:00 TU, SDR dédiés, UI).
