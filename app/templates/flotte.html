@@ -79,9 +79,6 @@
         TX {{ tx_mhz }} MHz · ACK {{ ack1_mhz }} / {{ ack2_mhz }} · {{ schedule_ident_short }} {{ time_utc }} TU
       </p>
       <p class="kiwi-ident__qrg">
-        Buddy {{ buddy_qrgs_label }} kHz · {{ buddy_time_utc }} TU
-      </p>
-      <p class="kiwi-ident__qrg">
         {{ t('tx_on_air') }} : {{ bulletin_tx_label | default('F6KUF') }}
       </p>
       <p class="kiwi-ident__clock">
@@ -161,24 +158,6 @@
           </tbody>
         </table>
         {% endif %}
-        <h2>{{ t('kiwi_buddy') }}</h2>
-        <table class="tbl">
-          <thead>
-            <tr><th>{{ t('role') }}</th><th>{{ t('receiver') }}</th><th>{{ t('distance') }}</th><th>{{ t('zone') }}</th></tr>
-          </thead>
-          <tbody>
-            {% for k in buddy_kiwis or [] %}
-            <tr>
-              <td>{{ k.site_label or k.site }}</td>
-              <td><a href="{{ k.url }}" rel="noreferrer">{{ k.name }}</a></td>
-              <td>{{ k.site_km or k.distance_km }} km</td>
-              <td>{{ k.prop_zone or '—' }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4" class="meta">{{ t('none_buddy') }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
         <h2>{{ t('kiwi_beam') }}</h2>
         <table class="tbl">
           <thead>
@@ -240,21 +219,14 @@
   "buddy": buddy_aim or {},
   "boats": fleet.boats or [],
   "kiwis": kiwis or [],
-  "buddy_kiwis": buddy_kiwis or [],
+  "buddy_kiwis": [],
   "beam_kiwis": beam_kiwis or [],
   "tts_voices": tts_voices or [],
   "trafics": globe_trafics or [],
   "tx_sites": tx_sites or [],
   "skippers": buddy_skippers,
   "display": display or {},
-  "qrg": {
-    "buddy_main_khz": buddy_main_khz,
-    "buddy_alt_khz": buddy_alt_khz,
-    "buddy_extra1_khz": buddy_extra1_khz,
-    "buddy_extra2_khz": buddy_extra2_khz,
-    "buddy_qrgs_label": buddy_qrgs_label,
-    "buddy_time_utc": buddy_time_utc
-  }
+  "qrg": {}
 } | tojson }}</script>
 {% endblock %}
 {% block extra_js %}

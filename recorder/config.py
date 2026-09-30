@@ -52,6 +52,21 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
             cfg = _deep_merge(cfg, extra)
     if _migrate_legacy_ack_qrg(cfg):
         _write_settings_merge(cfg, {"radio": {"ack": list((cfg.get("radio") or {}).get("ack") or [])}})
+    if _migrate_drop_buddy(cfg):
+        # Réécrit settings sans clé buddy (skippers déjà dans fleet).
+        path = _settings_file(cfg)
+        if path.is_file():
+            try:
+                extra = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                extra = {}
+            if isinstance(extra, dict) and "buddy" in extra:
+                extra.pop("buddy", None)
+                fleet = dict(extra.get("fleet") or {})
+                if not fleet.get("skippers"):
+                    fleet["skippers"] = list(((cfg.get("fleet") or {}).get("skippers") or []))
+                    extra["fleet"] = fleet
+                path.write_text(json.dumps(extra, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return cfg
 
 
@@ -107,6 +122,26 @@ def _migrate_legacy_ack_qrg(cfg: dict[str, Any]) -> bool:
             continue
         row["freq_khz"] = new_khz
         row["label"] = ack_label(new_khz)
+        changed = True
+    return changed
+
+
+def _migrate_drop_buddy(cfg: dict[str, Any]) -> bool:
+    """Transfère buddy.centroid.skippers → fleet.skippers et retire la section buddy."""
+    changed = False
+    fleet = cfg.setdefault("fleet", {})
+    if not isinstance(fleet, dict):
+        cfg["fleet"] = {}
+        fleet = cfg["fleet"]
+        changed = True
+    skippers = [str(x).strip() for x in (fleet.get("skippers") or []) if str(x).strip()]
+    buddy = cfg.get("buddy")
+    if isinstance(buddy, dict):
+        legacy = ((buddy.get("centroid") or {}).get("skippers") or []) if isinstance(buddy.get("centroid"), dict) else []
+        if not skippers and legacy:
+            fleet["skippers"] = [str(x).strip() for x in legacy if str(x).strip()]
+            changed = True
+        cfg.pop("buddy", None)
         changed = True
     return changed
 
@@ -394,54 +429,27 @@ def _hhmm(raw: str | None, default: str) -> str:
 
 
 def buddy_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Buddy call 12:00 TU — QRG et centroïde exposés à l’UI."""
+    """Skippers du centroïde (plus de buddy call) — clés UI historiques conservées."""
+    from recorder.fleet import fleet_skippers
+
     cfg = cfg or load_config()
-    buddy = cfg.get("buddy") or {}
-    main = buddy.get("main") or {}
-    alt = buddy.get("alternate") or {}
-    cent = buddy.get("centroid") or {}
-    kiwi = buddy.get("kiwi") or {}
-    main_khz = float(main.get("freq_khz") or 4483.0)
-    alt_khz = float(alt.get("freq_khz") or 6516.0)
-    extras: list[dict[str, Any]] = []
-    extra_khz: list[float] = []
-    for raw in buddy.get("extras") or []:
-        if not isinstance(raw, dict):
-            continue
-        try:
-            khz = float(raw.get("freq_khz"))
-        except (TypeError, ValueError):
-            continue
-        if not (1000.0 <= khz <= 30000.0):
-            continue
-        extra_khz.append(khz)
-        extras.append(
-            {
-                "freq_khz": khz,
-                "label": raw.get("label") or f"Buddy call {fmt_khz(khz)} kHz",
-                "zoom": int(raw.get("zoom") or 12),
-            }
-        )
-    while len(extra_khz) < 2:
-        extra_khz.append(8294.0 if len(extra_khz) == 0 else 12353.0)
-    skippers = [str(x).strip() for x in (cent.get("skippers") or []) if str(x).strip()]
-    all_khz = [main_khz, alt_khz] + extra_khz[:2]
+    skippers = fleet_skippers(cfg)
     return {
-        "buddy_enabled": bool(buddy.get("enabled", True)),
-        "buddy_time_utc": _hhmm(buddy.get("time_utc"), "12:00"),
-        "buddy_lead": int(buddy.get("lead_minutes") or 1),
-        "buddy_duration_minutes": int(buddy.get("duration_minutes") or 15),
-        "buddy_main_khz": main_khz,
-        "buddy_alt_khz": alt_khz,
-        "buddy_extra1_khz": float(extra_khz[0]),
-        "buddy_extra2_khz": float(extra_khz[1]),
-        "buddy_extras": extras,
-        "buddy_qrgs_label": " / ".join(fmt_khz(k) for k in all_khz),
-        "buddy_main_label": main.get("label") or f"Buddy call {fmt_khz(main_khz)} kHz",
-        "buddy_alt_label": alt.get("label") or f"Buddy call {fmt_khz(alt_khz)} kHz (secours)",
+        "buddy_enabled": False,
+        "buddy_time_utc": "",
+        "buddy_lead": 0,
+        "buddy_duration_minutes": 0,
+        "buddy_main_khz": 0.0,
+        "buddy_alt_khz": 0.0,
+        "buddy_extra1_khz": 0.0,
+        "buddy_extra2_khz": 0.0,
+        "buddy_extras": [],
+        "buddy_qrgs_label": "",
+        "buddy_main_label": "",
+        "buddy_alt_label": "",
         "buddy_skippers": skippers,
         "buddy_include_fleet": False,
-        "buddy_kiwi_count": int(kiwi.get("count") or 4),
+        "buddy_kiwi_count": 0,
         "buddy_skippers_short": ", ".join(skippers) if skippers else "aucun skipper",
     }
 
@@ -465,4 +473,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
             return pkg_version("ggr-vacations")
         except PackageNotFoundError:
             cfg = cfg or {}
-            return str(cfg.get("version") or "1.1.29")
+            return str(cfg.get("version") or "2.0.0")

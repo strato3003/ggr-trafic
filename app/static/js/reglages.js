@@ -38,8 +38,8 @@
   };
 
   const payload = () => {
-    const skipperBoxes = [...form.querySelectorAll('input[name="buddy_skipper"]:checked')];
-    const skipperText = form.elements.namedItem("buddy_skippers_text");
+    const skipperBoxes = [...form.querySelectorAll('input[name="fleet_skipper"]:checked')];
+    const skipperText = form.elements.namedItem("fleet_skippers_text");
     const skippers = skipperBoxes.length
       ? skipperBoxes.map((el) => el.value)
       : skipperText
@@ -48,7 +48,6 @@
             .map((s) => s.trim())
             .filter(Boolean)
         : [];
-    const enabledEl = form.elements.namedItem("buddy_enabled");
     const tx_sites = [];
     for (let i = 0; i < 5; i++) {
       const labelEl = form.elements.namedItem("tx_label_" + i);
@@ -69,16 +68,8 @@
       qrg_tolerance_khz: Number(form.elements.namedItem("qrg_tolerance_khz").value),
       lead_minutes: Number(form.elements.namedItem("lead_minutes").value),
       duration_minutes: Number(form.elements.namedItem("duration_minutes").value),
-      buddy_enabled: !!(enabledEl && enabledEl.checked),
-      buddy_main_khz: Number(form.elements.namedItem("buddy_main_khz").value),
-      buddy_alt_khz: Number(form.elements.namedItem("buddy_alt_khz").value),
-      buddy_extra1_khz: Number(form.elements.namedItem("buddy_extra1_khz").value),
-      buddy_extra2_khz: Number(form.elements.namedItem("buddy_extra2_khz").value),
-      buddy_time_utc: form.elements.namedItem("buddy_time_utc").value,
-      buddy_lead: Number(form.elements.namedItem("buddy_lead").value),
-      buddy_duration_minutes: Number(form.elements.namedItem("buddy_duration_minutes").value),
-      buddy_kiwi_count: Number((form.elements.namedItem("buddy_kiwi_count") || { value: 4 }).value) || 4,
       buddy_skippers: skippers,
+      skippers: skippers,
       tx_sites,
       display: {
         banner: !!(form.elements.namedItem("display_banner") && form.elements.namedItem("display_banner").checked),
@@ -138,8 +129,6 @@
           tx: data.tx_mhz,
           ack1: data.ack1_mhz,
           ack2: data.ack2_mhz,
-          qrgs: data.buddy_qrgs_label || [data.buddy_main_khz, data.buddy_alt_khz, data.buddy_extra1_khz, data.buddy_extra2_khz].filter(Boolean).join(" / "),
-          time: data.buddy_time_utc,
           n: (data.tx_sites || []).length,
         }),
         true
@@ -220,27 +209,24 @@
     });
   }
 
-  const saveBuddyBtn = document.getElementById("save-buddy");
-  if (saveBuddyBtn) {
-    saveBuddyBtn.addEventListener("click", async () => {
-      busy(saveBuddyBtn, true);
-      say("buddy", t("buddy_saving"), true);
+  const saveCentroidBtn = document.getElementById("save-centroid");
+  if (saveCentroidBtn) {
+    saveCentroidBtn.addEventListener("click", async () => {
+      busy(saveCentroidBtn, true);
+      say("centroid", t("centroid_saving"), true);
       try {
         const data = await saveSettings();
         say(
-          "buddy",
-          t("buddy_ok", {
-            qrgs: data.buddy_qrgs_label || [data.buddy_main_khz, data.buddy_alt_khz, data.buddy_extra1_khz, data.buddy_extra2_khz].filter(Boolean).join(" / "),
-            time: data.buddy_time_utc,
-            state: data.buddy_enabled ? t("buddy_on") : t("buddy_off"),
+          "centroid",
+          t("centroid_saved_skippers", {
             skippers: (data.buddy_skippers || []).join(", ") || t("no_skipper"),
           }),
           true
         );
       } catch (err) {
-        say("buddy", String(err), false);
+        say("centroid", String(err), false);
       } finally {
-        busy(saveBuddyBtn, false);
+        busy(saveCentroidBtn, false);
       }
     });
   }

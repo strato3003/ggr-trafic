@@ -82,8 +82,8 @@ def test_prop_rings_4mhz_nvis_vs_16mhz_hop():
 def test_i18n_fr_en():
     from app.i18n import dump, t
 
-    assert "Buddy" in t("en", "buddy_main")
-    assert t("fr", "buddy_main") != t("en", "buddy_main")
+    assert "Centroid" in t("en", "setup_centroid_legend")
+    assert t("fr", "setup_centroid_legend") != t("en", "setup_centroid_legend")
     assert "speech_play" in dump("fr")
     assert "speech_mp3" in dump("en")
     assert t("en", "metarea_err") != t("fr", "metarea_err")
@@ -166,20 +166,15 @@ def test_scheduler_cron_is_1759_with_one_minute_lead():
     assert _vacation_dow({"schedule": {"tahiti_daily": True}}) is None
 
 
-def test_next_recording_picks_buddy_in_the_morning():
+def test_next_recording_is_bulletin_only():
     cfg = {
-        "schedule": {"time_utc": "18:00", "lead_minutes": 1},
-        "buddy": {"time_utc": "12:00", "lead_minutes": 1, "enabled": True},
+        "schedule": {"time_utc": "18:00", "lead_minutes": 1, "days": ["mon", "thu"], "tahiti_daily": True},
     }
     morning = datetime(2026, 9, 17, 10, 0, tzinfo=timezone.utc)
     nxt = next_recording_utc(cfg, morning)
-    assert nxt.hour == 11 and nxt.minute == 59
+    assert nxt.hour == 17 and nxt.minute == 59
     afternoon = datetime(2026, 9, 17, 15, 0, tzinfo=timezone.utc)
     nxt = next_recording_utc(cfg, afternoon)
-    assert nxt.hour == 17 and nxt.minute == 59
-    off = dict(cfg)
-    off["buddy"] = {**cfg["buddy"], "enabled": False}
-    nxt = next_recording_utc(off, morning)
     assert nxt.hour == 17 and nxt.minute == 59
 
 
@@ -1262,10 +1257,11 @@ def test_usb_dial_in_plus_minus_five_khz_window():
     assert abs(hit["freq_khz"] - 14138.0) < 0.25
 
 
-def test_scheduler_buddy_cron_is_1159():
-    from recorder.scheduler import _buddy_lead
 
-    assert _buddy_lead({"buddy": {"time_utc": "12:00", "lead_minutes": 1}}) == (11, 59)
+def test_scheduler_buddy_cron_is_1159():
+    """Buddy call retiré."""
+    return
+
 
 
 def test_fmt_khz_keeps_integer_channel():
@@ -1312,10 +1308,8 @@ def test_buddy_aim_listed_skippers_only():
         "source": "yellowbrick",
     }
     trio_cfg = {
-        "buddy": {
-            "centroid": {
-                "skippers": ["Damien Guillou", "Etienne Messikommer", "Louis Kerdelhue"],
-            }
+        "fleet": {
+            "skippers": ["Damien Guillou", "Etienne Messikommer", "Louis Kerdelhue"],
         }
     }
     trio = buddy_aim(fleet, trio_cfg)
@@ -1323,11 +1317,8 @@ def test_buddy_aim_listed_skippers_only():
     assert 40.0 < trio["lat"] < 42.0
     # include_fleet historique : ignoré, le centroïde reste le skipper listé.
     one_cfg = {
-        "buddy": {
-            "centroid": {
-                "skippers": ["Damien Guillou"],
-                "include_fleet": True,
-            }
+        "fleet": {
+            "skippers": ["Damien Guillou"],
         }
     }
     one = buddy_aim(fleet, one_cfg)
@@ -1458,107 +1449,25 @@ def test_tts_rejects_empty_and_lists_voices():
     assert en and all(row["lang"] == "en" for row in en)
 
 
-def test_buddy_channels_record_both_qrgs():
-    from recorder.session import _buddy_channels
 
-    cfg = {
-        "buddy": {
-            "main": {"freq_khz": 4483.0, "label": "Buddy call 4483 kHz", "zoom": 12},
-            "alternate": {"freq_khz": 6516.0, "label": "Buddy call 6516 kHz (secours)", "zoom": 12},
-        }
-    }
-    roles = {
-        "nvis": {
-            "name": "kiwi-nvis",
-            "site_label": "proche / NVIS",
-            "free_slots": 3,
-            "prop_zone": "nvis",
-            "site_km": 400,
-        },
-        "hop": {
-            "name": "kiwi-hop",
-            "site_label": "saut 1 hop",
-            "free_slots": 1,
-            "prop_zone": "hop",
-            "site_km": 2200,
-        },
-    }
-    rows = _buddy_channels(cfg, roles)
-    # 4/6 MHz → NVIS (2 places) ; hop inutilisé faute de bande « far ».
-    assert [c["id"] for c in rows] == ["nvis-main", "nvis-alt"]
-    assert [c["freq_khz"] for c in rows] == [4483.0, 6516.0]
-    assert rows[0]["screencast"] is True
-    assert rows[1]["screencast"] is False
+def test_buddy_channels_record_both_qrgs():
+    """Buddy call retiré."""
+    return
+
+
 
 
 def test_buddy_channels_near_far_prop():
-    from recorder.session import _buddy_channels
+    """Buddy call retiré."""
+    return
 
-    cfg = {
-        "buddy": {
-            "main": {"freq_khz": 4483.0, "label": "Buddy call 4483 kHz", "zoom": 12},
-            "alternate": {"freq_khz": 6516.0, "label": "Buddy call 6516 kHz (secours)", "zoom": 12},
-            "extras": [
-                {"freq_khz": 8294.0, "label": "Buddy call 8294 kHz", "zoom": 12},
-                {"freq_khz": 12353.0, "label": "Buddy call 12353 kHz", "zoom": 12},
-            ],
-        }
-    }
-    roles = {
-        "nvis": {
-            "name": "kiwi-nvis",
-            "site_label": "proche / NVIS",
-            "free_slots": 2,
-            "prop_zone": "nvis",
-            "site_km": 500,
-        },
-        "hop": {
-            "name": "kiwi-hop",
-            "site_label": "saut 1 hop",
-            "free_slots": 2,
-            "prop_zone": "hop",
-            "site_km": 2500,
-        },
-        "far": {
-            "name": "kiwi-far",
-            "site_label": "saut long",
-            "free_slots": 1,
-            "prop_zone": "far",
-            "site_km": 3800,
-        },
-    }
-    rows = _buddy_channels(cfg, roles)
-    by_freq = {c["freq_khz"]: c for c in rows}
-    assert by_freq[4483.0]["site"] == "nvis"
-    assert by_freq[6516.0]["site"] == "nvis"
-    assert by_freq[8294.0]["site"] in ("hop", "far")
-    assert by_freq[12353.0]["site"] in ("hop", "far")
-    assert by_freq[4483.0]["prop_want"] == "near"
-    assert by_freq[8294.0]["prop_want"] == "far"
-    # max 2 / Kiwi
-    from collections import Counter
 
-    assert max(Counter(c["site"] for c in rows).values()) <= 2
 
 
 def test_buddy_context_extras_defaults():
-    from recorder.config import buddy_context
+    """Buddy call retiré."""
+    return
 
-    ctx = buddy_context(
-        {
-            "buddy": {
-                "main": {"freq_khz": 4483.0},
-                "alternate": {"freq_khz": 6516.0},
-                "extras": [
-                    {"freq_khz": 8294.0},
-                    {"freq_khz": 12353.0},
-                ],
-            }
-        }
-    )
-    assert ctx["buddy_extra1_khz"] == 8294.0
-    assert ctx["buddy_extra2_khz"] == 12353.0
-    assert ctx["buddy_qrgs_label"] == "4483 / 6516 / 8294 / 12353"
 
 
 def test_safe_next_keeps_zoom_query():
