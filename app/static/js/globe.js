@@ -55,20 +55,39 @@
   window.GgrWfCache = window.GgrWfCache || {};
   (function prefetchWaterfalls() {
     const cache = window.GgrWfCache;
-    (data.trafics || data.vacations || []).forEach((v, i) => {
+    const jobs = [];
+    (data.trafics || data.vacations || []).forEach((v) => {
       (v.channels || []).forEach((c) => {
         const name = c.waterfall || "";
         if (!name || !(c.has_audio || c.audio)) return;
         const url = "/media/" + encodeURIComponent(v.id) + "/" + encodeURIComponent(name);
-        if (cache[url]) return;
-        fetch(url, { cache: "force-cache", priority: i < 2 ? "high" : "low" })
+        if (!cache[url]) jobs.push(url);
+      });
+    });
+    let inflight = 0;
+    const pump = () => {
+      // Mixeur ouvert : laisser le réseau aux MP3. Tout précharger d’un coup
+      // sature HTTP/2 et Play reste à currentTime 0.
+      if (document.getElementById("mix-audio-bin")) {
+        window.setTimeout(pump, 500);
+        return;
+      }
+      while (inflight < 2 && jobs.length) {
+        const url = jobs.shift();
+        inflight += 1;
+        fetch(url, { cache: "force-cache", priority: "low" })
           .then((r) => (r.ok ? r.blob() : null))
           .then((b) => {
             if (b && b.size > 128) cache[url] = b;
           })
-          .catch(() => {});
-      });
-    });
+          .catch(() => {})
+          .finally(() => {
+            inflight -= 1;
+            pump();
+          });
+      }
+    };
+    window.setTimeout(pump, 800);
   })();
 
   const TOKEN_KEY = "ggr-admin-token";
