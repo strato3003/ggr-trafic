@@ -1501,8 +1501,8 @@ body.kiwi-panel-off .kiwi-toggle__arr {
 .mix__desk {
   display: flex;
   flex-direction: column;
-  min-height: var(--vac-row);
-  max-height: calc(6 * var(--vac-row));
+  min-height: 4.6rem;
+  max-height: calc(5 * 4.6rem);
   overflow-x: hidden;
   overflow-y: auto;
   background: #000;
@@ -1512,9 +1512,9 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   display: flex;
   flex-direction: row;
   align-items: center;
-  height: var(--vac-row);
-  min-height: var(--vac-row);
-  max-height: var(--vac-row);
+  height: 4.6rem;
+  min-height: 4.6rem;
+  max-height: 4.6rem;
   min-width: 0;
   overflow: hidden;
   border-bottom: 1px solid #123048;
@@ -1575,7 +1575,7 @@ body.kiwi-mix-focus .mix__wf {
   min-height: 0;
   height: auto;
 }
-body.kiwi-mix-focus .mix__wave {
+body.kiwi-mix-focus .mix__wf-wrap canvas.mix__wave {
   display: block;
   flex: 0 0 4.4rem;
   height: 4.4rem;
@@ -1719,13 +1719,25 @@ body.kiwi-mix-focus .mix__seek {
   height: 100%;
   background: #000;
   cursor: ew-resize;
+  display: flex;
+  flex-direction: column;
 }
-.mix__wf-wrap canvas {
+.mix__wf-wrap canvas.mix__wf {
   display: block;
   width: 100%;
-  height: 100%;
+  /* height:0 + flex : ignorer la hauteur bitmap du canvas (sinon l’onde est rognée). */
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
 }
-.mix__wave { display: none; }
+.mix__wf-wrap canvas.mix__wave {
+  display: block;
+  flex: 0 0 1.85rem;
+  height: 1.85rem;
+  width: 100%;
+  border-top: 1px solid #1c3348;
+  background: #121a22;
+}
 .mix__wf-legend {
   display: none;
   position: absolute;
