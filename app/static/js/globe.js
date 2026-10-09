@@ -494,8 +494,139 @@
     return ang;
   }
 
+  function uprightDelta(ang) {
+    const n = ((ang % 360) + 360) % 360;
+    return n > 90 && n < 270 ? 180 : 0;
+  }
+
+  // Échantillons du parallèle, puis le tronçon continu qui contient l’ancre
+  // (un saut d’écran = le méridien passe derrière le globe).
+  function parallelRun(lat, lon) {
+    const step = 0.45;
+    const half = 55;
+    const pts = [];
+    for (let d = -half; d <= half + 1e-6; d += step) {
+      let L = lon + d;
+      if (L > 180) L -= 360;
+      if (L < -180) L += 360;
+      const p = projectLatLon(lat, L);
+      if (!p) continue;
+      pts.push({ d: d, x: p.x, y: p.y });
+    }
+    if (pts.length < 2) return [];
+    const steps = [];
+    for (let i = 1; i < pts.length; i++) {
+      steps.push(Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+    }
+    const sorted = steps.slice().sort(function (a, b) {
+      return a - b;
+    });
+    const med = sorted[Math.floor(sorted.length / 2)] || 1;
+    const limit = Math.max(90, med * 4);
+    const breaks = [0];
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i] > limit) breaks.push(i + 1);
+    }
+    breaks.push(pts.length);
+    for (let b = 0; b < breaks.length - 1; b++) {
+      const seg = pts.slice(breaks[b], breaks[b + 1]);
+      if (seg.length >= 2 && seg.some(function (p) { return Math.abs(p.d) < step; })) return seg;
+    }
+    return [];
+  }
+
+  function arcAlong(seg) {
+    const cum = [0];
+    for (let i = 1; i < seg.length; i++) {
+      cum.push(cum[i - 1] + Math.hypot(seg[i].x - seg[i - 1].x, seg[i].y - seg[i - 1].y));
+    }
+    let anchorS = 0;
+    for (let i = 1; i < seg.length; i++) {
+      if (seg[i - 1].d <= 0 && seg[i].d >= 0) {
+        const spanD = seg[i].d - seg[i - 1].d || 1;
+        const t = (0 - seg[i - 1].d) / spanD;
+        anchorS = cum[i - 1] + t * (cum[i] - cum[i - 1]);
+        break;
+      }
+    }
+    function tangent(i0, i1) {
+      const dx = seg[i1].x - seg[i0].x;
+      const dy = seg[i1].y - seg[i0].y;
+      if (dx * dx + dy * dy < 1) return 0;
+      return (Math.atan2(dy, dx) * 180) / Math.PI;
+    }
+    function at(s) {
+      const last = cum[cum.length - 1];
+      if (s <= 0) return { x: seg[0].x, y: seg[0].y, ang: tangent(0, 1), inside: s >= -4 };
+      if (s >= last) {
+        const n = seg.length;
+        return { x: seg[n - 1].x, y: seg[n - 1].y, ang: tangent(n - 2, n - 1), inside: s <= last + 4 };
+      }
+      for (let i = 1; i < seg.length; i++) {
+        if (s <= cum[i]) {
+          const span = cum[i] - cum[i - 1] || 1;
+          const t = (s - cum[i - 1]) / span;
+          return {
+            x: seg[i - 1].x + t * (seg[i].x - seg[i - 1].x),
+            y: seg[i - 1].y + t * (seg[i].y - seg[i - 1].y),
+            ang: tangent(i - 1, i),
+            inside: true,
+          };
+        }
+      }
+      return { x: seg[0].x, y: seg[0].y, ang: 0, inside: false };
+    }
+    return { at: at, anchorS: anchorS };
+  }
+
+  // Libellé long : une lettre après l’autre sur le parallèle, tangente locale
+  // comme le libellé de distance sur son trait.
+  function applyAezCurve(row) {
+    const host = row.el;
+    const chars = host.children;
+    if (!chars.length) return;
+    const anchor = projectLatLon(row.lat, row.lon);
+    const seg = anchor ? parallelRun(row.lat, row.lon) : [];
+    if (!anchor || seg.length < 2) {
+      for (let i = 0; i < chars.length; i++) chars[i].style.visibility = "hidden";
+      return;
+    }
+    const arc = arcAlong(seg);
+    const widths = [];
+    let total = 0;
+    let pending = false;
+    for (let i = 0; i < chars.length; i++) {
+      const w = chars[i].getBoundingClientRect().width;
+      if (!(w > 0.5)) pending = true;
+      const use = w > 0.5 ? w : 7.2;
+      widths.push(use);
+      total += use;
+    }
+    const delta = uprightDelta(arc.at(arc.anchorS).ang);
+    let cursor = arc.anchorS - total / 2;
+    const ax = anchor.x;
+    const ay = anchor.y;
+    for (let i = 0; i < chars.length; i++) {
+      const mid = cursor + widths[i] / 2;
+      const p = arc.at(mid);
+      const ang = p.ang + delta;
+      chars[i].style.visibility = p.inside ? "visible" : "hidden";
+      chars[i].style.transform =
+        "translate(" + (p.x - ax) + "px," + (p.y - ay) + "px) translate(-50%,-50%) rotate(" + ang + "deg)";
+      cursor += widths[i];
+    }
+    if (pending && (row._layoutTries || 0) < 8) {
+      row._layoutTries = (row._layoutTries || 0) + 1;
+      scheduleKmAlign();
+    }
+  }
+
   function applyKmLabelAngle(row) {
     if (!row || !row.el) return;
+    if (row.kind === "aez") {
+      applyAezCurve(row);
+      return;
+    }
     const ang = screenAlongDeg(row.tanA, row.tanB, row.fallback);
     row.el.style.transform = "translate(-50%,-50%) rotate(" + ang + "deg)";
   }
@@ -605,10 +736,9 @@
     return rows;
   }
 
-  /** Libellé complet sur le parallèle 48° S, tangent au cercle comme les km SDR. */
+  /** Libellé complet sur le parallèle 48° S. Les lettres suivent la courbe. */
   function aezLabelPoints() {
     const lon = -20;
-    const step = 6;
     return [
       {
         lat: AEZ_LAT,
@@ -616,9 +746,6 @@
         lng: lon,
         kind: "aez",
         name: t("aez_label"),
-        alongDeg: geoAlongDeg(90),
-        tanA: [AEZ_LAT, lon - step],
-        tanB: [AEZ_LAT, lon + step],
       },
     ];
   }
@@ -728,7 +855,23 @@
       wrap.title = d.name || "";
       return wrap;
     }
-    if (d.kind === "link_km" || d.kind === "tx_km" || d.kind === "aez") {
+    if (d.kind === "aez") {
+      const host = document.createElement("span");
+      host.className = "globe-mark__aez-run";
+      Array.from(d.name || "").forEach(function (ch) {
+        const span = document.createElement("span");
+        span.className = "globe-mark__aez-ch";
+        span.textContent = ch;
+        host.appendChild(span);
+      });
+      wrap.appendChild(host);
+      wrap.title = d.name || "";
+      const row = { el: host, kind: "aez", lat: d.lat, lon: d.lon };
+      kmLabelNodes.push(row);
+      applyKmLabelAngle(row);
+      return wrap;
+    }
+    if (d.kind === "link_km" || d.kind === "tx_km") {
       const km = document.createElement("span");
       km.className = "globe-mark__km";
       km.textContent = d.name || "";

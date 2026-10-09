@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.2.2 — 2026-10-09
+
+- Globe : le libellé des glaces suit le parallèle 48° S, lettre par lettre, comme les distances suivent leur trait.
+
 ## 2.2.1 — 2026-10-09
 
 - Setup : les quatre choix d’un skipper sont Tête, centre, queue et none.
