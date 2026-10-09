@@ -1236,11 +1236,13 @@
     const zoom = deepZoom || q.get("zoom") === "1" || q.get("zoom") === "true" || q.has("ch");
     const focus = deepFocus || q.get("ch") || q.get("focus") || (zoom ? "0" : "");
     const deepTime = deepT || q.get("t") || q.get("at") || "";
+    if (mixRoot) mixRoot.setAttribute("data-status", v.status || "");
     window.GgrMixer.mount({
       root: mixRoot,
       tracks: tracks,
       vacId: v.id,
       started: v.started_at,
+      status: v.status || "",
       zoom: zoom,
       focus: focus,
       t: deepTime,
@@ -1290,7 +1292,8 @@
       if (Array.isArray(full.mixer_tracks) && full.mixer_tracks.length) next = full.mixer_tracks;
       else if ((full.channels || []).length) next = mixerTracks(full);
       const richer = next.some((t, i) => (t.src || "") && (t.src || "") !== ((listed[i] && listed[i].src) || ""));
-      if (richer) mountMuxMixer(v, next);
+      const statusChanged = !!(full && full.status && full.status !== v.status);
+      if (richer || statusChanged) mountMuxMixer(muxOpen, next);
     } catch {
       /* carte globe : lat/lon déjà dans la liste */
     }
