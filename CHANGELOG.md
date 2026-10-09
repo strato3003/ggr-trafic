@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.2.1 — 2026-10-09
+
+- Setup : les quatre choix d’un skipper sont Tête, centre, queue et none.
+
 ## 2.2.0 — 2026-10-09
 
 - Globe : le parallèle 48° S porte le libellé complet, en français ou en anglais selon la langue. Les pointillés ont la même épaisseur que le cercle de la flotte.

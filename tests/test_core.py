@@ -87,8 +87,13 @@ def test_i18n_fr_en():
     assert "glaces" in t("fr", "aez_label")
     assert t("en", "aez_label") == "Ice Antarctic Exclusion Zone"
     assert t("fr", "aez_label") != t("en", "aez_label")
-    assert t("fr", "group_tete") != t("en", "group_tete")
-    assert t("en", "group_queue") == "tail"
+    assert t("fr", "group_tete") == "Tête"
+    assert t("en", "group_tete") == "Tête"
+    assert t("fr", "group_centre") == "centre"
+    assert t("fr", "group_queue") == "queue"
+    assert t("en", "group_queue") == "queue"
+    assert t("fr", "group_none") == "none"
+    assert t("en", "group_none") == "none"
     assert "speech_play" in dump("fr")
     assert "speech_mp3" in dump("en")
     assert t("en", "metarea_err") != t("fr", "metarea_err")
