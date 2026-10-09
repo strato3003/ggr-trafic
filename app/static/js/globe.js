@@ -553,10 +553,22 @@
     return rows;
   }
 
-  /** Libellé Ice Antarctic Exclusion Zone sur le parallèle 48° S. */
+  /** Libellé « ice » sur le parallèle 48° S, tangent au cercle comme les km SDR. */
   function aezLabelPoints() {
-    // Atlantique sud : lisible face à la flotte GGR actuelle.
-    return [{ lat: AEZ_LAT, lon: -20, lng: -20, kind: "aez", name: t("aez_label") }];
+    const lon = -20;
+    const step = 6;
+    return [
+      {
+        lat: AEZ_LAT,
+        lon: lon,
+        lng: lon,
+        kind: "aez",
+        name: t("aez_label"),
+        alongDeg: geoAlongDeg(90),
+        tanA: [AEZ_LAT, lon - step],
+        tanB: [AEZ_LAT, lon + step],
+      },
+    ];
   }
 
   function fmtLatLon(lat, lon) {
@@ -664,7 +676,7 @@
       wrap.title = d.name || "";
       return wrap;
     }
-    if (d.kind === "link_km" || d.kind === "tx_km") {
+    if (d.kind === "link_km" || d.kind === "tx_km" || d.kind === "aez") {
       const km = document.createElement("span");
       km.className = "globe-mark__km";
       km.textContent = d.name || "";
@@ -687,17 +699,6 @@
       lab.textContent = d.name || "GGR 2026 — trafic HF";
       wrap.style.opacity = String(d.opacity != null ? d.opacity : 1);
       wrap.appendChild(lab);
-      return wrap;
-    }
-    if (d.kind === "aez") {
-      wrap.style.width = "auto";
-      wrap.style.height = "auto";
-      wrap.style.pointerEvents = "none";
-      const lab = document.createElement("span");
-      lab.className = "globe-mark__aez";
-      lab.textContent = d.name || "Ice Antarctic Exclusion Zone";
-      wrap.appendChild(lab);
-      wrap.title = d.name || "";
       return wrap;
     }
     const icon = document.createElement("span");
@@ -772,7 +773,8 @@
       .concat(txLinkPaths());
   }
 
-  // Ice Antarctic Exclusion Zone GGR : parallèle 48° S (cercle pointillé).
+  // Ice Antarctic Exclusion Zone GGR : parallèle 48° S.
+  // stroke 2 : même épaisseur d’écran que les pointillés SDR.
   const AEZ_LAT = -48;
   const AEZ_DASH_DEG = 2.8;
   const AEZ_GAP_DEG = 1.6;
@@ -789,8 +791,8 @@
           [AEZ_LAT, b, 0.0012],
         ],
         color: "rgba(190, 220, 255, 0.7)",
-        stroke: 1,
-        dash: true,
+        stroke: 2,
+        dash: false,
       });
       lon = b + AEZ_GAP_DEG;
     }
@@ -2227,16 +2229,16 @@
         const lon = Number.isFinite(d.lon) ? d.lon : d.lng;
         if (!Number.isFinite(lon)) return;
         const boat = d.kind === "boat";
-        const aez = d.kind === "aez";
+        const alongLab = d.kind === "link_km" || d.kind === "tx_km" || d.kind === "aez";
         const node = markerEl(d);
         const m = L.marker([d.lat, lon], {
           icon: L.divIcon({
             className: "ggr-leaflet-icon",
             html: "",
-            iconSize: boat ? [22, 22] : d.kind === "kiwi_all" ? [4, 4] : aez ? [1, 1] : [12, 12],
-            iconAnchor: boat ? [11, 11] : d.kind === "kiwi_all" ? [2, 2] : aez ? [0, 0] : [6, 6],
+            iconSize: boat ? [22, 22] : d.kind === "kiwi_all" ? [4, 4] : [12, 12],
+            iconAnchor: boat ? [11, 11] : d.kind === "kiwi_all" ? [2, 2] : [6, 6],
           }),
-          interactive: d.kind !== "link_km" && d.kind !== "tx_km" && !aez,
+          interactive: !alongLab,
           keyboard: false,
         }).addTo(mapLayers);
         const mount = () => {

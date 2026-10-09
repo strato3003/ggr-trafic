@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.1.3 — 2026-10-09
+
+- Globe : le libellé « ice » suit le parallèle 48° S, comme les distances sur les pointillés SDR. Le cercle a la même épaisseur (trait 2).
+
 ## 2.1.2 — 2026-10-09
 
 - À propos : le faisceau affiché est celui visé selon la flotte (Guy en Atlantique). Cap Town ne s’active plus dès 35°W : seulement autour du cap (± 15°).
