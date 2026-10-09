@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.0.6 — 2026-10-09
+
+- Mixeur : les waterfalls ne sont plus en priorité haute. Les MP3 de lecture passent devant, Play ne reste plus plusieurs secondes à « — TU ».
+
 ## 2.0.5 — 2026-10-09
 
 - Globe : le préchargement de tous les waterfalls saturait HTTP/2. Play passait en Pause mais l’horloge restait à 17:59:00 (`currentTime` 0). Les PNG partent maintenant deux par deux, et s’interrompent tant que le mixeur a des pistes audio.

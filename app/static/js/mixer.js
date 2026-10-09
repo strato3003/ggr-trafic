@@ -1210,6 +1210,11 @@ window.GgrMixer = (function () {
     tr.el.setAttribute("aria-hidden", "true");
     tr.el.playsInline = true;
     tr.el.setAttribute("playsinline", "");
+    try {
+      tr.el.fetchPriority = "high";
+    } catch {
+      /* navigateurs sans fetchPriority */
+    }
     let bin = document.getElementById("mix-audio-bin");
     if (!bin) {
       bin = document.createElement("div");
@@ -1359,7 +1364,7 @@ window.GgrMixer = (function () {
       const bag = (window.GgrWfCache = window.GgrWfCache || {});
       let blob = bag[url] || null;
       if (!blob) {
-        const res = await fetch(url, { cache: "force-cache", priority: "high" });
+        const res = await fetch(url, { cache: "force-cache", priority: "low" });
         if (!res.ok) return false;
         blob = await res.blob();
         if (blob && blob.size > 128) bag[url] = blob;
