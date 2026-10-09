@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent
 SUBZONES_PATH = ROOT / "static" / "geo" / "metarea2-subzones.json"
 METAREAS_PATH = ROOT / "static" / "geo" / "metareas.json"
 WWMIWS = "https://wwmiws.wmo.int/index.php/metareas"
-UA = "GGR-Trafic/2.1.3 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
+UA = "GGR-Trafic/2.1.4 (F6KUF; https://ggr-trafic.k3s.lpb.ovh)"
 CACHE_TTL_S = 20 * 60
 # Grilles intérieures officielles (rectangles + océan). Les autres METAREA
 # basculent seules via le polygone OHI + le bulletinset WWMIWS du même n°.
@@ -197,7 +197,6 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bshowers\b", "averses"),
     (r"\brain\b", "pluie"),
     (r"\bfog\b", "brouillard"),
-    (r"\bpoor\b", "médiocre"),
     (r"\bwith associated ridge towards\b", "avec dorsale associée vers"),
     (r"\bassociated ridge towards\b", "dorsale associée vers"),
     (r"\bassociated ridge\b", "dorsale associée"),
@@ -360,12 +359,14 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bVery poor vis\b", "visibilité mauvaise"),
     (r"\bPoor vis\b", "visibilité médiocre"),
     (r"\bModerate vis\b", "visibilité moyenne"),
+    (r"\bpoor\b", "médiocre"),
     (r"\bSlight or moderate\b", "mer peu agitée ou agitée"),
     (r"\bModerate or rough\b", "mer agitée ou forte"),
     (r"\bvery rough\b", "mer très forte"),
     (r"\bSevere gusts\b", "rafales fortes"),
-    (r"\bnear gale or gale\b", "fort coup de vent ou coup de vent"),
-    (r"\bnear gale\b", "fort coup de vent"),
+    (r"\bnear gale or gale\b", "grand frais ou coup de vent"),
+    (r"\bnear gale\b", "grand frais"),
+    (r"\bsevere gale\b", "fort coup de vent"),
     (r"\bwith coastal breeze\b", "avec brise de mer"),
     (r"\btomorrow afternoon\b", "demain après-midi"),
     (r"\btomorrow morning\b", "demain matin"),
@@ -468,7 +469,7 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bSlight\b", "Mer peu agitée"),
     (r"\bModerate\b", "Mer agitée"),
     (r"\bRough\b", "Mer forte"),
-    (r"\bGusts\b", "Rafales"),
+    (r"\bGusts\b", "rafales"),
     (r"\bgusts\b", "rafales"),
     (r"\bthen\b", "puis"),
     (r"\bbut\b", "mais"),
@@ -477,7 +478,219 @@ _FR_RAW: list[tuple[str, str]] = [
     (r"\bUTC\b", "TU"),
     (r"\bkt\b", "nd"),
 ]
+# Phrases ajoutées devant le glossaire historique : les plus longues d’abord.
+# Le glossaire seul laissait l’anglais des bulletins MF (flux, onde, ZCIT)
+# et de la Marine brésilienne (METAREA V : WIND, WAVES, VIS, fronts).
+_FR_EXTRA: list[tuple[str, str]] = [
+    (r"\bwith associated strong flow\b", "avec un fort flux associé"),
+    (r"\bstrong flow\b", "fort flux"),
+    (r"\bslow moving\b", "se déplaçant lentement"),
+    (r"\bA tropical wave is in the E Atlantic\b", "Une onde tropicale est dans l'Atlantique est"),
+    (r"\bE Atlantic\b", "Atlantique est"),
+    (r"\bextending from\b", "s'étendant de"),
+    (r"\bmoving westward around\b", "se déplaçant vers l'ouest à environ"),
+    (r"\bmoving eastward around\b", "se déplaçant vers l'est à environ"),
+    (
+        r"\bThe monsoon trough enters the Atlantic through the coast of Guinea\b",
+        "Le talweg de mousson entre dans l'Atlantique par la côte de Guinée",
+    ),
+    (r"\bcontinues westward to\b", "se poursuit vers l'ouest jusqu'à"),
+    (r"\bcontinues westward\b", "se poursuit vers l'ouest"),
+    (r"\bcontinues eastward\b", "se poursuit vers l'est"),
+    (r"\bmb low\b", "hPa, dépression"),
+    (r"\bThe ITCZ extends from\b", "La ZCIT s'étend de"),
+    (r"\bITCZ extends from\b", "la ZCIT s'étend de"),
+    (r"\bINTERTROPICAL CONVERGENCE ZONE\s*\(ITCZ\)", "zone de convergence intertropicale (ZCIT)"),
+    (r"\bINTERTROPICAL CONVERGENCE ZONE\b", "zone de convergence intertropicale"),
+    (r"\bITCZ\b", "ZCIT"),
+    (r"\bMainly Northerly\b", "surtout de nord"),
+    (r"\bMainly Southerly\b", "surtout de sud"),
+    (r"\bmainly Westerly\b", "surtout d'ouest"),
+    (r"\bmainly Easterly\b", "surtout d'est"),
+    (r"\bmainly over\b", "surtout sur"),
+    (r"\bmainly\b", "surtout"),
+    (r"\bVery poor vis\b", "visibilité mauvaise"),
+    (r"\bPoor or very poor vis\b", "visibilité médiocre ou mauvaise"),
+    (r"\bModerate or poor vis\b", "visibilité moyenne ou médiocre"),
+    (r"\bPoor vis\b", "visibilité médiocre"),
+    (r"\bModerate vis\b", "visibilité moyenne"),
+    (r"\bVIS MOD/POOR\b", "visibilité moyenne à médiocre"),
+    (r"\bVIS GOOD\b", "visibilité bonne"),
+    (r"\bMOD OR POOR\b", "visibilité moyenne ou médiocre"),
+    (r"\bin thundersqualls\b", "sous les grains orageux"),
+    (r"\bin thunderstorms\b", "sous les orages"),
+    (r"\bin some thundery showers or thundersqualls\b", "sous quelques averses orageuses ou grains orageux"),
+    (r"\bin some thundery showers\b", "sous quelques averses orageuses"),
+    (r"\bin thundery showers\b", "sous des averses orageuses"),
+    (r"\bat times thundery\b", "par moments orageux"),
+    (r"\bthundery\b", "orageux"),
+    (r"\bin scattered showers\b", "sous des averses éparses"),
+    (r"\bscattered showers\b", "averses éparses"),
+    (r"\bin some showers\b", "sous quelques averses"),
+    (r"\bdue to some sand haze\b", "par brume de sable"),
+    (r"\bdue to sand haze\b", "par brume de sable"),
+    (r"\bclearing tomorrow morning\b", "se dégageant demain matin"),
+    (r"\bclearing\b", "se dégageant"),
+    (r"\bnext night\b", "la nuit prochaine"),
+    (r"\bin the evening\b", "dans la soirée"),
+    (r"\blate afternoon\b", "en fin d'après-midi"),
+    (r"\bincreasing gradually\b", "se renforçant progressivement"),
+    (r"\bfrom east to west\b", "d'est en ouest"),
+    (r"\bfrom west to east\b", "d'ouest en est"),
+    (r"\bfrom south to north\b", "du sud au nord"),
+    (r"\bfrom north to south\b", "du nord au sud"),
+    (r"\bNEAR GALE WARNING\b", "avis de grand frais"),
+    (r"\bGALE/SEVERE GALE WARNING\b", "avis de coup de vent ou de fort coup de vent"),
+    (r"\bSEVERE GALE\b", "fort coup de vent"),
+    (r"\bWARNING ISSUED AT\b", "avis émis à"),
+    (r"\bISSUED AT\b", "émis à"),
+    (r"\bVALID UNTIL\b", "valable jusqu'au"),
+    (r"\bVALID FM\b", "valable à partir du"),
+    (r"\bSTARTING AT\b", "à partir de"),
+    (r"\bCOASTAL AREA BETWEEN\b", "zone côtière entre"),
+    (r"\bOCEANIC AREA BETWEEN\b", "zone océanique entre"),
+    (r"\bSOUTH OCEANIC AREA\b", "zone océanique sud"),
+    (r"\bNORTH OCEANIC AREA\b", "zone océanique nord"),
+    (r"\bCOASTAL AREA\b", "zone côtière"),
+    (r"\bOCEANIC AREA\b", "zone océanique"),
+    (r"\bNEAR THE COAST\b", "près de la côte"),
+    (r"\bTO (\d+) NM\b", r"jusqu'à \1 milles"),
+    (r"\bOFFSHORE\b", "au large"),
+    (r"\bQ-STNR FRONT\b", "front quasi-stationnaire"),
+    (r"\bC-FRONT\b", "front froid"),
+    (r"\bW-FRONT\b", "front chaud"),
+    (r"\bO-FRONT\b", "front occlus"),
+    (r"\bMOVING TO\b", "se déplaçant vers"),
+    (r"\bBACK TO\b", "reculant vers"),
+    (r"\bBACK\b", "reculant"),
+    (r"\bDURING SHWRS\b", "sous les averses"),
+    (r"\bISOL SHWRS\b", "averses isolées"),
+    (r"\bISOL\b", "isolé"),
+    (r"\bELSE\b", "ailleurs"),
+    (r"\bDATE AND TIME UTC\b", "date et heure TU."),
+    (r"\bPRESSURE HPA\b", "pression en hPa."),
+    (r"\bWINDS BEAUFORT SCALE\b", "vent, échelle Beaufort."),
+    (r"\bWAVES HEIGHT METER\b", "hauteur des vagues en mètres."),
+    (r"\bPART ONE\s+WARNINGS\b", "Première partie, avis."),
+    (r"\bONDAS\b", "vagues"),
+    (r"\bWAVES\b", "vagues"),
+    (r"\bWIND\b", "vent"),
+    (r"\bVIS\b", "visibilité"),
+    (r"\bSHORE\b", "côtier"),
+    (r"\bOCEANIC\b", "océanique"),
+    (r"\bSECURITE\s+WEATHER AND SEA BULLETIN\b", "Sécurité. Bulletin météo et de mer"),
+    (r"\bWEATHER AND SEA BULLETIN\b", "bulletin météo et de mer"),
+    (r"\bin far southeast\b", "à l'extrême sud-est"),
+    (r"\bin far southwest\b", "à l'extrême sud-ouest"),
+    (r"\bin far northeast\b", "à l'extrême nord-est"),
+    (r"\bin far northwest\b", "à l'extrême nord-ouest"),
+    (r"\bin far north\b", "à l'extrême nord"),
+    (r"\bin far south\b", "à l'extrême sud"),
+    (r"\bin far west\b", "à l'extrême ouest"),
+    (r"\bin far east\b", "à l'extrême est"),
+    (r"\bWEATHER FCST\b", "prévision"),
+    (r"\bWEATHER ANALYSIS\b", "analyse"),
+    (r"\bPART ONE\b", "première partie"),
+    (r"\bPART TWO\b", "deuxième partie"),
+    (r"\bPART THREE\b", "troisième partie"),
+    (r"\bPART FOUR\b", "quatrième partie"),
+    (r"\bAREAS OF\b", "zones de"),
+    (r"\bOCNL\b", "par moments"),
+    (r"\bmb\b", "hPa"),
+    (r"\bGuinea\b", "Guinée"),
+    (r"\bAtlantic\b", "Atlantique"),
+]
+_FR_LATE: list[tuple[str, str]] = [
+    (r"\bTROUGH\b", "talweg"),
+    (r"\bFRONT\b", "front"),
+    (r"\bWARNING\b", "avis"),
+    (r"\bISSUED\b", "émis"),
+    (r"\bVALID\b", "valable"),
+    (r"\bUNTIL\b", "jusqu'au"),
+    (r"\bBETWEEN\b", "entre"),
+    (r"\bDURING\b", "pendant"),
+    (r"\bOFFSHORE\b", "au large"),
+    (r"\bCOASTAL\b", "côtier"),
+    (r"\bFORECAST\b", "prévision"),
+    (r"\bFCST\b", "prévision"),
+    (r"\bANALYSIS\b", "analyse"),
+    (r"\bBULLETIN\b", "bulletin"),
+    (r"\bWEATHER\b", "temps"),
+    (r"\bHEIGHT\b", "hauteur"),
+    (r"\bMETER\b", "mètres"),
+    (r"\bSCALE\b", "échelle"),
+    (r"\bPRESSURE\b", "pression"),
+    (r"\bBEAUFORT\b", "Beaufort"),
+    (r"\bHPA\b", "hPa"),
+    (r"\bAREA\b", "zone"),
+    (r"\bFM\b", "de"),
+    (r"\bNM\b", "milles"),
+    (r"\bFORCE\b", "force"),
+    (r"\bGOOD\b", "bonne"),
+    (r"\bvis\b", "visibilité"),
+    (r"\bthundery\b", "orageux"),
+    (r"\bextends\b", "s'étend"),
+    (r"\bcontinues\b", "se poursuit"),
+    (r"\bentering\b", "entrant"),
+    (r"\benters\b", "entre"),
+    (r"\bthrough\b", "par"),
+    (r"\baround\b", "environ"),
+    (r"\bslow\b", "lent"),
+    (r"\bstrong\b", "fort"),
+    (r"\bflow\b", "flux"),
+    (r"\bof\b", "de"),
+    (r"\bthe\b", ""),
+    (r"\bSECURITE\b", "Sécurité"),
+    (r"\bWARNINGS\b", "avis"),
+    (r"\bAT\s+(?=\d)", "à "),
+    (r"\bnear\b", "près de"),
+]
 _FR_PHRASES: list[tuple[re.Pattern[str], str]] = [(re.compile(p, re.I), r) for p, r in _FR_RAW]
+_FR_EXTRA_RE: list[tuple[re.Pattern[str], str]] = [(re.compile(p, re.I), r) for p, r in _FR_EXTRA]
+_FR_LATE_RE: list[tuple[re.Pattern[str], str]] = [(re.compile(p, re.I), r) for p, r in _FR_LATE]
+
+_COMPASS = {
+    "N": "nord",
+    "S": "sud",
+    "E": "est",
+    "W": "ouest",
+    "NE": "nord-est",
+    "NW": "nord-ouest",
+    "SE": "sud-est",
+    "SW": "sud-ouest",
+    "NNE": "nord-nord-est",
+    "ENE": "est-nord-est",
+    "ESE": "est-sud-est",
+    "SSE": "sud-sud-est",
+    "SSW": "sud-sud-ouest",
+    "WSW": "ouest-sud-ouest",
+    "WNW": "ouest-nord-ouest",
+    "NNW": "nord-nord-ouest",
+}
+_COMPASS_ALT = "(?:NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW|NE|NW|SE|SW|N|S|E|W)"
+_MON_ABBR = {
+    "JAN": "janvier",
+    "FEB": "février",
+    "MAR": "mars",
+    "APR": "avril",
+    "MAY": "mai",
+    "JUN": "juin",
+    "JUL": "juillet",
+    "AUG": "août",
+    "SEP": "septembre",
+    "OCT": "octobre",
+    "NOV": "novembre",
+    "DEC": "décembre",
+}
+_DAY_ABBR = {
+    "MON": "lundi",
+    "TUE": "mardi",
+    "WED": "mercredi",
+    "THU": "jeudi",
+    "FRI": "vendredi",
+    "SAT": "samedi",
+    "SUN": "dimanche",
+}
 
 _ZONE_LINE = re.compile(r"^([A-Z][A-Z0-9 ,.'/()-]+)\.\s*$")
 _ZONE_COLON = re.compile(r"^([A-Z][A-Z0-9 ,.'/()-]+):\s*(.*)$")
@@ -580,22 +793,71 @@ def content_lines(content: Any) -> list[str]:
     return []
 
 
+# Mots qui commencent une ligne GTS normale. S’ils suivent une coupure à 69 octets,
+# on ne recolle pas (sinon « South » + « or », « OIAPOQUE » + « SHWRS »).
+_GTS_KEEP = frozenset(
+    """
+    a an the of and with from over near to at in by or then for on but nor not
+    utc vis wind sea low high new end far next soon good poor rain fog waves
+    south north east west later first rough slight swell gusts gale area part
+    one two three four five six seven eight nine ten
+    ne nw se sw nm nr mb kt fm is it as be we do
+    thu fri sat sun mon tue wed
+    jan feb mar apr may jun jul aug sep oct nov dec
+    alfa bravo charlie delta echo foxtrot golf hotel
+    shwrs isol else valid issued starting offshore coastal oceanic between
+    force back front trough wave moderate variable cyclonic warning analysis
+    forecast fcst bulletin weather height meter scale pressure during vis
+    high seas and warnings
+    """.split()
+)
+
+
+def _gts_cut(line: str) -> bool:
+    """Ligne remplie jusqu’à la colonne WMO (69 octets), souvent au milieu d’un mot."""
+    if not line or not line[-1].isalpha():
+        return False
+    return len(line.encode("utf-8")) >= 69
+
+
+def _gts_glue(prev: str, nxt: str) -> bool:
+    if not _gts_cut(prev) or not nxt[:1].isalpha():
+        return False
+    last = prev.split()[-1]
+    m = re.match(r"[A-Za-z]+", nxt)
+    if not m:
+        return False
+    first = m.group(0)
+    # « STARTING A » + « T 101200Z » (deux lettres isolées).
+    if len(last) == 1 and len(first) == 1 and last.isalpha():
+        return True
+    if last.lower() in _GTS_KEEP or len(last) > 3:
+        return False
+    return first.lower() not in _GTS_KEEP
+
+
 def join_lines(lines: list[str]) -> str:
     out: list[str] = []
     buf = ""
+    cut = False
     for raw in lines:
         line = raw.strip()
         if not line:
             if buf:
                 out.append(buf)
                 buf = ""
+            cut = False
             continue
-        if buf and not buf.endswith(".") and not _ZONE_LINE.match(line):
-            buf = buf + " " + line
+        # Une ligne toute en capitales qui finit par un point ressemble à une zone,
+        # mais « ARTING… » est la suite d’un mot coupé à la colonne 69.
+        glue = bool(buf) and cut and _gts_glue(buf, line)
+        if buf and not buf.endswith(".") and (glue or not _ZONE_LINE.match(line)):
+            buf = (buf + line) if glue else (buf + " " + line)
         else:
             if buf:
                 out.append(buf)
             buf = line
+        cut = _gts_cut(line)
     if buf:
         out.append(buf)
     return "\n".join(out)
@@ -709,6 +971,121 @@ def expand_positions(text: str, *, lang: str = "fr") -> str:
     return s
 
 
+def _fr_codes(text: str) -> str:
+    """Dates, heures Zoulou et hauteurs : avant le glossaire, sans toucher aux caps."""
+    s = re.sub(r"\bNNNN\b", " ", text)
+    s = re.sub(r"\b1\s+31\s+05\s+02\s+12\s+20\b", " ", s)
+
+    def _dmy(m: re.Match[str]) -> str:
+        return f"{int(m.group(1))} {_MON_ABBR[m.group(2).upper()]} {m.group(3)}"
+
+    s = re.sub(
+        r"\b(\d{1,2})/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/(\d{4})\b",
+        _dmy,
+        s,
+        flags=re.I,
+    )
+
+    def _dhhmm(m: re.Match[str]) -> str:
+        return f"{int(m.group(1))} à {m.group(2)}:{m.group(3)} TU"
+
+    s = re.sub(r"\b(\d{2})(\d{2})(\d{2})Z\b", _dhhmm, s, flags=re.I)
+    s = re.sub(
+        r"\b(\d{2})(\d{2})Z\b",
+        lambda m: f"{m.group(1)}:{m.group(2)} TU",
+        s,
+        flags=re.I,
+    )
+    s = re.sub(
+        r"\b(AT|FM|UNTIL|TO)\s+(\d{2})(\d{2})(\d{2})\b",
+        lambda m: f"{m.group(1)} {int(m.group(2))} à {m.group(3)}:{m.group(4)} TU",
+        s,
+        flags=re.I,
+    )
+    s = re.sub(
+        r"\b([01]\d|2[0-3])([0-5]\d)\b(?=\s+(?:MON|TUE|WED|THU|FRI|SAT|SUN)\b)",
+        lambda m: f"{m.group(1)}:{m.group(2)} TU",
+        s,
+    )
+    for en, fr in _DAY_ABBR.items():
+        s = re.sub(rf"\b{en}\b", fr, s)
+    s = re.sub(r"\b(\d+\.\d+)/(\d+\.\d+)\b", r"\1 à \2 m", s)
+    return s
+
+
+def _expand_compass(text: str) -> str:
+    """SE/NE, S OF, NW : caps du bulletin brésilien, après les phrases qui disent IN NE."""
+
+    def _sector(m: re.Match[str]) -> str:
+        return " ou ".join(_COMPASS[p.upper()] for p in m.group(1).split("/"))
+
+    # Majuscules seules : « se » (se déplaçant) n’est pas le cap SE.
+    s = re.sub(rf"\b({_COMPASS_ALT}(?:/{_COMPASS_ALT})+)\b", _sector, text)
+    s = re.sub(r"\bN\s+OF\b", "au nord de", s)
+    s = re.sub(r"\bS\s+OF\b", "au sud de", s)
+    s = re.sub(r"\bE\s+OF\b", "à l'est de", s)
+    s = re.sub(r"\bW\s+OF\b", "à l'ouest de", s)
+
+    def _one(m: re.Match[str]) -> str:
+        return _COMPASS[m.group(1).upper()]
+
+    s = re.sub(rf"\b({_COMPASS_ALT})\b(?=\s+(?:OR|OF|WITH|avec|\d))", _one, s)
+    s = re.sub(r"\b(NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW|NE|NW|SE|SW)\b", _one, s)
+    s = re.sub(
+        r"((?:nord|sud|est|ouest)(?:-(?:nord|sud|est|ouest))?)\s*,?\s*(\d{1,2})/(\d{1,2})\b",
+        r"\1 \2 à \3",
+        s,
+        flags=re.I,
+    )
+    s = re.sub(r"\bvent\s+(\d{1,2})/(\d{1,2})\b", r"vent \1 à \2", s, flags=re.I)
+
+    def _pair(m: re.Match[str]) -> str:
+        a, b = int(m.group(1)), int(m.group(2))
+        if a <= 12 and b <= 12:
+            return f", {a} à {b}"
+        return m.group(0)
+
+    s = re.sub(r",\s*(\d{1,2})/(\d{1,2})\b", _pair, s)
+    return s
+
+
+def _fr_polish(text: str) -> str:
+    """Accords courts après remplacement mot à mot."""
+    s = re.sub(
+        r"(\d+(?:\.\d+)?) Nord\s*-\s*(\d+(?:\.\d+)?) Nord",
+        r"\1 Nord à \2 Nord",
+        text,
+    )
+    s = re.sub(
+        r"(\d+(?:\.\d+)?) Sud\s*-\s*(\d+(?:\.\d+)?) Sud",
+        r"\1 Sud à \2 Sud",
+        s,
+    )
+    s = re.sub(
+        r"\b(mer (?:très forte|peu agitée|agitée|forte|calme)) "
+        r"(nord-ouest|nord-est|sud-ouest|sud-est|nord|sud|est|ouest)\b",
+        r"\1 de \2",
+        s,
+        flags=re.I,
+    )
+
+    def _side(m: re.Match[str]) -> str:
+        w = m.group(2).lower()
+        prep = f"à l'{w}" if w in ("est", "ouest") else f"au {w}"
+        return f"{m.group(1)} {prep}"
+
+    s = re.sub(
+        r"\b(orages|averses|pluie|grains orageux)\s+"
+        r"(nord-ouest|nord-est|sud-ouest|sud-est|nord|sud|est|ouest)\b",
+        _side,
+        s,
+        flags=re.I,
+    )
+    # 090000Z → « 9 à 00:00 » : « à partir du 9 », pas « à partir de 9 ».
+    s = re.sub(r"à partir de (\d{1,2}) à", r"à partir du \1 à", s)
+    return s
+
+
 def fr_marine(text: str) -> str:
     """Anglais EGC → français bulletin, lisible à l’antenne."""
     s = " ".join(str(text or "").split())
@@ -717,12 +1094,20 @@ def fr_marine(text: str) -> str:
     # 24/12UTC / 25/ 00UTC → espace avant UTC pour le lexique.
     s = re.sub(r"(\d{1,2}/)\s*(\d{2})\s*UTC\b", r"\1\2 UTC", s, flags=re.I)
     s = _fr_datetimes(s)
+    s = _fr_codes(s)
+    for pat, repl in _FR_EXTRA_RE:
+        s = pat.sub(repl, s)
     for pat, repl in _FR_PHRASES:
+        s = pat.sub(repl, s)
+    s = _expand_compass(s)
+    for pat, repl in _FR_LATE_RE:
         s = pat.sub(repl, s)
     s = re.sub(r"\s+or\s+", " ou ", s, flags=re.I)
     s = re.sub(r"(?<![/\d])(\d{3,4})\s*TU\b", lambda m: _fr_clock(m.group(1)) + " TU", s)
     s = expand_positions(s, lang="fr")
+    s = _fr_polish(s)
     s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"\.([A-Za-zÀ-ÿ])", r". \1", s)
     s = re.sub(r"\s+([,.;:])", r"\1", s)
     bits = re.split(r"(?<=[.!?])\s+", s)
     s = " ".join((p[0].upper() + p[1:] if p and p[0].islower() else p) for p in bits if p)
@@ -1225,6 +1610,7 @@ def build_digest(
         if en:
             lecture.append(f"Coastal forecast {titre}" + (f" ({gts})" if gts else "") + ".")
         else:
+            titre = re.sub(r"\s*\bFORECAST\b", "", str(titre), flags=re.I).strip()
             lecture.append(f"Bulletin côtier {titre}" + (f" ({gts})" if gts else "") + ".")
         if has_gale:
             gale_txt = (item.get("gale_en") if en else item.get("gale_fr")) or item.get("gale_fr") or ""

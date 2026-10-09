@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.1.4 — 2026-10-09
+
+- Condensé METAREA : le français couvre le synoptique Météo-France (flux, onde tropicale, ZCIT, visibilité) et le télégramme de la Marine brésilienne (METAREA V : vent, vagues, visibilité, fronts, avis). Les mots coupés en fin de ligne GTS sont recollés.
+
 ## 2.1.3 — 2026-10-09
 
 - Globe : le libellé « ice » suit le parallèle 48° S, comme les distances sur les pointillés SDR. Le cercle a la même épaisseur (trait 2).

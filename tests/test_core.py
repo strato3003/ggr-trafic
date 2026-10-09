@@ -2272,6 +2272,94 @@ def test_metarea2_fqnt52_digest_canarias():
     assert "hors des sous-zones" in lecture
 
 
+def test_metarea_fr_mf_and_brazil_phrasing():
+    """Condensé lisible : synoptique MF et télégramme Marine brésilienne."""
+    from app.metarea import fr_marine, join_lines
+
+    syn = fr_marine(
+        "New low expected 1011 41N45W by 09/18 UTC, then 999 49N26W by 10/12 UTC, "
+        "with associated strong flow over northwestern areas. "
+        "High 1034 41N22W, slow moving and expected 1028 37N23W by 10/12 UTC. "
+        "A tropical wave is in the E Atlantic near 25W, extending from 05N-19N, "
+        "moving westward around 5-10 kt. "
+        "The monsoon trough enters the Atlantic through the coast of Guinea "
+        "near 11N15W and continues westward to 1014 mb low near 12N33W to 12N40W. "
+        "ITCZ extends from 12N40W to 10N61W."
+    )
+    low = syn.lower()
+    for bad in (
+        "strong", "flow", "slow", "extending", "around", "monsoon", "enters",
+        "through", "continues", "westward", "itcz", "extends", "mb", "moving", "near",
+    ):
+        assert bad not in low, (bad, syn)
+    assert "fort flux associé" in low
+    assert "se déplaçant lentement" in low
+    assert "onde tropicale" in low
+    assert "atlantique est" in low
+    assert "près de" in low
+    assert "talweg de mousson" in low
+    assert "guinée" in low
+    assert "zcit" in low
+    assert "hpa" in low
+    assert "5 nord à 19 nord" in low
+
+    zone = fr_marine(
+        "Mainly Northerly 2 to 4. Poor vis in showers at times thundery. "
+        "Very poor vis in thundersqualls. Moderate vis due to sand haze in far south. "
+        "SMOOTH, OCNL SLGT NW. AREAS OF RAIN WITH MOD. VIS MOD/POOR DURING SHWRS."
+    )
+    zlow = zone.lower()
+    for bad in ("mainly", "northerly", "poor vis", "thundery", "thundersqualls", "ocnl", "shwrs", "during"):
+        assert bad not in zlow, (bad, zone)
+    assert "visibilité médiocre" in zlow
+    assert "visibilité mauvaise" in zlow
+    assert "à l'extrême sud" in zlow
+    assert "visibilité moyenne à médiocre" in zlow
+    assert "mer agitée/médiocre" not in zlow
+    assert "par moments mer peu agitée de nord-ouest" in zlow
+
+    br = fr_marine(
+        "WARNING NR 742/2026 NEAR GALE WARNING ISSUED AT 1300Z - THU - 08/OCT/2026 "
+        "COASTAL AREA BETWEEN TOUROS/RN AND SAO LUIS/MA TO 80 NM OFFSHORE "
+        "STARTING AT 090000Z. WIND SE/NE FORCE 7 WITH GUSTS. VALID UNTIL 110000Z. "
+        "GALE/SEVERE GALE WARNING. WIND E/NE BACK TO NW/W, 8 WITH GUSTS 9. "
+        "C-FRONT 30S053W MOVING TO NE/E AT 5-10 KT. Q-STNR FRONT 23S033W. "
+        "S OF 26S. WAVES E/NE 1.0/2.0. VIS GOOD. ISOL SHWRS. ONDAS SW/S 2.0/3.0. "
+        "SW/SE ELSE, 3/5. NEAR THE COAST."
+    )
+    blow = br.lower()
+    for bad in (
+        "warning", "issued", "coastal", "offshore", "starting", "valid", "until",
+        "wind", "waves", "during", "shwrs", "ondas", "else", "near the", "trough",
+    ):
+        assert bad not in blow, (bad, br)
+    assert "grand frais" in blow
+    assert "fort coup de vent" in blow
+    assert "jeudi" in blow
+    assert "octobre" in blow
+    assert "milles" in blow
+    assert "à partir du" in blow
+    assert "front froid" in blow
+    assert "front quasi-stationnaire" in blow
+    assert "au sud de" in blow
+    assert "1.0 à 2.0 m" in blow
+    assert "visibilité bonne" in blow
+    assert "près de la côte" in blow
+    assert "3 à 5" in blow
+
+    lines = [
+        "COASTAL AREA BETWEEN TOUROS/RN AND SÃO LUÍS/MA TO 80 NM OFFSHORE ST",
+        "ARTING AT 090000Z. WIND SE/NE FORCE 7 WITH GUSTS.",
+        "OCEANIC AREA BETWEEN 30S042W, 36S048W, 36S030W AND 30S030W STARTING A",
+        "T 101200Z. WIND E/NE BACK TO NW/W.",
+    ]
+    joined = join_lines(lines)
+    assert "STARTING AT" in joined
+    assert "ST ARTING" not in joined
+    assert "STARTING AT 101200Z" in joined or "STARTING AT 101200" in joined
+    assert "A T " not in joined
+
+
 def test_metarea_digest_en_uses_official_english():
     from app.metarea import assemble
 
@@ -2395,7 +2483,8 @@ def test_metarea_coastal_las_palmas_only_occupied_zones():
     coastal = [{**parsed, "title": "LAS PALMAS FORECAST", "gts": "FQNT72", "url": "https://wwmiws.wmo.int/x"}]
     body = assemble(raw, [{"lat": 28.0, "lon": -16.0}], coastal=coastal)
     lecture = body["lecture"]
-    assert "Bulletin côtier LAS PALMAS FORECAST" in lecture
+    assert "Bulletin côtier LAS PALMAS" in lecture
+    assert "FORECAST" not in lecture
     assert "entre les îles" in lecture.lower()
     assert "TARFAYA" not in lecture
     assert "MADEIRA" not in lecture
@@ -2459,8 +2548,8 @@ def test_metarea_coastal_dedupes_casablanca_between_tarifa_and_las_palmas():
     )
     lecture = body["lecture"]
     assert lecture.count("Bulletin côtier") == 1
-    assert "LAS PALMAS FORECAST" in lecture
-    assert "TARIFA FORECAST" not in lecture
+    assert "LAS PALMAS" in lecture
+    assert "TARIFA" not in lecture
     assert [c["gts"] for c in body["coastal"]] == ["FQNT72"]
 
 
