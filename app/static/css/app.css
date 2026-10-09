@@ -1436,7 +1436,27 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   padding: 0;
   list-style: none;
 }
-.skipper-list label { display: flex; gap: 0.4rem; align-items: center; }
+.skipper-list label {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  justify-content: space-between;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.92rem;
+  color: var(--foam);
+}
+.skipper-list select {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--foam);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 0.2rem 0.35rem;
+  max-width: 8.5rem;
+}
 .settings-msg {
   min-height: 1.4em;
   margin: 0.45rem 0 0;

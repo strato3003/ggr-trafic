@@ -533,9 +533,10 @@ def _hhmm(raw: str | None, default: str) -> str:
 
 def buddy_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     """Skippers du centroïde (plus de buddy call) — clés UI historiques conservées."""
-    from recorder.fleet import fleet_skippers
+    from recorder.fleet import fleet_groups, fleet_skippers
 
     cfg = cfg or load_config()
+    groups = fleet_groups(cfg)
     skippers = fleet_skippers(cfg)
     return {
         "buddy_enabled": False,
@@ -551,6 +552,7 @@ def buddy_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "buddy_main_label": "",
         "buddy_alt_label": "",
         "buddy_skippers": skippers,
+        "buddy_groups": groups,
         "buddy_include_fleet": False,
         "buddy_kiwi_count": 0,
         "buddy_skippers_short": ", ".join(skippers) if skippers else "aucun skipper",
@@ -576,4 +578,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
             return pkg_version("ggr-vacations")
         except PackageNotFoundError:
             cfg = cfg or {}
-            return str(cfg.get("version") or "2.1.4")
+            return str(cfg.get("version") or "2.2.0")

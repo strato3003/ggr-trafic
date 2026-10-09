@@ -93,7 +93,52 @@
   const TOKEN_KEY = "ggr-admin-token";
   const token = () => localStorage.getItem(TOKEN_KEY) || "";
   const boats = (data.boats || []).filter((b) => Number.isFinite(b.lat) && Number.isFinite(b.lon));
-  const skippers = new Set(data.skippers || []);
+  const GROUP_KEYS = ["tete", "centre", "queue"];
+  const groups = { tete: new Set(), centre: new Set(), queue: new Set() };
+  const skippers = new Set();
+
+  function loadGroups(raw) {
+    GROUP_KEYS.forEach((k) => groups[k].clear());
+    const src = raw && typeof raw === "object" ? raw : null;
+    const explicit = !!(src && GROUP_KEYS.some((k) => Array.isArray(src[k])));
+    const seen = new Set();
+    const take = (key, name) => {
+      const text = String(name || "").trim();
+      if (!text || seen.has(text)) return;
+      seen.add(text);
+      groups[key].add(text);
+    };
+    if (explicit) {
+      GROUP_KEYS.forEach((k) => (src[k] || []).forEach((name) => take(k, name)));
+    } else {
+      (data.skippers || []).forEach((name) => take("centre", name));
+    }
+    skippers.clear();
+    GROUP_KEYS.forEach((k) => groups[k].forEach((n) => skippers.add(n)));
+  }
+  loadGroups(data.groups);
+
+  function groupOf(name) {
+    for (let i = 0; i < GROUP_KEYS.length; i++) {
+      if (groups[GROUP_KEYS[i]].has(name)) return GROUP_KEYS[i];
+    }
+    return "";
+  }
+
+  function setSkipperGroup(name, key) {
+    GROUP_KEYS.forEach((k) => groups[k].delete(name));
+    if (key && groups[key]) groups[key].add(name);
+    skippers.clear();
+    GROUP_KEYS.forEach((k) => groups[k].forEach((n) => skippers.add(n)));
+  }
+
+  function groupsPayload() {
+    return {
+      tete: [...groups.tete],
+      centre: [...groups.centre],
+      queue: [...groups.queue],
+    };
+  }
   const trafics = (data.trafics || data.vacations || []).filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lon));
   const TX_MAX = 5;
   let txSites = (data.tx_sites || []).filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon)).slice(0, TX_MAX);
@@ -351,6 +396,11 @@
     return boats.filter((b) => skippers.has(b.name));
   }
 
+  function boatsOf(key) {
+    const set = groups[key];
+    return boats.filter((b) => set && set.has(b.name));
+  }
+
   function sphericalCentroid(pts) {
     if (!pts.length) return null;
     let x = 0;
@@ -372,7 +422,9 @@
   }
 
   function fleetCenter() {
-    return sphericalCentroid(selectedBoats().map((b) => [b.lat, b.lon]));
+    const centre = boatsOf("centre");
+    const sel = centre.length ? centre : selectedBoats();
+    return sphericalCentroid(sel.map((b) => [b.lat, b.lon]));
   }
 
   function fleetRingKm(center) {
@@ -553,7 +605,7 @@
     return rows;
   }
 
-  /** Libellé « ice » sur le parallèle 48° S, tangent au cercle comme les km SDR. */
+  /** Libellé complet sur le parallèle 48° S, tangent au cercle comme les km SDR. */
   function aezLabelPoints() {
     const lon = -20;
     const step = 6;
@@ -774,7 +826,7 @@
   }
 
   // Ice Antarctic Exclusion Zone GGR : parallèle 48° S.
-  // stroke 2 : même épaisseur d’écran que les pointillés SDR.
+  // stroke 1 : même épaisseur d’écran que le cercle de la flotte.
   const AEZ_LAT = -48;
   const AEZ_DASH_DEG = 2.8;
   const AEZ_GAP_DEG = 1.6;
@@ -791,7 +843,7 @@
           [AEZ_LAT, b, 0.0012],
         ],
         color: "rgba(190, 220, 255, 0.7)",
-        stroke: 2,
+        stroke: 1,
         dash: false,
       });
       lon = b + AEZ_GAP_DEG;
@@ -837,16 +889,31 @@
     return out;
   }
 
+  const RING_COLOR = {
+    tete: "rgba(232,197,71,0.62)",
+    centre: "rgba(244,230,195,0.55)",
+    queue: "rgba(186,214,232,0.62)",
+  };
+
   function fleetRingPaths() {
-    const center = fleetCenter();
-    if (!center) return [];
-    return [
-      {
-        coords: circleCoords(center.lat, center.lon, fleetRingKm(center), 72),
-        color: "rgba(244,230,195,0.55)",
+    const out = [];
+    GROUP_KEYS.forEach((key) => {
+      const sel = boatsOf(key);
+      if (!sel.length) return;
+      const center = sphericalCentroid(sel.map((b) => [b.lat, b.lon]));
+      if (!center) return;
+      const maxD = Math.max.apply(
+        null,
+        sel.map((b) => haversineKm(center.lat, center.lon, b.lat, b.lon))
+      );
+      const km = Math.max(40, maxD * 1.15);
+      out.push({
+        coords: circleCoords(center.lat, center.lon, km, 72),
+        color: RING_COLOR[key] || RING_COLOR.centre,
         stroke: 1,
-      },
-    ];
+      });
+    });
+    return out;
   }
 
   // Tirets SDR : ~20 km / trou 16 km. pathStroke 2 = 2 px écran (Line2), pas arcStroke.
@@ -1170,20 +1237,27 @@
 
   function renderSkippers() {
     if (!skipEl) return;
-    skipEl.querySelectorAll('input[name="fleet_skipper"], input[name="buddy_skipper"], input[data-skipper]').forEach((inp) => {
-      const name = inp.value || inp.getAttribute("data-skipper");
-      if (name) inp.checked = boatInBuddy(name);
+    skipEl.querySelectorAll('select[name="fleet_group"]').forEach((sel) => {
+      const name = sel.getAttribute("data-skipper");
+      if (name) sel.value = groupOf(name);
     });
   }
 
   if (skipEl) {
     skipEl.addEventListener("change", (ev) => {
       const inp = ev.target;
-      if (!inp || inp.type !== "checkbox") return;
+      if (!inp) return;
+      if (inp.tagName === "SELECT" && inp.getAttribute("name") === "fleet_group") {
+        const name = inp.getAttribute("data-skipper");
+        if (!name) return;
+        setSkipperGroup(name, inp.value);
+        refreshGlobe();
+        return;
+      }
+      if (inp.type !== "checkbox") return;
       const name = inp.value || inp.getAttribute("data-skipper");
       if (!name) return;
-      if (inp.checked) skippers.add(name);
-      else skippers.delete(name);
+      setSkipperGroup(name, inp.checked ? "centre" : "");
       refreshGlobe();
     });
   }
@@ -1355,8 +1429,7 @@
       const btn = document.getElementById("globe-toggle-skip");
       if (btn) {
         btn.addEventListener("click", () => {
-          if (skippers.has(d.name)) skippers.delete(d.name);
-          else skippers.add(d.name);
+          setSkipperGroup(d.name, skippers.has(d.name) ? "" : "centre");
           renderSkippers();
           refreshGlobe();
           onPointClick({ ...d, inBuddy: skippers.has(d.name) });
@@ -2626,6 +2699,7 @@
             duration_minutes: cur.duration_minutes,
             buddy_skippers: [...skippers],
             skippers: [...skippers],
+            groups: groupsPayload(),
           }),
         });
         const body = await res.json().catch(() => ({}));

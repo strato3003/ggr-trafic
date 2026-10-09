@@ -118,19 +118,32 @@
     {% if boats %}
     <ul class="skipper-list" id="globe-skippers">
       {% for b in boats %}
+      {% set g = 'tete' if b.name in buddy_groups.tete else ('queue' if b.name in buddy_groups.queue else ('centre' if b.name in buddy_groups.centre else '')) %}
       <li>
         <label>
-          <input type="checkbox" name="fleet_skipper" value="{{ b.name }}"
-                 {% if b.name in buddy_skippers %}checked{% endif %}>
-          {{ b.name }}{% if b.sail %} <span class="meta">({{ b.sail }})</span>{% endif %}
+          <span>{{ b.name }}{% if b.sail %} <span class="meta">({{ b.sail }})</span>{% endif %}</span>
+          <select name="fleet_group" data-skipper="{{ b.name }}">
+            <option value=""{% if not g %} selected{% endif %}>{{ t('group_none') }}</option>
+            <option value="tete"{% if g == 'tete' %} selected{% endif %}>{{ t('group_tete') }}</option>
+            <option value="centre"{% if g == 'centre' %} selected{% endif %}>{{ t('group_centre') }}</option>
+            <option value="queue"{% if g == 'queue' %} selected{% endif %}>{{ t('group_queue') }}</option>
+          </select>
         </label>
       </li>
       {% endfor %}
     </ul>
     {% else %}
     <label>
-      {{ t('setup_skippers_text') }}
-      <textarea name="fleet_skippers_text" rows="4">{{ buddy_skippers | join('\n') }}</textarea>
+      {{ t('group_tete') }}
+      <textarea name="fleet_group_tete" rows="3">{{ buddy_groups.tete | join('\n') }}</textarea>
+    </label>
+    <label>
+      {{ t('group_centre') }}
+      <textarea name="fleet_group_centre" rows="3">{{ buddy_groups.centre | join('\n') }}</textarea>
+    </label>
+    <label>
+      {{ t('group_queue') }}
+      <textarea name="fleet_group_queue" rows="3">{{ buddy_groups.queue | join('\n') }}</textarea>
     </label>
     {% endif %}
     <p class="settings__actions">

@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from recorder.fleet import GROUP_KEYS, MERGE_KM, fleet_groups, skipper_matches
 from recorder.geo import (
     along_track_frac,
     azimuth_delta,
+    centroid,
     cross_track_km,
     fmt_latlon,
     haversine_km,
@@ -451,14 +453,18 @@ def select_bulletin_beam_kiwis(
     fleet_lon: float,
     cfg: dict[str, Any],
     exclude: set[str] | None = None,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Jusqu’à 6 Kiwi dans le faisceau 14.135 MHz, de l’émetteur jusqu’aux bateaux.
 
     Le plus proche de la flotte est toujours gardé. Les autres échantillonnent
     le grand cercle (milieu de trajet compris : Canaries depuis la Vendée).
+    `limit` réduit ce plafond (2 par centroïde éloigné) sans changer le faisceau
+    unique, qui garde `beam.count`.
     """
     beam = _beam_cfg(cfg)
-    want = max(0, min(int(beam["count"]), 6))
+    cap = int(beam["count"]) if limit is None else int(limit)
+    want = max(0, min(cap, 6))
     if want <= 0:
         return []
     path_km = haversine_km(tx_lat, tx_lon, fleet_lat, fleet_lon)
@@ -743,6 +749,183 @@ def _fleet_extremes(points: list[tuple[float, float]]) -> tuple[tuple[float, flo
     return west, east
 
 
+def _cluster_centroid(members: list[dict[str, Any]]) -> tuple[float, float]:
+    points: list[tuple[float, float]] = []
+    for member in members:
+        for boat in member.get("boats") or []:
+            try:
+                points.append((float(boat["lat"]), float(boat["lon"])))
+            except (TypeError, ValueError, KeyError):
+                continue
+    center = centroid(points)
+    if center:
+        return center
+    return float(members[0]["lat"]), float(members[0]["lon"])
+
+
+def _split_centroid_clusters(
+    boats: list[dict[str, Any]] | None,
+    cfg: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Groupes tête / centre / queue éloignés de plus de 800 km.
+
+    Liste vide : un seul faisceau 4–6 (centre seul, ou groupes fusionnés).
+    """
+    groups = fleet_groups(cfg or {})
+    placed: list[dict[str, Any]] = []
+    for key in GROUP_KEYS:
+        names = groups.get(key) or []
+        if not names:
+            continue
+        members: list[dict[str, Any]] = []
+        points: list[tuple[float, float]] = []
+        for boat in boats or []:
+            if not isinstance(boat, dict) or not skipper_matches(boat, names, []):
+                continue
+            if boat.get("lat") is None or boat.get("lon") is None:
+                continue
+            try:
+                lat, lon = float(boat["lat"]), float(boat["lon"])
+            except (TypeError, ValueError):
+                continue
+            members.append(boat)
+            points.append((lat, lon))
+        if not points:
+            continue
+        center = centroid(points)
+        if center is None:
+            continue
+        placed.append({"key": key, "lat": center[0], "lon": center[1], "boats": members})
+    if len(placed) < 2:
+        return []
+    parent = list(range(len(placed)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(len(placed)):
+        for j in range(i + 1, len(placed)):
+            dist = haversine_km(placed[i]["lat"], placed[i]["lon"], placed[j]["lat"], placed[j]["lon"])
+            if dist < MERGE_KM:
+                parent[find(j)] = find(i)
+    buckets: dict[int, list[dict[str, Any]]] = {}
+    for i, row in enumerate(placed):
+        buckets.setdefault(find(i), []).append(row)
+    if len(buckets) < 2:
+        return []
+    clusters: list[dict[str, Any]] = []
+    for members in buckets.values():
+        keys = [m["key"] for m in members]
+        if "centre" in keys:
+            key = "centre"
+            aim = next(m for m in members if m["key"] == "centre")
+            lat, lon = float(aim["lat"]), float(aim["lon"])
+        elif "tete" in keys:
+            key = "tete"
+            lat, lon = _cluster_centroid(members)
+        else:
+            key = "queue"
+            lat, lon = _cluster_centroid(members)
+        boats_out = [b for m in members for b in m["boats"]]
+        clusters.append({"key": key, "lat": lat, "lon": lon, "boats": boats_out})
+    return clusters
+
+
+def _assign_split_centroid_kiwis(
+    pool: list[dict[str, Any]],
+    clusters: list[dict[str, Any]],
+    *,
+    fleet_lat: float,
+    fleet_lon: float,
+    cfg: dict[str, Any],
+    boats: list[dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    """2 Kiwi par centroïde éloigné, dédoublonnés, 6 au plus. Screencast = centre."""
+    sdr = cfg.get("sdr") or {}
+    tx_slots = int(sdr.get("min_free_slots") or 2)
+    qth = bulletin_beam_qth(cfg, fleet_lat, fleet_lon, boats)
+    order = {"centre": 0, "tete": 1, "queue": 2}
+    ordered = sorted(clusters, key=lambda c: (order.get(str(c.get("key")), 9), str(c.get("key"))))
+    used: set[str] = set()
+    picked: list[dict[str, Any]] = []
+    for cluster in ordered:
+        rows = select_bulletin_beam_kiwis(
+            pool,
+            tx_lat=float(qth["lat"]),
+            tx_lon=float(qth["lon"]),
+            fleet_lat=float(cluster["lat"]),
+            fleet_lon=float(cluster["lon"]),
+            cfg=cfg,
+            exclude=used,
+            limit=2,
+        )
+        for kiwi in rows:
+            if len(picked) >= 6:
+                break
+            key = kiwi_key(kiwi)
+            if not key or key in used:
+                continue
+            chosen = dict(kiwi)
+            chosen["centroid"] = cluster["key"]
+            picked.append(chosen)
+            used.add(key)
+    out: dict[str, dict[str, Any]] = {}
+
+    def take(role: str, kiwi: dict[str, Any], label: str) -> None:
+        chosen = dict(kiwi)
+        chosen["site"] = role
+        chosen["site_label"] = label
+        out[role] = chosen
+
+    if not picked:
+        kiwi = pick_nearest(pool, fleet_lat, fleet_lon, exclude=set(), min_free=tx_slots, min_snr=5.0)
+        if kiwi is None:
+            kiwi = pick_nearest(pool, fleet_lat, fleet_lon, exclude=set(), min_free=1, min_snr=0.0)
+        if kiwi is None:
+            return out
+        dist = haversine_km(fleet_lat, fleet_lon, float(kiwi["lat"]), float(kiwi["lon"]))
+        kiwi = dict(kiwi)
+        kiwi["fleet_km"] = round(dist, 1)
+        kiwi["site_km"] = round(dist, 1)
+        take("tx", kiwi, "flotte (bulletin)")
+        log.info("Kiwi bulletin flotte (hors faisceau) → %s (%.0f km)", kiwi.get("name"), dist)
+        return out
+
+    centre = next((c for c in ordered if c["key"] == "centre"), None)
+    aim_lat = float(centre["lat"]) if centre else float(fleet_lat)
+    aim_lon = float(centre["lon"]) if centre else float(fleet_lon)
+
+    def rank(kiwi: dict[str, Any]) -> tuple[float, float, float, float]:
+        dist = haversine_km(aim_lat, aim_lon, float(kiwi["lat"]), float(kiwi["lon"]))
+        slotted = 0.0 if int(kiwi.get("free_slots") or 0) >= tx_slots else 1.0
+        return (slotted, dist, float(kiwi.get("beam_xt_km") or 1e12), -float(kiwi.get("snr_hf") or 0))
+
+    priority = dict(min(picked, key=rank))
+    dist = haversine_km(aim_lat, aim_lon, float(priority["lat"]), float(priority["lon"]))
+    priority["fleet_km"] = round(dist, 1)
+    take("tx", priority, "flotte (bulletin)")
+    log.info(
+        "Kiwi bulletin flotte → %s (%.0f km du centre, %s groupes)",
+        priority.get("name"),
+        dist,
+        len(ordered),
+    )
+    rest = [k for k in picked if kiwi_key(k) != kiwi_key(priority)]
+    for n, kiwi in enumerate(rest, start=1):
+        take(f"tx_beam{n}", kiwi, f"faisceau {n}")
+        log.info(
+            "Kiwi faisceau %s → %s (groupe %s, %.0f km de son centroïde)",
+            n,
+            kiwi.get("name"),
+            kiwi.get("centroid"),
+            float(kiwi.get("fleet_km") or 0),
+        )
+    return out
+
+
 def assign_vacation_kiwis(
     pool: list[dict[str, Any]],
     *,
@@ -758,8 +941,22 @@ def assign_vacation_kiwis(
     Les rôles ``tx_beam*`` jalonnent le grand cercle selon le QTH d’émission
     (Vendée tant que la flotte est dans l’Atlantique). ``when`` est conservé
     pour l’appelant ; l’origine du faisceau suit la position, pas le jour.
+
+    Tête et queue à plus de 800 km du centre : 2 Kiwi par groupe distinct,
+    le même récepteur une seule fois, 6 au plus. Le screencast reste le plus
+    proche du centre.
     """
     del when  # l’origine du cône dépend de la position de la flotte
+    clusters = _split_centroid_clusters(boats, cfg)
+    if clusters:
+        return _assign_split_centroid_kiwis(
+            pool,
+            clusters,
+            fleet_lat=fleet_lat,
+            fleet_lon=fleet_lon,
+            cfg=cfg,
+            boats=boats,
+        )
     sdr = cfg.get("sdr") or {}
     tx_slots = int(sdr.get("min_free_slots") or 2)
     out: dict[str, dict[str, Any]] = {}

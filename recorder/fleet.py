@@ -458,45 +458,155 @@ def skipper_matches(boat: dict[str, Any], names: list[str], team_ids: list[int])
     return False
 
 
-def fleet_skippers(cfg: dict[str, Any] | None = None) -> list[str]:
-    """Noms Yellowbrick des skippers du centroïde (config `fleet.skippers`)."""
+# Tête / centre / queue. Un skipper n’est que dans un groupe (ordre de lecture).
+GROUP_KEYS = ("tete", "centre", "queue")
+# En dessous, les groupes partagent le faisceau 4–6 Kiwi du centre.
+MERGE_KM = 800.0
+
+
+def _raw_skipper_names(cfg: dict[str, Any] | None) -> list[str]:
+    """Liste historique `fleet.skippers`, sinon l’ancienne clé buddy."""
     cfg = cfg or {}
     fleet = cfg.get("fleet") or {}
     names = [str(x).strip() for x in (fleet.get("skippers") or []) if str(x).strip()]
     if names:
         return names
-    # Ancienne clé (buddy.centroid.skippers) — migration douce des settings runtime.
     legacy = ((cfg.get("buddy") or {}).get("centroid") or {}).get("skippers") or []
     return [str(x).strip() for x in legacy if str(x).strip()]
 
 
-def buddy_aim(fleet: dict[str, Any], cfg: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Centroïde d’écoute : uniquement les skippers listés (jamais le reste de la flotte)."""
+def fleet_groups(cfg: dict[str, Any] | None = None) -> dict[str, list[str]]:
+    """Tête, centre, queue. Sans `fleet.groups`, toute la liste historique est le centre."""
     cfg = cfg or {}
-    names = fleet_skippers(cfg)
+    fleet = cfg.get("fleet") or {}
+    raw = fleet.get("groups") if isinstance(fleet, dict) else None
+    groups = {key: [] for key in GROUP_KEYS}
+    seen: set[str] = set()
+    if isinstance(raw, dict):
+        source = {key: raw.get(key) or [] for key in GROUP_KEYS}
+    else:
+        source = {"tete": [], "centre": _raw_skipper_names(cfg), "queue": []}
+    for key in GROUP_KEYS:
+        vals = source[key]
+        if isinstance(vals, str):
+            vals = [ln.strip() for ln in vals.splitlines() if ln.strip()]
+        if not isinstance(vals, list):
+            continue
+        for item in vals:
+            text = str(item).strip()
+            fold = _fold_name(text)
+            if not text or not fold or fold in seen:
+                continue
+            seen.add(fold)
+            groups[key].append(text)
+    return groups
+
+
+def normalize_groups(raw: Any) -> dict[str, list[str]]:
+    """POST Setup : un nom ne reste que dans le premier groupe (tête, puis centre, puis queue)."""
+    if not isinstance(raw, dict):
+        raise ValueError("Groupes de centroïde invalides")
+    return fleet_groups({"fleet": {"groups": raw}})
+
+
+def fleet_skippers(cfg: dict[str, Any] | None = None) -> list[str]:
+    """Noms Yellowbrick suivis : union tête + centre + queue."""
+    groups = fleet_groups(cfg)
+    out: list[str] = []
+    for key in GROUP_KEYS:
+        out.extend(groups[key])
+    return out
+
+
+def _core_points(
+    boats: list[dict[str, Any]],
+    names: list[str],
+    team_ids: list[int],
+) -> tuple[list[dict[str, Any]], list[tuple[float, float]], tuple[float, float] | None, list[str]]:
+    core = [b for b in boats if skipper_matches(b, names, team_ids)]
+    points: list[tuple[float, float]] = []
+    for boat in core:
+        if boat.get("lat") is None or boat.get("lon") is None:
+            continue
+        try:
+            points.append((float(boat["lat"]), float(boat["lon"])))
+        except (TypeError, ValueError):
+            continue
+    center = centroid(points) if points else None
+    core_names = [str(b.get("name") or "?").strip() for b in core]
+    return core, points, center, core_names
+
+
+def buddy_aim(fleet: dict[str, Any], cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Centroïde d’écoute : skippers des groupes, jamais le reste de la flotte.
+
+    Le point principal est le centre s’il a des positions, sinon l’union.
+    `skippers` reste l’union (tête + centre + queue) pour viser chaque groupe.
+    """
+    cfg = cfg or {}
+    groups = fleet_groups(cfg)
     fleet_cfg = cfg.get("fleet") or {}
     try:
         team_ids = [int(x) for x in (fleet_cfg.get("team_ids") or [])]
     except (TypeError, ValueError):
         team_ids = []
     boats = [b for b in (fleet.get("boats") or []) if isinstance(b, dict)]
-    core = [b for b in boats if skipper_matches(b, names, team_ids)]
-    points = [
-        (float(b["lat"]), float(b["lon"]))
-        for b in core
-        if b.get("lat") is not None and b.get("lon") is not None
-    ]
-    center = centroid(points) if points else None
-    core_names = [str(b.get("name") or "?").strip() for b in core]
+    by_key: dict[str, dict[str, Any]] = {}
+    for key in GROUP_KEYS:
+        core, points, center, core_names = _core_points(boats, groups[key], team_ids)
+        by_key[key] = {"core": core, "points": points, "center": center, "names": core_names}
+    seen: set[str] = set()
+    union: list[dict[str, Any]] = []
+    union_points: list[tuple[float, float]] = []
+    for key in GROUP_KEYS:
+        for boat in by_key[key]["core"]:
+            ident = _fold_name(str(boat.get("name") or "")) or str(id(boat))
+            if ident in seen:
+                continue
+            seen.add(ident)
+            union.append(boat)
+            if boat.get("lat") is None or boat.get("lon") is None:
+                continue
+            try:
+                union_points.append((float(boat["lat"]), float(boat["lon"])))
+            except (TypeError, ValueError):
+                continue
+    union_names = [str(b.get("name") or "?").strip() for b in union]
+    union_center = centroid(union_points) if union_points else None
+    centre = by_key["centre"]
+    if centre["center"]:
+        center = centre["center"]
+        label_names = centre["names"]
+        n_boats = len(centre["points"])
+    elif union_center:
+        center = union_center
+        label_names = union_names
+        n_boats = len(union_points)
+    else:
+        center = None
+        label_names = union_names
+        n_boats = 0
+    group_aims: dict[str, Any] = {}
+    for key in GROUP_KEYS:
+        block = by_key[key]
+        if not block["center"]:
+            continue
+        group_aims[key] = {
+            "lat": block["center"][0],
+            "lon": block["center"][1],
+            "n_boats": len(block["points"]),
+            "skipper_names": block["names"],
+        }
     if center:
         return {
             "lat": center[0],
             "lon": center[1],
             "fmt": fmt_latlon(center[0], center[1]),
-            "label": "Centroïde : " + (", ".join(core_names) or "aucun skipper"),
-            "n_boats": len(points),
-            "skippers": core,
-            "skipper_names": core_names,
+            "label": "Centroïde : " + (", ".join(label_names) or "aucun skipper"),
+            "n_boats": n_boats,
+            "skippers": union,
+            "skipper_names": union_names,
+            "groups": group_aims,
             "include_fleet": False,
             "source": fleet.get("source") or "fleet",
         }
@@ -506,8 +616,9 @@ def buddy_aim(fleet: dict[str, Any], cfg: dict[str, Any] | None = None) -> dict[
         "fmt": fleet.get("fmt") or fmt_latlon(float(fleet.get("lat") or 46.5025), float(fleet.get("lon") or -1.7888)),
         "label": (fleet.get("label") or "Flotte") + " (repli centroïde)",
         "n_boats": 0,
-        "skippers": core,
-        "skipper_names": core_names,
+        "skippers": union,
+        "skipper_names": union_names,
+        "groups": group_aims,
         "include_fleet": False,
         "source": fleet.get("source") or "fallback",
     }

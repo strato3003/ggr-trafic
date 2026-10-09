@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 2.2.0 — 2026-10-09
+
+- Globe : le parallèle 48° S porte le libellé complet, en français ou en anglais selon la langue. Les pointillés ont la même épaisseur que le cercle de la flotte.
+- Setup : chaque skipper peut être en tête, au centre, en queue, ou dans aucun groupe. Un seul groupe (ou des groupes à moins de 800 km) garde le faisceau de 4 à 6 Kiwi. Au-delà, 2 Kiwi par groupe, sans doubler le même récepteur, 6 au plus. Le screencast reste le plus proche du centre.
+
 ## 2.1.4 — 2026-10-09
 
 - Condensé METAREA : le français couvre le synoptique Météo-France (flux, onde tropicale, ZCIT, visibilité) et le télégramme de la Marine brésilienne (METAREA V : vent, vagues, visibilité, fronts, avis). Les mots coupés en fin de ligne GTS sont recollés.

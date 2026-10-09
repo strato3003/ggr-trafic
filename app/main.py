@@ -897,16 +897,28 @@ async def api_settings_put(
         },
         "schedule": {"lead_minutes": lead, "duration_minutes": duration},
     }
-    if "buddy_skippers" in body or "skippers" in body:
-        raw_skip = body.get("skippers", body.get("buddy_skippers"))
-        if isinstance(raw_skip, str):
-            names = [ln.strip() for ln in raw_skip.splitlines() if ln.strip()]
-        elif isinstance(raw_skip, list):
-            names = [str(x).strip() for x in raw_skip if str(x).strip()]
+    if "groups" in body or "buddy_skippers" in body or "skippers" in body:
+        from recorder.fleet import GROUP_KEYS, normalize_groups
+
+        if "groups" in body:
+            try:
+                groups = normalize_groups(body.get("groups"))
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
         else:
-            raise HTTPException(400, "Liste de skippers invalide")
+            raw_skip = body.get("skippers", body.get("buddy_skippers"))
+            if isinstance(raw_skip, str):
+                names = [ln.strip() for ln in raw_skip.splitlines() if ln.strip()]
+            elif isinstance(raw_skip, list):
+                names = [str(x).strip() for x in raw_skip if str(x).strip()]
+            else:
+                raise HTTPException(400, "Liste de skippers invalide")
+            # Ancien client : toute la liste est le centre.
+            groups = {"tete": [], "centre": names, "queue": []}
+        names = [n for key in GROUP_KEYS for n in groups[key]]
         fleet_cfg = dict(cfg.get("fleet") or {})
         fleet_cfg["skippers"] = names
+        fleet_cfg["groups"] = groups
         patch["fleet"] = fleet_cfg
     if "tx_sites" in body:
         try:

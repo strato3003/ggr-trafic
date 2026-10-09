@@ -84,6 +84,11 @@ def test_i18n_fr_en():
 
     assert "Centroid" in t("en", "setup_centroid_legend")
     assert t("fr", "setup_centroid_legend") != t("en", "setup_centroid_legend")
+    assert "glaces" in t("fr", "aez_label")
+    assert t("en", "aez_label") == "Ice Antarctic Exclusion Zone"
+    assert t("fr", "aez_label") != t("en", "aez_label")
+    assert t("fr", "group_tete") != t("en", "group_tete")
+    assert t("en", "group_queue") == "tail"
     assert "speech_play" in dump("fr")
     assert "speech_mp3" in dump("en")
     assert t("en", "metarea_err") != t("fr", "metarea_err")
@@ -1474,6 +1479,178 @@ def test_buddy_aim_listed_skippers_only():
         trio_cfg,
     )
     assert mismatch["warning"] == "Skippers du centroïde introuvables — repli flotte"
+
+
+def test_fleet_groups_legacy_is_centre_and_dedupes():
+    from recorder.fleet import fleet_groups, fleet_skippers
+
+    legacy = {"fleet": {"skippers": ["Damien Guillou", "Etienne Messikommer"]}}
+    groups = fleet_groups(legacy)
+    assert groups["tete"] == []
+    assert groups["centre"] == ["Damien Guillou", "Etienne Messikommer"]
+    assert groups["queue"] == []
+    assert fleet_skippers(legacy) == groups["centre"]
+
+    dup = {
+        "fleet": {
+            "groups": {
+                "tete": ["Damien Guillou"],
+                "centre": ["Damien Guillou", "Etienne Messikommer"],
+                "queue": ["Etienne Messikommer", "Louis Kerdelhue"],
+            }
+        }
+    }
+    groups = fleet_groups(dup)
+    assert groups["tete"] == ["Damien Guillou"]
+    assert groups["centre"] == ["Etienne Messikommer"]
+    assert groups["queue"] == ["Louis Kerdelhue"]
+
+
+def test_buddy_aim_centre_wins_when_groups_split():
+    from recorder.fleet import buddy_aim
+
+    fleet = {
+        "lat": 0.0,
+        "lon": 0.0,
+        "fmt": "x",
+        "label": "flotte",
+        "boats": [
+            {"name": "Damien Guillou", "lat": 40.0, "lon": -20.0},
+            {"name": "Etienne Messikommer", "lat": 10.0, "lon": -30.0},
+            {"name": "Louis Kerdelhue", "lat": -20.0, "lon": -10.0},
+        ],
+    }
+    cfg = {
+        "fleet": {
+            "groups": {
+                "tete": ["Etienne Messikommer"],
+                "centre": ["Damien Guillou"],
+                "queue": ["Louis Kerdelhue"],
+            }
+        }
+    }
+    aim = buddy_aim(fleet, cfg)
+    assert aim["n_boats"] == 1
+    assert abs(aim["lat"] - 40.0) < 0.01
+    assert set(aim["skipper_names"]) == {"Damien Guillou", "Etienne Messikommer", "Louis Kerdelhue"}
+    assert "tete" in aim["groups"] and "queue" in aim["groups"]
+
+
+def _vendee_beam_pool():
+    def kiwi(kid, name, lat, lon, snr=20.0, free=3):
+        return {
+            "id": kid,
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "snr_hf": snr,
+            "free_slots": free,
+            "url": f"http://{kid}.invalid",
+        }
+
+    return [
+        kiwi("fr", "talmont", 46.46806, -1.61694, snr=22, free=4),
+        kiwi("fleet", "mindelo", 16.9, -25.0, snr=18, free=3),
+        kiwi("canaries", "tenerife", 28.3, -16.6, snr=16, free=3),
+        kiwi("azores", "faial", 38.7, -27.2, snr=18, free=3),
+        kiwi("lisbon", "lisboa", 38.7, -9.1, snr=15, free=3),
+        kiwi("madeira", "funchal", 32.7, -16.9, snr=17, free=3),
+        kiwi("natal", "natal", -5.8, -35.2, snr=14, free=3),
+        kiwi("th", "papeete", -17.5350, -149.5697, snr=16, free=2),
+    ]
+
+
+def test_assign_vacation_kiwis_centre_only_keeps_canaries():
+    """Seul le centre : le faisceau 4–6 (Canaries) ne se réduit pas à 2 Kiwi."""
+    from recorder.kiwi_list import assign_vacation_kiwis
+
+    fleet_lat, fleet_lon = 19.503, -19.184
+    cfg = {
+        "sdr": {"min_free_slots": 2, "sites": {"france": {"lat": 46.46806, "lon": -1.61694, "label": "Vendée"}}},
+        "fleet": {"groups": {"tete": [], "centre": ["Damien Guillou"], "queue": []}},
+    }
+    boats = [{"name": "Damien Guillou", "lat": fleet_lat, "lon": fleet_lon}]
+    roles = assign_vacation_kiwis(pool=_vendee_beam_pool(), fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg, boats=boats)
+    ids = {row["id"] for row in roles.values()}
+    assert roles["tx"]["id"] == "fleet"
+    assert "canaries" in ids
+    assert 4 <= len(roles) <= 6
+
+
+def test_assign_vacation_kiwis_close_groups_share_one_beam():
+    """Tête et centre à moins de 800 km : un seul faisceau, pas 2+2."""
+    from recorder.kiwi_list import assign_vacation_kiwis
+
+    fleet_lat, fleet_lon = 19.503, -19.184
+    cfg = {
+        "sdr": {"min_free_slots": 2, "sites": {"france": {"lat": 46.46806, "lon": -1.61694, "label": "Vendée"}}},
+        "fleet": {"groups": {"tete": ["Etienne Messikommer"], "centre": ["Damien Guillou"], "queue": []}},
+    }
+    boats = [
+        {"name": "Damien Guillou", "lat": 40.0, "lon": -20.0},
+        {"name": "Etienne Messikommer", "lat": 40.4, "lon": -20.3},
+    ]
+    roles = assign_vacation_kiwis(pool=_vendee_beam_pool(), fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg, boats=boats)
+    ids = {row["id"] for row in roles.values()}
+    assert roles["tx"]["id"] == "fleet"
+    assert "canaries" in ids
+    assert 4 <= len(roles) <= 6
+
+
+def test_assign_vacation_kiwis_far_groups_two_each():
+    """Tête, centre et queue éloignés : 2 Kiwi chacun, screencast sur le centre."""
+    from recorder.geo import along_great_circle
+    from recorder.kiwi_list import assign_vacation_kiwis
+
+    tx = (46.825, -1.762)
+    aims = {
+        "tete": (42.0, -28.0),
+        "centre": (5.0, -28.0),
+        "queue": (-22.0, -5.0),
+    }
+
+    def kiwi(kid, lat, lon):
+        return {
+            "id": kid,
+            "name": kid,
+            "lat": lat,
+            "lon": lon,
+            "snr_hf": 20.0,
+            "free_slots": 3,
+            "url": f"http://{kid}.invalid",
+        }
+
+    pool = []
+    boats = []
+    for key, aim in aims.items():
+        near = along_great_circle(*tx, *aim, 0.98)
+        mid = along_great_circle(*tx, *aim, 0.45)
+        pool.append(kiwi(key + "-near", *near))
+        pool.append(kiwi(key + "-mid", *mid))
+        boats.append({"name": key, "lat": aim[0], "lon": aim[1]})
+    cfg = {
+        "sdr": {"min_free_slots": 2, "sites": {"france": {"lat": tx[0], "lon": tx[1], "label": "Vendée"}}},
+        "fleet": {
+            "groups": {
+                "tete": ["tete"],
+                "centre": ["centre"],
+                "queue": ["queue"],
+            }
+        },
+    }
+    roles = assign_vacation_kiwis(
+        pool,
+        fleet_lat=aims["centre"][0],
+        fleet_lon=aims["centre"][1],
+        cfg=cfg,
+        boats=boats,
+    )
+    ids = [row["id"] for row in roles.values()]
+    assert len(ids) == len(set(ids)) == 6
+    assert roles["tx"]["id"] == "centre-near"
+    for key in ("tete", "centre", "queue"):
+        assert key + "-near" in ids
+        assert key + "-mid" in ids
 
 
 def test_assign_buddy_kiwis_nvis_and_hop_not_just_nearest():

@@ -1,5 +1,5 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "2.1.4"
+version: "2.2.0"
 
 club:
   callsign: F6KUF
@@ -53,6 +53,8 @@ fleet:
   # Ignorer les traces « fantômes » historiques (Moitessier, RKJ, etc.)
   skip_team_id_from: 900
   # Skippers suivis pour le centroïde d’écoute (bulletin) — noms Yellowbrick RaceSetup.
+  # Sans fleet.groups, cette liste est le centre. Groupes optionnels : tete, centre, queue.
+  # Moins de 800 km entre groupes : un seul faisceau (4 à 6 Kiwi). Au-delà : 2 Kiwi par groupe.
   skippers:
     - "Damien Guillou"
     - "Etienne Messikommer"
