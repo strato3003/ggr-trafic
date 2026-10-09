@@ -1680,6 +1680,7 @@ def test_bulletin_tx_qths_overlap_france_cape_tahiti():
 
     assert ids(28.0, -15.0) == ["france", "tahiti"]
     assert ids(28.0, -15.0, include_france=False) == ["tahiti"]
+    assert ids(-22.0, -29.0) == ["france", "tahiti"]  # Atlantique sud, pas le cap
     assert ids(-35.0, 10.0) == ["france", "cape", "tahiti"]
     assert ids(-35.0, 25.0) == ["france", "cape", "tahiti"]
     assert ids(-40.0, 70.0) == ["tahiti"]

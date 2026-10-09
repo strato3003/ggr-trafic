@@ -336,9 +336,11 @@ CAPE_HORN_LON = -67.266667
 _TAHITI_TX_LAT_MAX = -30.0
 # Recouvrement France / Cap Town / Tahiti autour du méridien du cap (± 15°).
 TX_OVERLAP_LON_DEG = 15.0
-# Boîte Cap Town (METAREA VII + marge GGR) : 8°S–52°S, 35°W–58°E.
+# Autour du cap seulement (± 15° à l’ouest du méridien 18°28′ E, jusqu’au début Indien).
+# 35°W mettait le milieu de l’Atlantique (flotte encore loin du cap) dans « Cap Town ».
 _CAPE_LAT_MIN, _CAPE_LAT_MAX = -52.0, -8.0
-_CAPE_LON_MIN, _CAPE_LON_MAX = -35.0, 58.0
+_CAPE_LON_MIN = CAPE_GOOD_HOPE_LON - TX_OVERLAP_LON_DEG
+_CAPE_LON_MAX = 58.0
 # Skippers assez écartés pour un Kiwi flotte ouest / est en plus du centroïde.
 _FLEET_EXTREME_SPAN_DEG = 8.0
 _FLEET_EXTREME_MIN_KM = 400.0

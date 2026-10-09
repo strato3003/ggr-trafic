@@ -24,6 +24,7 @@ from recorder.config import display_defaults, fmt_khz, fmt_mhz, load_config, par
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import (
     assign_vacation_kiwis,
+    bulletin_beam_qth,
     bulletin_tx_label,
     bulletin_tx_qths,
     fetch_ranked_kiwis,
@@ -616,14 +617,23 @@ async def _globe_page(request: Request):
         except Exception:
             log.exception("Liste KiwiSDR indisponible")
         now = datetime.now(timezone.utc)
+        skippers = aim.get("skippers") or []
         qths = bulletin_tx_qths(
             cfg,
             float(fleet.get("lat") or 0),
             float(fleet.get("lon") or 0),
-            boats=aim.get("skippers") or [],
+            boats=skippers,
             when=now,
         )
-        tahiti_tx = any(qth.get("id") == "tahiti" for qth in qths)
+        # Le faisceau des Kiwi part du QTH que la flotte entend (Guy en Atlantique),
+        # pas de chaque zone large (Cap Town dès 35°W).
+        beam = bulletin_beam_qth(
+            cfg,
+            float(aim.get("lat") or fleet.get("lat") or 0),
+            float(aim.get("lon") or fleet.get("lon") or 0),
+            skippers,
+        )
+        tahiti_tx = beam.get("id") == "tahiti"
     except Exception:
         log.exception("Page flotte")
         return render_unavailable(request, status_code=503)
@@ -640,6 +650,7 @@ async def _globe_page(request: Request):
         tx_sites=tx_sites_aim(cfg, fleet.get("lat"), fleet.get("lon")),
         boats=fleet.get("boats") or [],
         bulletin_tx_label=bulletin_tx_label(qths),
+        beam_tx_label=str(beam.get("label") or "F6KUF"),
         bulletin_tx_from_tahiti=tahiti_tx,
         bulletin_tx_overlap=len(qths) > 1,
         unavailable=bool((cfg.get("web") or {}).get("unavailable")) or wait_q in ("1", "true", "oui"),

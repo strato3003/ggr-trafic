@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.1.2 — 2026-10-09
+
+- À propos : le faisceau affiché est celui visé selon la flotte (Guy en Atlantique). Cap Town ne s’active plus dès 35°W : seulement autour du cap (± 15°).
+
 ## 2.1.1 — 2026-10-09
 
 - À propos et accueil : Guy F4DAI / F6KUF émet depuis Saint-Christophe-du-Ligneron. Philippe F4HWM (Talmont-Saint-Hilaire) n’émet plus.
