@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.0.4 — 2026-10-09
+
+- Mixeur : Play ne partait pas. L’ouverture chargeait les WAV complets (~35 Mo × voies) en plus des MP3 ; le navigateur saturé laissait `currentTime` à 0 (horloge figée, bouton Pause). Le WAV n’est plus téléchargé si le waterfall PNG est déjà là. Les `<audio>` ne sont plus en `display: none`.
+
 ## 2.0.3 — 2026-10-09
 
 - Mixeur : la piste Audacity restait rognée sous le waterfall (hauteur bitmap du canvas) et le recalcul bloquait Play.

@@ -79,6 +79,7 @@ window.GgrMixer = (function () {
   specSheet.height = FREQ;
 
   const tracks = [];
+  let alive = true;
   let duration = 0;
   let playing = false;
   let t0 = 0;
@@ -359,6 +360,11 @@ window.GgrMixer = (function () {
   }
 
   function clockTrack() {
+    const audible = (tr) => tr.el && !tr.dead && !(focusId && tr.id !== focusId);
+    const moving = tracks.find((tr) => audible(tr) && !tr.el.paused && tr.el.currentTime > 0.05);
+    if (moving) return moving;
+    const started = tracks.find((tr) => audible(tr) && !tr.el.paused);
+    if (started) return started;
     if (focusId) {
       const hit = tracks.find((tr) => tr.id === focusId && tr.el && !tr.dead);
       if (hit) return hit;
@@ -658,17 +664,33 @@ window.GgrMixer = (function () {
         applyGain(tr);
         return;
       }
-      seekElTo(tr, off);
       applyGain(tr);
-      const kick = () => {
-        if (gen !== playGen || !playing) return;
+      const cur = Number.isFinite(tr.el.currentTime) ? tr.el.currentTime : 0;
+      // Ne pas bouger currentTime tant que le fichier n’a pas de métadonnées :
+      // le seek annule la requête et Play reste à 00 s.
+      if (tr.el.readyState >= 1 && Math.abs(cur - off) >= 0.35) seekElTo(tr, off);
+      const again = () => {
+        if (gen !== playGen || !playing || !tr.el || !tr.el.paused) return;
         applyGain(tr);
-        tr.el.play().catch(() => {});
+        const retry = tr.el.play();
+        if (retry && typeof retry.catch === "function") retry.catch(() => {});
       };
-      tr.el.play().then(kick).catch(() => {
-        tr.el.addEventListener("canplay", kick, { once: true });
-        window.setTimeout(kick, 400);
-      });
+      let started = null;
+      try {
+        started = tr.el.play();
+      } catch {
+        started = null;
+      }
+      if (started && typeof started.then === "function") {
+        started.then(() => {
+          if (gen !== playGen || !playing) return;
+          applyGain(tr);
+        }).catch(() => {
+          if (gen !== playGen || !playing) return;
+          tr.el.addEventListener("canplay", again, { once: true });
+          again();
+        });
+      }
     });
     setPlayUi(true);
     cancelAnimationFrame(raf);
@@ -1181,21 +1203,27 @@ window.GgrMixer = (function () {
       return;
     }
     const url = media(tr.src);
-    tr.el = new Audio(url);
+    tr.el = new Audio();
     // auto : stream HTML5 immédiat, sans jauge tampon.
     tr.el.preload = "auto";
     tr.el.controls = false;
-    tr.el.hidden = true;
     tr.el.setAttribute("aria-hidden", "true");
     tr.el.playsInline = true;
+    tr.el.setAttribute("playsinline", "");
     let bin = document.getElementById("mix-audio-bin");
     if (!bin) {
       bin = document.createElement("div");
       bin.id = "mix-audio-bin";
-      bin.hidden = true;
+      bin.setAttribute("aria-hidden", "true");
+      // Pas de hidden / display:none : WebKit ne lit pas un <audio> masqué,
+      // et Chrome peut laisser currentTime à 0.
+      bin.style.cssText =
+        "position:fixed;left:0;bottom:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;";
       root.appendChild(bin);
     }
+    bin.hidden = false;
     bin.appendChild(tr.el);
+    tr.el.src = url;
     ["progress", "canplay", "canplaythrough", "waiting", "playing", "stalled", "loadeddata", "loadstart"].forEach(
       (ev) => {
         tr.el.addEventListener(ev, updateAudioLoad);
@@ -1224,11 +1252,6 @@ window.GgrMixer = (function () {
       const clock = clockTrack();
       if (clock && clock.el === tr.el) pauseAt(duration || tr.el.currentTime || 0);
     });
-    try {
-      tr.el.load();
-    } catch {
-      /* ignore */
-    }
   }
 
   function pcmName(src) {
@@ -1538,28 +1561,32 @@ window.GgrMixer = (function () {
       if (deepTimePending) applyDeepTime();
     });
 
-    // Waterfall + pics Audacity en parallèle (mixer + zoom).
+    // Waterfall + pics Audacity en parallèle. Le WAV (~35 Mo) n’est chargé
+    // que si le PNG serveur manque : sinon il sature le navigateur et le
+    // MP3 de lecture ne démarre jamais (currentTime reste à 0).
     void Promise.all(
       tracks.map(async (tr) => {
-        await Promise.all([loadStoredWf(tr), loadPeaks(tr)]);
+        const wfOk = await loadStoredWf(tr);
+        if (!alive) return;
+        await loadPeaks(tr);
+        if (!alive || wfOk || tr.storedWf || tr.dead) return;
+        const wav = await fetchWav(tr);
+        if (!alive || !wav) return;
+        await paintSpec(tr, wav);
       })
     ).then(() => {
+      if (!alive) return;
       const withPeaks = tracks.filter((tr) => tr.peaks).length;
       const withWf = tracks.filter((tr) => tr.storedWf).length;
       if (statusEl && live && (withWf || withPeaks)) {
         statusEl.textContent = t("mix_visual_ready", { live: live, n: tracks.length });
       }
     });
-
-    // Fallback anciennes sessions sans PNG serveur.
-    tracks.forEach((tr) => {
-      if (tr.storedWf || tr.dead) return;
-      fetchWav(tr).then((wav) => paintSpec(tr, wav));
-    });
   }
 
 
   function destroy() {
+    alive = false;
     playing = false;
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
