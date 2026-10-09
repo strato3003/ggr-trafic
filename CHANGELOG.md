@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 2.0.1 — 2026-10-09
+
+- Mixeur : suppression des jauges tampon navigateur (Play restait inopérant).
+- Trafic en cours d’enregistrement : message « Enregistrement en cours… » ; sinon lecture immédiate (waterfall + pics Audacity en parallèle).
+
 ## 2.0.0 — 2026-09-30
 
 - **Breaking** : suppression complète du buddy call (QRG, planning 12:00 TU, SDR, UI, enregistrement).
