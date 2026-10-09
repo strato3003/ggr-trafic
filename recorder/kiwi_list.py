@@ -349,13 +349,15 @@ _FLEET_ACK_RADIUS_KM = 2500.0
 _BEAM_COUNT = 6
 _BEAM_MIN_FLEET_KM = 0.0
 _BEAM_MIN_TX_KM = 400.0
-_BEAM_MAX_XT_KM = 1500.0
+_BEAM_MAX_XT_KM = 1800.0
 _BEAM_MAX_DAZ_DEG = 22.0
-_BEAM_MIN_SEP_KM = 400.0
+_BEAM_MIN_SEP_KM = 350.0
 _BEAM_MIN_PATH_KM = 800.0
 _BEAM_MAX_TX_KM = 14000.0
 _BEAM_MIN_ALONG = 0.12
-_BEAM_MAX_ALONG = 1.20
+# Un peu après les bateaux : en plein océan le premier Kiwi « à bord »
+# est souvent la terre juste au-delà (Brésil sur le trajet Vendée → Atlantique).
+_BEAM_MAX_ALONG = 1.55
 # Omni flotte (buddy / ACK) : répartition azimutale sur 360° (antennes bateau omni).
 _OMNI_MIN = 4
 _OMNI_MAX = 10
@@ -790,8 +792,12 @@ def assign_vacation_kiwis(
         log.info("Kiwi bulletin flotte (hors faisceau) → %s (%.0f km)", kiwi.get("name"), dist)
         return out
 
-    def rank(kiwi: dict[str, Any]) -> tuple[float, float]:
-        return (float(kiwi.get("fleet_km") or 1e12), float(kiwi.get("beam_xt_km") or 1e12))
+    def rank(kiwi: dict[str, Any]) -> tuple[float, float, float]:
+        return (
+            float(kiwi.get("fleet_km") or 1e12),
+            float(kiwi.get("beam_xt_km") or 1e12),
+            -float(kiwi.get("snr_hf") or 0),
+        )
 
     slotted = [k for k in selected if int(k.get("free_slots") or 0) >= tx_slots]
     priority = min(slotted or selected, key=rank)

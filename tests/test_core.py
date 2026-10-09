@@ -1075,6 +1075,47 @@ def test_assign_vacation_kiwis_vendee_beam_includes_canaries():
     assert not any(k.startswith("omni") for k in roles)
 
 
+def test_assign_vacation_kiwis_atlantic_beam_keeps_canaries_and_brazil():
+    """Flotte équatoriale (oct. 2026) : Canaries sur le trajet, Brésil le plus proche."""
+    from recorder.kiwi_list import assign_vacation_kiwis
+
+    def kiwi(kid, name, lat, lon, snr=20.0, free=3):
+        return {
+            "id": kid,
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "snr_hf": snr,
+            "free_slots": free,
+            "url": f"http://{kid}.invalid",
+        }
+
+    pool = [
+        kiwi("fuerte", "EA8 Fuerteventura", 28.4, -14.0, snr=25, free=8),
+        kiwi("coimbra", "Coimbra", 40.21, -8.43, snr=16, free=4),
+        kiwi("seville", "Seville", 37.35, -6.05, snr=8, free=4),
+        kiwi("brasilia", "PT2FHC Brasilia", -15.79, -47.88, snr=28, free=6),
+        kiwi("brasilia-b", "PT2FHC clone", -15.79, -47.88, snr=14, free=3),
+        kiwi("pardinho", "Pardinho", -23.11, -48.38, snr=26, free=4),
+        kiwi("vinhedo", "Vinhedo", -23.03, -46.98, snr=22, free=4),
+        kiwi("flores", "Azores Flores", 39.45, -31.13, snr=20, free=4),
+        kiwi("belp", "Belp", 46.89, 7.50, snr=17, free=2),
+    ]
+    cfg = {"sdr": {"sites": {}, "min_free_slots": 2}}
+    roles = assign_vacation_kiwis(pool, fleet_lat=-3.38, fleet_lon=-26.77, cfg=cfg)
+    ids = {row["id"] for row in roles.values()}
+    assert roles["tx"]["id"] == "brasilia"
+    assert "fuerte" in ids
+    assert "coimbra" in ids
+    assert "seville" in ids
+    assert "pardinho" in ids or "vinhedo" in ids
+    assert not {"pardinho", "vinhedo"} <= ids
+    assert "brasilia-b" not in ids
+    assert "flores" not in ids
+    assert "belp" not in ids
+    assert 4 <= len(roles) <= 6
+
+
 def test_ack_window_h_plus_10():
     from recorder.session import _ack_window
 

@@ -3,7 +3,7 @@
 ## 2.1.0 — 2026-10-09
 
 - Bulletin uniquement sur **14.135 MHz USB** (bande 20 m). Plus d’enregistrement ni de réglage des QRG 12.418 et 16.551 MHz.
-- Faisceau d’émission : 4 à 6 KiwiSDR entre l’émetteur et la flotte. Priorité au plus proche des bateaux (screencast, qualité à bord). Les Canaries restent dans le cône quand F6KUF émet depuis la Vendée vers l’Atlantique (`min_along` 0,12 ; l’ancien seuil 0,75 les excluait).
+- Faisceau d’émission : 4 à 6 KiwiSDR entre l’émetteur et la flotte. Priorité au plus proche des bateaux (screencast, qualité à bord). Les Canaries restent dans le cône quand F6KUF émet depuis la Vendée vers l’Atlantique (`min_along` 0,12 ; l’ancien seuil 0,75 les excluait). Le cône va un peu au-delà des bateaux : s’il n’y a pas de Kiwi en mer, le premier au Brésil sur le même azimut sert de référence « à bord ».
 
 ## 2.0.6 — 2026-10-09
 

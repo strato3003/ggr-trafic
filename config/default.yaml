@@ -79,13 +79,14 @@ sdr:
     count: 6
     min_fleet_km: 0
     min_tx_km: 400
-    max_xt_km: 1500
+    max_xt_km: 1800
     max_daz_deg: 22
-    min_separation_km: 400
+    min_separation_km: 350
     min_path_km: 800
     max_tx_km: 14000
     min_along: 0.12
-    max_along: 1.20
+    # 1,55 : inclut la première terre au-delà des bateaux (pas l’autre hémisphère).
+    max_along: 1.55
   viewport:
     width: 1280
     height: 800
