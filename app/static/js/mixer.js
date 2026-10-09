@@ -483,7 +483,7 @@ window.GgrMixer = (function () {
 
   function drawWave(tr) {
     const canvas = tr.wave;
-    if (!canvas || focusId !== tr.id) return;
+    if (!canvas) return;
     const wrap = canvas.parentElement;
     const cssW = Math.max(64, (wrap && wrap.clientWidth) || canvas.clientWidth || 140);
     const cssH = Math.max(28, canvas.clientHeight || 48);
@@ -873,7 +873,7 @@ window.GgrMixer = (function () {
     });
     tracks.forEach((tr) => {
       const on = !!(focusId && tr.id === focusId);
-      if (tr.wave) tr.wave.hidden = !on;
+      if (tr.wave) tr.wave.hidden = false;
       if (tr.legend) tr.legend.hidden = !on;
     });
     if (!focusId) {
@@ -1049,7 +1049,7 @@ window.GgrMixer = (function () {
           " " +
           esc(where) +
           '"></canvas>' +
-          '<canvas class="mix__wave" hidden aria-label="Amplitude ' +
+          '<canvas class="mix__wave" aria-label="Amplitude ' +
           esc(qrg) +
           '"></canvas>' +
           '<p class="mix__wf-legend" hidden>USB 0 Hz (bas) → 2,7 kHz (haut) · noir/bleu = bruit · cyan/vert = signal · jaune/blanc = fort</p>' +

@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.0.2 — 2026-10-09
+
+- Mixeur : piste amplitude façon Audacity sous le waterfall dès l’ouverture (plus seulement au zoom).
+
 ## 2.0.1 — 2026-10-09
 
 - Mixeur : suppression des jauges tampon navigateur (Play restait inopérant).
