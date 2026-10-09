@@ -402,9 +402,11 @@ window.GgrMixer = (function () {
   function resizeCanvas(tr) {
     const canvas = tr.canvas;
     if (!canvas) return false;
-    const wrap = canvas.parentElement;
-    const cssW = Math.max(64, (wrap && wrap.clientWidth) || canvas.clientWidth || 140);
-    const cssH = Math.max(18, (wrap && wrap.clientHeight) || canvas.clientHeight || 28);
+    // Taille du canvas waterfall seul. Le wrap inclut la piste Audacity :
+    // prendre sa hauteur repousse l’onde hors de la ligne (overflow) et
+    // relance ResizeObserver en boucle — Play ne part plus.
+    const cssW = Math.max(64, canvas.clientWidth || 140);
+    const cssH = Math.max(12, canvas.clientHeight || 18);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.floor(cssW * dpr);
     const h = Math.floor(cssH * dpr);
@@ -1143,8 +1145,15 @@ window.GgrMixer = (function () {
     ev.preventDefault();
     playBtn.click();
   }
+  let drawing = false;
   function onResize() {
-    tracks.forEach(drawTrack);
+    if (drawing) return;
+    drawing = true;
+    try {
+      tracks.forEach(drawTrack);
+    } finally {
+      drawing = false;
+    }
   }
   window.addEventListener("keydown", onKey, sig);
   window.addEventListener("resize", onResize, sig);

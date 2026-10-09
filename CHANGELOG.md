@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.0.3 — 2026-10-09
+
+- Mixeur : la piste Audacity restait rognée sous le waterfall (hauteur bitmap du canvas) et le recalcul bloquait Play.
+
 ## 2.0.2 — 2026-10-09
 
 - Mixeur : piste amplitude façon Audacity sous le waterfall dès l’ouverture (plus seulement au zoom).
