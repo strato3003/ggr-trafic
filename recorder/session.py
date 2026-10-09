@@ -165,21 +165,24 @@ def _channels(
     club_label: str | None = None,
     extra_tx: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Voies bulletin : 1 écoute 14.135 près flotte + ACK omni (2 QRG × N Kiwi).
+    """Voies bulletin : 14.135 MHz USB seulement.
 
-    ``extra_tx`` est conservé pour compat / tests, mais le bulletin courant
-    n’en ajoute plus (plus de faisceaux ni QTH multiples).
+    ``tx`` est le Kiwi le plus proche de la flotte (screencast). ``extra_tx``
+    ajoute les autres Kiwi du faisceau, sur la même QRG. ``ack_sites`` est
+    ignoré : plus d’écoute 12.418 / 16.551 MHz.
     """
+    del ack_sites, club_label
     radio = cfg.get("radio") or {}
     tx = radio.get("tx") or {}
     tx_label = tx.get("label") or "Bulletin F6KUF"
+    freq = float(tx["freq_khz"])
     rows = [
         {
             "id": "tx",
             "kind": "tx",
             "site": "tx",
             "site_label": "flotte (bulletin)",
-            "freq_khz": float(tx["freq_khz"]),
+            "freq_khz": freq,
             "label": tx_label + " · flotte",
             "zoom": int(tx.get("zoom") or 10),
             "screencast": bool((cfg.get("sdr") or {}).get("screencast_tx", True)),
@@ -197,63 +200,12 @@ def _channels(
                 "kind": "tx",
                 "site": role,
                 "site_label": f"{elabel} (bulletin)",
-                "freq_khz": float(tx["freq_khz"]),
+                "freq_khz": freq,
                 "label": f"{tx_label} · {elabel}",
                 "zoom": int(tx.get("zoom") or 10),
                 "screencast": False,
             }
         )
-    sites = ack_sites or []
-    for idx, ack in enumerate(radio.get("ack") or []):
-        base_label = ack.get("label") or f"Accusé {ack['freq_khz']} kHz"
-        if not sites:
-            rows.append(
-                {
-                    "id": f"ack{idx + 1}",
-                    "kind": "ack",
-                    "site": "fleet",
-                    "site_label": "flotte",
-                    "freq_khz": float(ack["freq_khz"]),
-                    "label": base_label,
-                    "zoom": int(ack.get("zoom") or 10),
-                    "screencast": bool((cfg.get("sdr") or {}).get("screencast_ack", False)),
-                }
-            )
-            continue
-        for site in sites:
-            sid = str(site["id"])
-            slabel = site.get("label") or sid
-            rows.append(
-                {
-                    "id": f"ack{idx + 1}-{sid}",
-                    "kind": "ack",
-                    "site": sid,
-                    "site_label": slabel,
-                    "freq_khz": float(ack["freq_khz"]),
-                    "label": f"{base_label} · {slabel}",
-                    "zoom": int(ack.get("zoom") or 10),
-                    "screencast": bool((cfg.get("sdr") or {}).get("screencast_ack", False)),
-                }
-            )
-    # Voie réservée : ACK depuis TRX local (SCU-17 / beam), remplie par upload navigateur.
-    ack0 = (radio.get("ack") or [{}])[0] if (radio.get("ack") or []) else {}
-    try:
-        local_khz = float(ack0.get("freq_khz") or 16551.0)
-    except (TypeError, ValueError):
-        local_khz = 16551.0
-    rows.append(
-        {
-            "id": "ack-local",
-            "kind": "ack",
-            "site": "local",
-            "site_label": "TRX local (SCU-17)",
-            "freq_khz": local_khz,
-            "label": "Accusé TRX local (beam)",
-            "zoom": int(ack0.get("zoom") or 10),
-            "screencast": False,
-            "local_trx": True,
-        }
-    )
     return rows
 
 
@@ -541,12 +493,18 @@ async def run_vacation(
                 when=started,
             )
         ]
-        ack_sites = [
-            {"id": sid, "label": kiwi.get("site_label") or sid}
-            for sid, kiwi in roles.items()
-            if not _is_tx_role(str(sid))
-        ]
-        channels = _channels(cfg, ack_sites, club_label=str(club["label"]))
+        extra_tx = []
+        for sid in sorted(role for role in roles if str(role).startswith("tx_beam")):
+            kiwi = roles[sid]
+            extra_tx.append(
+                {
+                    "id": str(sid).replace("tx_", "", 1),
+                    "role": sid,
+                    "channel_id": str(sid).replace("_", "-"),
+                    "label": str(kiwi.get("name") or kiwi.get("site_label") or sid),
+                }
+            )
+        channels = _channels(cfg, extra_tx=extra_tx, club_label=str(club["label"]))
         assignment = _pick_kiwis(roles, channels)
         if "tx" not in assignment:
             raise RuntimeError("Aucun KiwiSDR disponible près de la flotte pour le bulletin")
@@ -566,41 +524,17 @@ async def run_vacation(
         )
         duration = int(minutes) * 60
         meta["duration_minutes"] = int(minutes)
-        ack_delay_s, ack_dur_s = _ack_window(cfg, duration)
-        meta["ack_delay_minutes"] = round(ack_delay_s / 60.0, 2)
         radio = cfg.get("radio") or {}
         filt = radio.get("usb_filter") or {}
         ident = (cfg.get("sdr") or {}).get("ident_user") or "ggr-trafic"
         viewport = (cfg.get("sdr") or {}).get("viewport") or {"width": 1280, "height": 800}
         when_label = started.strftime("%Y-%m-%d %H:%M")
 
-        async def _ack_record(kiwi: dict[str, Any], ch: dict[str, Any], wav: Path) -> Any:
-            if ack_dur_s <= 0:
-                log.warning("Canal ACK %s ignoré : fenêtre nulle (augmentez duration_minutes)", ch["id"])
-                return {"ok": False, "skipped": "ack_window"}
-            if ack_delay_s > 0:
-                log.info("ACK %s : attente %ss (H+%s) puis %ss", ch["id"], ack_delay_s, int((cfg.get("schedule") or {}).get("ack_delay_minutes") or 10), ack_dur_s)
-                await asyncio.sleep(ack_delay_s)
-            raw = await record_kiwi_wav(
-                kiwi,
-                ch["freq_khz"],
-                wav,
-                ack_dur_s,
-                mode=str(radio.get("mode") or "usb"),
-                low_hz=int(filt.get("low_hz") or 300),
-                high_hz=int(filt.get("high_hz") or 2700),
-                ident=f"{ident}-{ch.get('site') or ch['id']}",
-            )
-            _prepend_wav_silence(wav, float(ack_delay_s))
-            if isinstance(raw, dict):
-                raw = {**raw, "ack_delay_s": float(ack_delay_s)}
-            return raw
-
         jobs = []
         for ch in channels:
-            if ch.get("local_trx"):
-                # Placeholder : audio apporté plus tard via POST /local-ack (SCU-17).
-                meta["channels"].append({**ch})
+            if ch.get("kind") == "ack" or ch.get("local_trx"):
+                # Plus d’écoute 12 / 16 MHz, y compris l’ancien placeholder TRX local.
+                log.info("Canal %s ignoré (bulletin 14.135 MHz seulement)", ch.get("id"))
                 continue
             kiwi = assignment.get(ch["id"])
             if not kiwi:
@@ -612,20 +546,7 @@ async def run_vacation(
             }
             wav = session_dir / f"audio-{ch['id']}.wav"
             ch_out["audio_file"] = str(wav.name)
-            if ch.get("kind") == "ack":
-                if ack_dur_s <= 0:
-                    log.warning("ACK désactivés : duration (%ss) ≤ délai H+10", duration)
-                    continue
-                ch_out["ack_delay_s"] = float(ack_delay_s)
-                jobs.append(
-                    _with_waterfall(
-                        _ack_record(kiwi, ch, wav),
-                        session_dir,
-                        ch["id"],
-                        wav,
-                    )
-                )
-            elif ch.get("screencast"):
+            if ch.get("screencast"):
                 webm = session_dir / f"screencast-{ch['id']}.webm"
                 overlay = {
                     "when": when_label,

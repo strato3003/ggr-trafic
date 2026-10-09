@@ -63,8 +63,6 @@
     }
     return {
       tx_khz: Number(form.elements.namedItem("tx_khz").value),
-      ack1_khz: Number(form.elements.namedItem("ack1_khz").value),
-      ack2_khz: Number(form.elements.namedItem("ack2_khz").value),
       qrg_tolerance_khz: Number(form.elements.namedItem("qrg_tolerance_khz").value),
       lead_minutes: Number(form.elements.namedItem("lead_minutes").value),
       duration_minutes: Number(form.elements.namedItem("duration_minutes").value),
@@ -127,8 +125,6 @@
         "save",
         t("saved_qrg", {
           tx: data.tx_mhz,
-          ack1: data.ack1_mhz,
-          ack2: data.ack2_mhz,
           n: (data.tx_sites || []).length,
         }),
         true

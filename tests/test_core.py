@@ -67,16 +67,16 @@ def test_azimuth_delta_and_cross_track():
     assert behind_along < 0.0
 
 
-def test_prop_rings_4mhz_nvis_vs_16mhz_hop():
+def test_prop_rings_4mhz_nvis_vs_20m_hop():
     from recorder.prop import prop_rings, prop_score, prop_zone
 
     r4 = prop_rings(4483.0, hour_utc=12.0)
-    r16 = prop_rings(16551.0, hour_utc=18.0)
-    assert r4["nvis_km"] > r16["nvis_km"]
-    assert r16["radius_km"] > r4["radius_km"]
+    r20 = prop_rings(14135.0, hour_utc=18.0)
+    assert r4["nvis_km"] > r20["nvis_km"]
+    assert r20["radius_km"] > r4["radius_km"]
     assert prop_zone(200.0, r4) == "nvis"
     assert prop_score(200.0, 4483.0, hour_utc=12.0) > prop_score(1100.0, 4483.0, hour_utc=12.0)
-    assert prop_score(3000.0, 16551.0, hour_utc=18.0) > prop_score(200.0, 16551.0, hour_utc=18.0)
+    assert prop_score(3000.0, 14135.0, hour_utc=18.0) > prop_score(200.0, 14135.0, hour_utc=18.0)
 
 
 def test_i18n_fr_en():
@@ -910,9 +910,9 @@ def test_fmt_mhz_keeps_hertz():
     from recorder.config import fmt_mhz
 
     assert fmt_mhz(14135.0) == "14.135"
-    assert fmt_mhz(16551.0) == "16.551"
-    assert fmt_mhz(12418.0) == "12.418"
-    assert fmt_mhz(16551.5) == "16.5515"
+    assert fmt_mhz(14000.0) == "14"
+    assert fmt_mhz(14350.0) == "14.35"
+    assert fmt_mhz(14135.5) == "14.1355"
 
 
 def test_parse_qrg_khz_accepts_mhz_or_khz():
@@ -920,9 +920,9 @@ def test_parse_qrg_khz_accepts_mhz_or_khz():
 
     assert parse_qrg_khz(14.135) == 14135.0
     assert parse_qrg_khz(14135) == 14135.0
-    assert parse_qrg_khz("16.551") == 16551.0
-    assert parse_qrg_khz(16.551) == 16551.0
-    assert parse_qrg_khz(12.418) == 12418.0
+    assert parse_qrg_khz("14.000") == 14000.0
+    assert parse_qrg_khz(14.0) == 14000.0
+    assert parse_qrg_khz(14.35) == 14350.0
 
 
 def test_zoom_for_span_covers_five_khz_window():
@@ -973,11 +973,13 @@ def test_assign_vacation_kiwis_geo_sites():
         "radio": {"ack": [{"freq_khz": 16551.0}, {"freq_khz": 12418.0}]},
     }
     roles = assign_vacation_kiwis(pool, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg)
+    ids = {row["id"] for row in roles.values()}
     assert roles["tx"]["id"] == "near-a"
-    assert not any(k.startswith("tx_") for k in roles)
-    assert not any(k.startswith("tx_beam") for k in roles)
-    assert 4 <= len([k for k in roles if k.startswith("omni")]) <= 5
-    assert "loud-far" not in {r["id"] for r in roles.values() if r.get("site") == "tx"}
+    assert "near-b" in ids
+    assert "omni-w" in ids
+    assert "omni-n" not in ids
+    assert not any(k.startswith("omni") for k in roles)
+    assert "loud-far" not in ids
 
 
 def test_assign_vacation_kiwis_bulletin_beam():
@@ -1024,6 +1026,55 @@ def test_assign_vacation_kiwis_bulletin_beam():
     assert not any(k.startswith("tx_beam") for k in roles)
 
 
+def test_assign_vacation_kiwis_vendee_beam_includes_canaries():
+    """Vendée → Cap-Vert : Canaries dans le faisceau, Mindelo prioritaire."""
+    from recorder.kiwi_list import assign_vacation_kiwis
+
+    def kiwi(kid, name, lat, lon, snr=20.0, free=3):
+        return {
+            "id": kid,
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "snr_hf": snr,
+            "free_slots": free,
+            "url": f"http://{kid}.invalid",
+        }
+
+    fleet_lat, fleet_lon = 19.503, -19.184
+    pool = [
+        kiwi("fr", "talmont", 46.46806, -1.61694, snr=22, free=4),
+        kiwi("fleet", "mindelo", 16.9, -25.0, snr=18, free=3),
+        kiwi("canaries", "tenerife", 28.3, -16.6, snr=16, free=3),
+        kiwi("azores", "faial", 38.7, -27.2, snr=18, free=3),
+        kiwi("lisbon", "lisboa", 38.7, -9.1, snr=15, free=3),
+        kiwi("madeira", "funchal", 32.7, -16.9, snr=17, free=3),
+        kiwi("natal", "natal", -5.8, -35.2, snr=14, free=3),
+        kiwi("th", "papeete", -17.5350, -149.5697, snr=16, free=2),
+    ]
+    cfg = {
+        "sdr": {
+            "min_free_slots": 2,
+            "sites": {
+                "france": {"lat": 46.46806, "lon": -1.61694, "label": "Vendée", "radius_km": 1500},
+            },
+        },
+    }
+    roles = assign_vacation_kiwis(
+        pool, fleet_lat=fleet_lat, fleet_lon=fleet_lon, cfg=cfg, when=datetime(2026, 10, 8, 18, 0, tzinfo=timezone.utc)
+    )
+    ids = {row["id"] for row in roles.values()}
+    assert roles["tx"]["id"] == "fleet"
+    assert "canaries" in ids
+    assert "madeira" in ids
+    assert "azores" not in ids
+    assert "natal" not in ids
+    assert "fr" not in ids
+    assert 4 <= len(roles) <= 6
+    assert all(str(k) == "tx" or str(k).startswith("tx_beam") for k in roles)
+    assert not any(k.startswith("omni") for k in roles)
+
+
 def test_ack_window_h_plus_10():
     from recorder.session import _ack_window
 
@@ -1035,7 +1086,7 @@ def test_ack_window_h_plus_10():
     assert dur0 == 0
 
 
-def test_ack_channels_per_site():
+def test_bulletin_channels_are_14mhz_only():
     from recorder.session import _channels, _pick_kiwis
 
     cfg = {
@@ -1046,45 +1097,22 @@ def test_ack_channels_per_site():
                 {"freq_khz": 12418.0, "label": "Accusé 12,418 MHz"},
             ],
         },
-        "sdr": {"screencast_tx": True, "screencast_ack": False},
+        "sdr": {"screencast_tx": True},
     }
-    sites = [
-        {"id": "fleet", "label": "flotte"},
-        {"id": "france", "label": "France"},
-        {"id": "tahiti", "label": "Tahiti"},
-    ]
-    channels = _channels(cfg, sites)
-    assert [c["id"] for c in channels] == [
-        "tx",
-        "ack1-fleet",
-        "ack1-france",
-        "ack1-tahiti",
-        "ack2-fleet",
-        "ack2-france",
-        "ack2-tahiti",
-        "ack-local",
-    ]
-    assert channels[-1]["local_trx"] is True
-    assert channels[-1]["freq_khz"] == 16551.0
+    channels = _channels(
+        cfg,
+        [{"id": "fleet", "label": "flotte"}],
+        extra_tx=[{"id": "beam1", "role": "tx_beam1", "label": "Canaries", "channel_id": "tx-beam1"}],
+    )
+    assert [c["id"] for c in channels] == ["tx", "tx-beam1"]
+    assert all(c["freq_khz"] == 14135.0 and c["kind"] == "tx" for c in channels)
     assert channels[0]["site_label"] == "flotte (bulletin)"
     assert channels[0]["screencast"] is True
-    roles = {
-        "tx": {"name": "k-fleet-tx"},
-        "fleet": {"name": "k-fleet"},
-        "france": {"name": "k-fr"},
-        "tahiti": {"name": "k-th"},
-    }
-    got = _pick_kiwis(roles, channels)
-    assert got["tx"]["name"] == "k-fleet-tx"
-    assert got["ack1-france"]["name"] == "k-fr"
-    assert got["ack2-tahiti"]["name"] == "k-th"
-    assert "ack-local" not in got
-
-    overlap = _channels(cfg, sites, extra_tx=[{"id": "cape", "label": "Cap Town"}])
-    assert [c["id"] for c in overlap[:2]] == ["tx", "tx-cape"]
-    assert overlap[1]["site"] == "tx_cape"
-    assert overlap[1]["screencast"] is False
-    assert overlap[-1]["id"] == "ack-local"
+    assert channels[1]["site"] == "tx_beam1"
+    assert channels[1]["screencast"] is False
+    got = _pick_kiwis({"tx": {"name": "k-fleet"}, "tx_beam1": {"name": "k-can"}}, channels)
+    assert got["tx"]["name"] == "k-fleet"
+    assert got["tx-beam1"]["name"] == "k-can"
 
 
 def test_runtime_settings_override_qrg(tmp_path, monkeypatch):
@@ -1102,8 +1130,8 @@ def test_runtime_settings_override_qrg(tmp_path, monkeypatch):
     assert qrg["qrg_tolerance_khz"] == 5.0
     assert qrg["schedule_lead"] == 1
     assert qrg["duration_minutes"] == 12
-    assert qrg["ack1_khz"] == 16551.0
-    assert qrg["ack2_khz"] == 12418.0
+    assert "ack1_khz" not in qrg
+    assert "ack2_khz" not in qrg
     assert (tmp_path / "settings.json").is_file()
 
 
@@ -1201,7 +1229,7 @@ def test_qrg_context_includes_tx_sites():
     assert qrg["tx_sites"][0]["lon"] == -1.7888
 
 
-def test_legacy_ack_qrg_migrated_from_settings(tmp_path, monkeypatch):
+def test_marine_ack_stripped_from_settings(tmp_path, monkeypatch):
     import json
 
     monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
@@ -1213,7 +1241,8 @@ def test_legacy_ack_qrg_migrated_from_settings(tmp_path, monkeypatch):
                         {"freq_khz": 16551.5, "label": "Accusé 16,5515 MHz"},
                         {"freq_khz": 12418.5, "label": "Accusé 12,4185 MHz"},
                     ]
-                }
+                },
+                "sdr": {"beam": {"count": 0, "min_along": 0.75}},
             }
         ),
         encoding="utf-8",
@@ -1221,14 +1250,12 @@ def test_legacy_ack_qrg_migrated_from_settings(tmp_path, monkeypatch):
     from recorder.config import load_config, qrg_context
 
     qrg = qrg_context(load_config())
-    assert qrg["ack1_khz"] == 16551.0
-    assert qrg["ack2_khz"] == 12418.0
-    assert qrg["ack1_mhz"] == "16.551"
-    assert qrg["ack2_mhz"] == "12.418"
+    assert qrg["tx_khz"] == 14135.0
+    assert "ack1_khz" not in qrg
+    assert "ack2_khz" not in qrg
     saved = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
-    assert saved["radio"]["ack"][0]["freq_khz"] == 16551.0
-    assert saved["radio"]["ack"][1]["freq_khz"] == 12418.0
-    assert saved["radio"]["ack"][0]["label"] == "Accusé 16,551 MHz"
+    assert "ack" not in (saved.get("radio") or {})
+    assert "beam" not in (saved.get("sdr") or {})
 
 
 def test_usb_dial_in_plus_minus_five_khz_window():
@@ -1584,8 +1611,12 @@ def test_bulletin_tx_qths_overlap_france_cape_tahiti():
         cfg=cfg,
         boats=split + [{"lat": -40.0, "lon": 35.0, "name": "Est"}],
     )
-    assert roles["tx"]["id"] in {"west", "cape", "east", "canaries"}
-    assert not any(k.startswith("tx_") for k in roles)
+    ids = {row["id"] for row in roles.values()}
+    assert roles["tx"]["id"] == "cape"
+    assert "west" in ids
+    assert "canaries" not in ids
+    assert any(k.startswith("tx_beam") for k in roles)
+    assert not any(k.startswith("omni") for k in roles)
     assert "tx_fleet_west" not in roles
     assert "tx_fleet_east" not in roles
 

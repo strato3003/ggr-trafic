@@ -20,19 +20,16 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import auth_email, auth_google, globe_tiles, i18n, metarea, operators, store, tts
-from recorder.config import ack_label, display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
+from recorder.config import display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import (
-    bulletin_beam_qth,
+    assign_vacation_kiwis,
     bulletin_tx_label,
     bulletin_tx_qths,
     fetch_ranked_kiwis,
     kiwi_directory,
-    kiwi_key,
     map_kiwis,
-    pick_near_fleet_kiwis,
     read_directory_cache,
-    select_bulletin_beam_kiwis,
 )
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
 from recorder.session import (
@@ -603,35 +600,19 @@ async def _globe_page(request: Request):
         aim = buddy_aim(fleet, cfg)
         kiwis = []
         beam_kiwis = []
-        beam_qth = None
         try:
             ranked = await fetch_ranked_kiwis(cfg, fleet["lat"], fleet["lon"], limit=0, min_free=1)
-            beam_qth = bulletin_beam_qth(
-                cfg,
-                float(aim["lat"]),
-                float(aim["lon"]),
-                boats=aim.get("skippers") or [],
-            )
-            beam_kiwis = select_bulletin_beam_kiwis(
+            roles = assign_vacation_kiwis(
                 ranked,
-                tx_lat=float(beam_qth["lat"]),
-                tx_lon=float(beam_qth["lon"]),
                 fleet_lat=float(aim["lat"]),
                 fleet_lon=float(aim["lon"]),
                 cfg=cfg,
+                boats=aim.get("skippers") or [],
+                when=datetime.now(timezone.utc),
             )
-            for i, kiwi in enumerate(beam_kiwis, start=1):
-                kiwi["site"] = f"tx_beam{i}"
-                kiwi["site_label"] = f"portée TX bulletin {i}"
-            used = {kiwi_key(k) for k in beam_kiwis}
-            kiwis = pick_near_fleet_kiwis(
-                ranked,
-                lat=float(aim["lat"]),
-                lon=float(aim["lon"]),
-                count=2,
-                radius_km=800.0,
-                exclude=used,
-            )
+            tx_kiwi = roles.get("tx")
+            kiwis = [tx_kiwi] if tx_kiwi else []
+            beam_kiwis = [roles[key] for key in sorted(roles) if str(key).startswith("tx_beam")]
         except Exception:
             log.exception("Liste KiwiSDR indisponible")
         now = datetime.now(timezone.utc)
@@ -887,8 +868,6 @@ async def api_settings_put(
     if not isinstance(body, dict):
         raise HTTPException(400, "JSON objet attendu")
     tx_khz = _khz_field(body, "tx_khz", "QRG TX")
-    ack1_khz = _khz_field(body, "ack1_khz", "QRG ACK 16 m")
-    ack2_khz = _khz_field(body, "ack2_khz", "QRG ACK 12 m")
     try:
         tol = round(float(body.get("qrg_tolerance_khz", 5.0)), 3)
         lead = int(body.get("lead_minutes", 1))
@@ -901,18 +880,9 @@ async def api_settings_put(
         raise HTTPException(400, "Avance hors plage (0–15 min)")
     if not (1 <= duration <= 45):
         raise HTTPException(400, "Durée hors plage (1–45 min)")
-    radio = cfg.get("radio") or {}
-    acks = [dict(row) for row in (radio.get("ack") or [])]
-    while len(acks) < 2:
-        acks.append({})
-    acks[0]["freq_khz"] = ack1_khz
-    acks[0]["label"] = ack_label(ack1_khz)
-    acks[1]["freq_khz"] = ack2_khz
-    acks[1]["label"] = ack_label(ack2_khz)
     patch = {
         "radio": {
             "tx": {"freq_khz": tx_khz, "qrg_tolerance_khz": tol},
-            "ack": acks[:2],
         },
         "schedule": {"lead_minutes": lead, "duration_minutes": duration},
     }

@@ -2619,8 +2619,6 @@
           headers: { "Content-Type": "application/json", "X-Admin-Token": tok },
           body: JSON.stringify({
             tx_khz: cur.tx_khz,
-            ack1_khz: cur.ack1_khz,
-            ack2_khz: cur.ack2_khz,
             qrg_tolerance_khz: cur.qrg_tolerance_khz,
             lead_minutes: cur.schedule_lead,
             duration_minutes: cur.duration_minutes,
@@ -2695,8 +2693,6 @@
           headers: { "Content-Type": "application/json", "X-Admin-Token": tok },
           body: JSON.stringify({
             tx_khz: cur.tx_khz,
-            ack1_khz: cur.ack1_khz,
-            ack2_khz: cur.ack2_khz,
             qrg_tolerance_khz: cur.qrg_tolerance_khz,
             lead_minutes: cur.schedule_lead,
             duration_minutes: cur.duration_minutes,

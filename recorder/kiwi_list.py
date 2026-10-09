@@ -343,17 +343,19 @@ _CAPE_LON_MIN, _CAPE_LON_MAX = -35.0, 58.0
 _FLEET_EXTREME_SPAN_DEG = 8.0
 _FLEET_EXTREME_MIN_KM = 400.0
 _FLEET_ACK_RADIUS_KM = 2500.0
-# Faisceau 20 m F6KUF → flotte, y compris au-delà des bateaux (Brésil, Argentine).
-_BEAM_COUNT = 4
-_BEAM_MIN_FLEET_KM = 800.0
+# Faisceau 14.135 MHz : émetteur → flotte (bande 20 m), 4 à 6 récepteurs.
+# min_along bas : les Canaries sont souvent à 0,3–0,7 du trajet Vendée → Atlantique
+# (un seuil à 0,75 les excluait). max_along un peu au-delà des bateaux, pas l’autre hémisphère.
+_BEAM_COUNT = 6
+_BEAM_MIN_FLEET_KM = 0.0
 _BEAM_MIN_TX_KM = 400.0
 _BEAM_MAX_XT_KM = 1500.0
-_BEAM_MAX_DAZ_DEG = 16.0
+_BEAM_MAX_DAZ_DEG = 22.0
 _BEAM_MIN_SEP_KM = 400.0
-_BEAM_MIN_PATH_KM = 1500.0
-_BEAM_MAX_TX_KM = 12000.0
-# Au-delà du milieu du trajet TX→flotte (pas l’Europe derrière les bateaux).
-_BEAM_MIN_ALONG = 0.75
+_BEAM_MIN_PATH_KM = 800.0
+_BEAM_MAX_TX_KM = 14000.0
+_BEAM_MIN_ALONG = 0.12
+_BEAM_MAX_ALONG = 1.20
 # Omni flotte (buddy / ACK) : répartition azimutale sur 360° (antennes bateau omni).
 _OMNI_MIN = 4
 _OMNI_MAX = 10
@@ -418,6 +420,7 @@ def _beam_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
         "min_path_km": float(raw["min_path_km"] if raw.get("min_path_km") is not None else _BEAM_MIN_PATH_KM),
         "max_tx_km": float(raw["max_tx_km"] if raw.get("max_tx_km") is not None else _BEAM_MAX_TX_KM),
         "min_along": float(raw["min_along"] if raw.get("min_along") is not None else _BEAM_MIN_ALONG),
+        "max_along": float(raw["max_along"] if raw.get("max_along") is not None else _BEAM_MAX_ALONG),
     }
 
 
@@ -427,7 +430,7 @@ def bulletin_beam_qth(
     fleet_lon: float,
     boats: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Origine du faisceau 20 m : Vendée tant que F6KUF est audible, sinon Michel."""
+    """Origine du faisceau 14.135 MHz : Vendée tant que la flotte l’entend, sinon Michel."""
     points = _boat_points(boats, fleet_lat, fleet_lon)
     if any(boat_hears_france(lat, lon) for lat, lon in points):
         return _sdr_site(cfg, "france")
@@ -444,9 +447,13 @@ def select_bulletin_beam_kiwis(
     cfg: dict[str, Any],
     exclude: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Jusqu’à 4 Kiwi dans le cône 20 m émetteur → flotte, y compris au-delà des skippers."""
+    """Jusqu’à 6 Kiwi dans le faisceau 14.135 MHz, de l’émetteur jusqu’aux bateaux.
+
+    Le plus proche de la flotte est toujours gardé. Les autres échantillonnent
+    le grand cercle (milieu de trajet compris : Canaries depuis la Vendée).
+    """
     beam = _beam_cfg(cfg)
-    want = max(0, min(int(beam["count"]), 4))
+    want = max(0, min(int(beam["count"]), 6))
     if want <= 0:
         return []
     path_km = haversine_km(tx_lat, tx_lon, fleet_lat, fleet_lon)
@@ -456,9 +463,10 @@ def select_bulletin_beam_kiwis(
     az_fleet = initial_bearing(tx_lat, tx_lon, fleet_lat, fleet_lon)
     used = set(exclude or ())
     min_sep = float(beam["min_separation_km"])
+    max_along = float(beam["max_along"])
 
-    def eligible(min_snr: float) -> list[tuple[float, float, float, dict[str, Any], float, float]]:
-        rows: list[tuple[float, float, float, dict[str, Any], float, float]] = []
+    def eligible(min_snr: float) -> list[tuple[float, float, float, float, float, dict[str, Any], float]]:
+        rows: list[tuple[float, float, float, float, float, dict[str, Any], float]] = []
         for kiwi in pool:
             key = kiwi_key(kiwi)
             if not key or key in used:
@@ -484,58 +492,82 @@ def select_bulletin_beam_kiwis(
             if xt > float(beam["max_xt_km"]):
                 continue
             along = along_track_frac(tx_lat, tx_lon, fleet_lat, fleet_lon, lat, lon)
-            if along < float(beam["min_along"]):
+            if along < float(beam["min_along"]) or along > max_along:
                 continue
-            rows.append((d_tx, xt, -float(kiwi.get("snr_hf") or 0), kiwi, d_fleet, daz))
-        rows.sort(key=lambda row: row[0])
+            rows.append((along, d_fleet, xt, daz, d_tx, kiwi, float(kiwi.get("snr_hf") or 0)))
         return rows
 
     cands = eligible(5.0)
-    if len(cands) < want:
+    if len(cands) < min(want, 4):
         cands = eligible(0.0)
     if not cands:
         return []
 
-    picked: list[dict[str, Any]] = []
-    picked_keys: set[str] = set()
-
-    def take_near(target: float) -> dict[str, Any] | None:
-        best: tuple[tuple[float, float, float], dict[str, Any], float, float, float, float] | None = None
-        for d_tx, xt, nsnr, kiwi, d_fleet, daz in cands:
-            key = kiwi_key(kiwi)
-            if key in picked_keys:
-                continue
-            if any(
-                haversine_km(float(kiwi["lat"]), float(kiwi["lon"]), float(other["lat"]), float(other["lon"])) < min_sep
-                for other in picked
-            ):
-                continue
-            score = (abs(d_tx - target), xt, nsnr)
-            if best is None or score < best[0]:
-                best = (score, kiwi, d_tx, d_fleet, xt, daz)
-        if best is None:
-            return None
-        _, kiwi, d_tx, d_fleet, xt, daz = best
+    def pack(row: tuple[float, float, float, float, float, dict[str, Any], float]) -> dict[str, Any]:
+        along, d_fleet, xt, daz, d_tx, kiwi, _snr = row
         chosen = dict(kiwi)
+        chosen["beam_along"] = round(along, 3)
         chosen["beam_xt_km"] = round(xt, 1)
         chosen["beam_daz_deg"] = round(daz, 1)
         chosen["fleet_km"] = round(d_fleet, 1)
         chosen["site_km"] = round(d_tx, 1)
-        picked.append(chosen)
-        picked_keys.add(kiwi_key(kiwi))
         return chosen
 
-    n = len(cands)
-    if n <= want:
-        for row in cands:
-            take_near(row[0])
-    else:
-        last = max(want - 1, 1)
-        for i in range(want):
-            idx = int(round(i * (n - 1) / last))
-            take_near(cands[idx][0])
+    # Priorité : qualité à bord. Ce Kiwi n’est pas écarté par l’écartement.
+    priority = min(cands, key=lambda row: (row[1], row[2], -row[6]))
+    picked_rows = [priority]
+    picked_keys = {kiwi_key(priority[5])}
 
-    return picked
+    def far_enough(kiwi: dict[str, Any]) -> bool:
+        for row in picked_rows:
+            other = row[5]
+            if haversine_km(float(kiwi["lat"]), float(kiwi["lon"]), float(other["lat"]), float(other["lon"])) < min_sep:
+                return False
+        return True
+
+    rest = [row for row in cands if kiwi_key(row[5]) not in picked_keys]
+    rest_n = want - 1
+    if rest_n > 0 and rest:
+        if len(cands) <= want:
+            rest.sort(key=lambda row: row[0])
+            for row in rest:
+                if len(picked_rows) >= want:
+                    break
+                if not far_enough(row[5]):
+                    continue
+                picked_rows.append(row)
+                picked_keys.add(kiwi_key(row[5]))
+        else:
+            lo = min(row[0] for row in cands)
+            hi = max(row[0] for row in cands)
+            span = hi - lo
+            targets = [lo + span * (i + 1) / (rest_n + 1) for i in range(rest_n)]
+            for target in targets:
+                best: tuple[float, float, float, float, float, dict[str, Any], float] | None = None
+                best_score: tuple[float, float, float] | None = None
+                for row in rest:
+                    kiwi = row[5]
+                    if kiwi_key(kiwi) in picked_keys or not far_enough(kiwi):
+                        continue
+                    score = (abs(row[0] - target), row[2], -row[6])
+                    if best_score is None or score < best_score:
+                        best, best_score = row, score
+                if best is None:
+                    continue
+                picked_rows.append(best)
+                picked_keys.add(kiwi_key(best[5]))
+            if len(picked_rows) < want:
+                leftover = [row for row in rest if kiwi_key(row[5]) not in picked_keys]
+                leftover.sort(key=lambda row: (row[1], row[2], -row[6]))
+                for row in leftover:
+                    if len(picked_rows) >= want:
+                        break
+                    if not far_enough(row[5]):
+                        continue
+                    picked_rows.append(row)
+                    picked_keys.add(kiwi_key(row[5]))
+
+    return [pack(row) for row in picked_rows]
 
 
 def bind_bulletin_beam(
@@ -550,7 +582,7 @@ def bind_bulletin_beam(
     cfg: dict[str, Any],
     bind,
 ) -> None:
-    """Jusqu’à 4 Kiwi dans le faisceau 20 m bulletin → flotte (y compris au-delà)."""
+    """Kiwi du faisceau 14.135 MHz (rôles tx_beam*, en plus du prioritaire flotte)."""
     selected = select_bulletin_beam_kiwis(
         pool,
         tx_lat=tx_lat,
@@ -566,7 +598,7 @@ def bind_bulletin_beam(
             role,
             float(kiwi["lat"]),
             float(kiwi["lon"]),
-            f"portée TX bulletin {n}",
+            f"faisceau {n}",
             radius_km=80.0,
             extra={
                 "beam_xt_km": kiwi.get("beam_xt_km"),
@@ -674,7 +706,7 @@ def listen_sites(
     fleet_lon: float,
     boats: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """ACK : flotte + France + Tahiti, et Cap Town dès qu’un bateau est dans la boîte SA."""
+    """Sites d’écoute historiques (flotte, France, Cap Town, Tahiti)."""
     points = _boat_points(boats, fleet_lat, fleet_lon)
     sites = [
         {
@@ -715,92 +747,71 @@ def assign_vacation_kiwis(
     boats: list[dict[str, Any]] | None = None,
     when: datetime | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Bulletin : 1 Kiwi près du centroïde (14.135) + 4–5 omni ACK sur 360°.
+    """Bulletin 14.135 MHz : 4 à 6 Kiwi dans le faisceau émetteur → flotte.
 
-    La diffusion du bulletin se vérifie au plus près de la flotte. Les accusés
-    (comme le buddy) se répartissent autour du centroïde selon les QRG de retour.
+    Le rôle ``tx`` est le plus proche des bateaux (screencast, qualité à bord).
+    Les rôles ``tx_beam*`` jalonnent le grand cercle selon le QTH d’émission
+    (Vendée tant que la flotte est dans l’Atlantique). ``when`` est conservé
+    pour l’appelant ; l’origine du faisceau suit la position, pas le jour.
     """
+    del when  # l’origine du cône dépend de la position de la flotte
     sdr = cfg.get("sdr") or {}
     tx_slots = int(sdr.get("min_free_slots") or 2)
     out: dict[str, dict[str, Any]] = {}
     used: set[str] = set()
+    qth = bulletin_beam_qth(cfg, fleet_lat, fleet_lon, boats)
+    selected = select_bulletin_beam_kiwis(
+        pool,
+        tx_lat=float(qth["lat"]),
+        tx_lon=float(qth["lon"]),
+        fleet_lat=fleet_lat,
+        fleet_lon=fleet_lon,
+        cfg=cfg,
+    )
 
-    def bind(
-        role: str,
-        lat: float,
-        lon: float,
-        label: str,
-        *,
-        radius_km: float | None = None,
-        min_free: int = 1,
-        extra: dict[str, Any] | None = None,
-        reuse: str | None = None,
-        relax_radius: bool = True,
-    ) -> dict[str, Any] | None:
-        kiwi = pick_nearest(pool, lat, lon, exclude=used, min_free=min_free, min_snr=5.0, radius_km=radius_km)
-        if kiwi is None:
-            kiwi = pick_nearest(pool, lat, lon, exclude=used, min_free=1, min_snr=0.0, radius_km=radius_km)
-        if kiwi is None and radius_km is not None and relax_radius:
-            kiwi = pick_nearest(pool, lat, lon, exclude=used, min_free=1, min_snr=0.0)
-        if kiwi is None:
-            if reuse and reuse in out:
-                chosen = dict(out[reuse])
-                chosen["site"] = role
-                chosen["site_label"] = label
-                if extra:
-                    chosen.update(extra)
-                out[role] = chosen
-                return chosen
-            return None
+    def take(role: str, kiwi: dict[str, Any], label: str) -> None:
         chosen = dict(kiwi)
         chosen["site"] = role
         chosen["site_label"] = label
-        chosen["site_km"] = round(haversine_km(lat, lon, float(kiwi["lat"]), float(kiwi["lon"])), 1)
-        if extra:
-            chosen.update(extra)
         out[role] = chosen
         used.add(kiwi_key(kiwi))
-        return chosen
 
-    # Écoute bulletin 14.135 : Kiwi le plus proche de la flotte (+ screencast).
-    fleet_tx = bind("tx", fleet_lat, fleet_lon, "flotte (bulletin)", min_free=tx_slots)
-    if fleet_tx is None:
+    if not selected:
+        kiwi = pick_nearest(pool, fleet_lat, fleet_lon, exclude=used, min_free=tx_slots, min_snr=5.0)
+        if kiwi is None:
+            kiwi = pick_nearest(pool, fleet_lat, fleet_lon, exclude=used, min_free=1, min_snr=0.0)
+        if kiwi is None:
+            return out
+        dist = haversine_km(fleet_lat, fleet_lon, float(kiwi["lat"]), float(kiwi["lon"]))
+        kiwi = dict(kiwi)
+        kiwi["fleet_km"] = round(dist, 1)
+        kiwi["site_km"] = round(dist, 1)
+        take("tx", kiwi, "flotte (bulletin)")
+        log.info("Kiwi bulletin flotte (hors faisceau) → %s (%.0f km)", kiwi.get("name"), dist)
         return out
-    log.info(
-        "Kiwi bulletin flotte → %s (%.0f km du centroïde)",
-        fleet_tx.get("name"),
-        fleet_tx.get("site_km") or 0,
-    )
 
-    # ACK : omni 360° autour du centroïde (comme buddy), selon les QRG de retour.
-    ack_freqs = [
-        float(row.get("freq_khz") or 0)
-        for row in ((cfg.get("radio") or {}).get("ack") or [])
-        if row.get("freq_khz")
-    ] or [16551.0, 12418.0]
-    hour = float((when or datetime.now(timezone.utc)).hour) + float((when or datetime.now(timezone.utc)).minute) / 60.0
-    omni = assign_omni_fleet_kiwis(
-        pool,
-        lat=fleet_lat,
-        lon=fleet_lon,
-        freqs_khz=ack_freqs,
-        cfg=cfg,
-        hour_utc=hour,
-        section=("sdr", "ack_omni"),
-        exclude=None,
+    def rank(kiwi: dict[str, Any]) -> tuple[float, float]:
+        return (float(kiwi.get("fleet_km") or 1e12), float(kiwi.get("beam_xt_km") or 1e12))
+
+    slotted = [k for k in selected if int(k.get("free_slots") or 0) >= tx_slots]
+    priority = min(slotted or selected, key=rank)
+    take("tx", priority, "flotte (bulletin)")
+    log.info(
+        "Kiwi bulletin flotte → %s (%.0f km du centroïde, faisceau %s)",
+        priority.get("name"),
+        float(priority.get("fleet_km") or 0),
+        qth.get("label"),
     )
-    for role, kiwi in omni.items():
-        key = kiwi_key(kiwi)
-        chosen = dict(kiwi)
-        chosen["site"] = role
-        out[role] = chosen
-        used.add(key)
+    beams = [k for k in selected if kiwi_key(k) not in used]
+    beams.sort(key=lambda k: float(k.get("beam_along") or 0))
+    for n, kiwi in enumerate(beams, start=1):
+        take(f"tx_beam{n}", kiwi, f"faisceau {n}")
         log.info(
-            "Kiwi ACK omni %s → %s (%.0f km, zone %s)",
-            chosen.get("site_label"),
-            chosen.get("name"),
-            chosen.get("site_km") or 0,
-            chosen.get("prop_zone"),
+            "Kiwi faisceau %s → %s (%.0f km de la flotte, écart GC %.0f km)",
+            n,
+            kiwi.get("name"),
+            float(kiwi.get("fleet_km") or 0),
+            float(kiwi.get("beam_xt_km") or 0),
         )
     return out
 
@@ -1084,8 +1095,8 @@ def normalize_receiver(
         if not _covers_freqs(bands, cover_hz):
             return None
     else:
-        min_hz = int(sdr_cfg.get("min_freq_hz") or 12_000_000)
-        max_hz = int(sdr_cfg.get("max_freq_hz") or 17_000_000)
+        min_hz = int(sdr_cfg.get("min_freq_hz") or 14_000_000)
+        max_hz = int(sdr_cfg.get("max_freq_hz") or 14_350_000)
         if not _covers_hf(bands, min_hz, max_hz):
             return None
     url = str(row.get("url") or "").strip()

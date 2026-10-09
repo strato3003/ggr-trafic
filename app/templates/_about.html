@@ -5,7 +5,6 @@
     {{ t('about_p_tx', days=schedule_days_label) }}
     {{ t('about_p_listen', tx_label=bulletin_tx_label | default('F6KUF')) }}{% if bulletin_tx_overlap %}{{ t('about_p_overlap') }}{% endif %}
     {{ t('about_p_kiwis') }}
-    {{ t('about_p_ack', ack1=ack1_mhz, ack2=ack2_mhz, tol=qrg_tolerance_khz) }}
     {{ t('about_p_centroid', skippers=buddy_skippers_short) }}
     {{ t('about_p_range') }}
   </p>

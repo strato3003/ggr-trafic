@@ -76,7 +76,7 @@
         <span class="ver">{{ version }}</span>
       </div>
       <p class="kiwi-ident__qrg">
-        TX {{ tx_mhz }} MHz · ACK {{ ack1_mhz }} / {{ ack2_mhz }} · {{ schedule_ident_short }} {{ time_utc }} TU
+        TX {{ tx_mhz }} MHz USB · {{ schedule_ident_short }} {{ time_utc }} TU
       </p>
       <p class="kiwi-ident__qrg">
         {{ t('tx_on_air') }} : {{ bulletin_tx_label | default('F6KUF') }}
@@ -160,7 +160,7 @@
             <tr><th>{{ t('role') }}</th><th>{{ t('receiver') }}</th><th>{{ t('distance_tx') }}</th><th>{{ t('fleet') }}</th></tr>
           </thead>
           <tbody>
-            {% for k in beam_kiwis or [] %}
+            {% for k in (kiwis or []) + (beam_kiwis or []) %}
             <tr>
               <td>{{ k.site_label or k.site }}</td>
               <td><a href="{{ k.url }}" rel="noreferrer">{{ k.name }}</a></td>
