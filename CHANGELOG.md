@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.2.3 — 2026-10-09
+
+- Globe : le libellé des glaces reste sur le parallèle 48° S. Au zoom ou après une rotation, la partie du cercle derrière le limbe n’entraînait plus les lettres vers le centre du disque.
+
 ## 2.2.2 — 2026-10-09
 
 - Globe : le libellé des glaces suit le parallèle 48° S, lettre par lettre, comme les distances suivent leur trait.

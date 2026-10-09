@@ -499,38 +499,75 @@
     return n > 90 && n < 270 ? 180 : 0;
   }
 
-  // Échantillons du parallèle, puis le tronçon continu qui contient l’ancre
-  // (un saut d’écran = le méridien passe derrière le globe).
+  // Horizon : au zoom, une partie du parallèle est derrière le limbe.
+  // Sa projection revient vers le centre du disque. Sans ce test, le libellé
+  // quitte le cercle selon le zoom et la rotation.
+  function onVisibleDisc(lat, lon) {
+    if (mapMode === "2d") return true;
+    try {
+      if (
+        !globe ||
+        typeof globe.getCoords !== "function" ||
+        typeof globe.camera !== "function" ||
+        typeof globe.getGlobeRadius !== "function"
+      ) {
+        return true;
+      }
+      const p = globe.getCoords(lat, lon, 0);
+      const cam = globe.camera();
+      if (!p || !cam || !cam.position) return true;
+      const R = Number(globe.getGlobeRadius());
+      const cx = cam.position.x;
+      const cy = cam.position.y;
+      const cz = cam.position.z;
+      const clen = Math.hypot(cx, cy, cz);
+      const plen = Math.hypot(p.x, p.y, p.z);
+      if (!(R > 0) || !(plen > 0) || !(clen > R + 1)) return true;
+      const cos = (p.x * cx + p.y * cy + p.z * cz) / (plen * clen);
+      return cos > R / clen + 1e-4;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  // Échantillons du parallèle encore devant le limbe, tronçon qui contient l’ancre.
   function parallelRun(lat, lon) {
     const step = 0.45;
     const half = 55;
-    const pts = [];
+    const runs = [];
+    let cur = [];
+    function flush() {
+      if (cur.length >= 2) runs.push(cur);
+      cur = [];
+    }
     for (let d = -half; d <= half + 1e-6; d += step) {
       let L = lon + d;
       if (L > 180) L -= 360;
       if (L < -180) L += 360;
+      if (!onVisibleDisc(lat, L)) {
+        flush();
+        continue;
+      }
       const p = projectLatLon(lat, L);
-      if (!p) continue;
-      pts.push({ d: d, x: p.x, y: p.y });
+      if (!p) {
+        flush();
+        continue;
+      }
+      if (cur.length) {
+        const prev = cur[cur.length - 1];
+        const jump = Math.hypot(p.x - prev.x, p.y - prev.y);
+        const ref =
+          cur.length >= 2
+            ? Math.hypot(prev.x - cur[cur.length - 2].x, prev.y - cur[cur.length - 2].y)
+            : jump;
+        if (jump > Math.max(90, ref * 4)) flush();
+      }
+      cur.push({ d: d, x: p.x, y: p.y });
     }
-    if (pts.length < 2) return [];
-    const steps = [];
-    for (let i = 1; i < pts.length; i++) {
-      steps.push(Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
-    }
-    const sorted = steps.slice().sort(function (a, b) {
-      return a - b;
-    });
-    const med = sorted[Math.floor(sorted.length / 2)] || 1;
-    const limit = Math.max(90, med * 4);
-    const breaks = [0];
-    for (let i = 0; i < steps.length; i++) {
-      if (steps[i] > limit) breaks.push(i + 1);
-    }
-    breaks.push(pts.length);
-    for (let b = 0; b < breaks.length - 1; b++) {
-      const seg = pts.slice(breaks[b], breaks[b + 1]);
-      if (seg.length >= 2 && seg.some(function (p) { return Math.abs(p.d) < step; })) return seg;
+    flush();
+    for (let i = 0; i < runs.length; i++) {
+      const seg = runs[i];
+      if (seg.some(function (p) { return Math.abs(p.d) < step * 1.5; })) return seg;
     }
     return [];
   }
@@ -540,7 +577,7 @@
     for (let i = 1; i < seg.length; i++) {
       cum.push(cum[i - 1] + Math.hypot(seg[i].x - seg[i - 1].x, seg[i].y - seg[i - 1].y));
     }
-    let anchorS = 0;
+    let anchorS = null;
     for (let i = 1; i < seg.length; i++) {
       if (seg[i - 1].d <= 0 && seg[i].d >= 0) {
         const spanD = seg[i].d - seg[i - 1].d || 1;
@@ -548,6 +585,18 @@
         anchorS = cum[i - 1] + t * (cum[i] - cum[i - 1]);
         break;
       }
+    }
+    if (anchorS == null) {
+      let best = 0;
+      let bestAbs = Infinity;
+      for (let i = 0; i < seg.length; i++) {
+        const ad = Math.abs(seg[i].d);
+        if (ad < bestAbs) {
+          bestAbs = ad;
+          best = i;
+        }
+      }
+      anchorS = cum[best];
     }
     function tangent(i0, i1) {
       const dx = seg[i1].x - seg[i0].x;
