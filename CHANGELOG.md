@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 2.1.1 — 2026-10-09
+
+- À propos et accueil : Guy F4DAI / F6KUF émet depuis Saint-Christophe-du-Ligneron. Philippe F4HWM (Talmont-Saint-Hilaire) n’émet plus.
+- Les Kiwi du bulletin sont décrits et visés selon la flotte (centroïde des skippers suivis). QTH France : 46°49′30″ N, 1°45′43″ W.
+
 ## 2.1.0 — 2026-10-09
 
 - Bulletin uniquement sur **14.135 MHz USB** (bande 20 m). Plus d’enregistrement ni de réglage des QRG 12.418 et 16.551 MHz.

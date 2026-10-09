@@ -1,18 +1,19 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "2.1.0"
+version: "2.1.1"
 
 club:
   callsign: F6KUF
   name: "Radio-club F6KUF"
 
 # QTH d’émission (max 5). Pointillé globe → centroïde des skippers suivis.
-# Semaine du 21 sept. 2026 : Philippe F4HWM / F6KUF depuis Talmont-Saint-Hilaire
-# (habituellement Guy F4DAI / F6KUF, Saint-Christophe-du-Ligneron).
+# France : Guy F4DAI / F6KUF, Saint-Christophe-du-Ligneron.
+# Commune : 46°49′30″ N, 1°45′43″ W (Wikipédia).
+# Philippe F4HWM (Talmont-Saint-Hilaire) n’émet plus le bulletin.
 tx_sites:
-  - label: Philippe F4HWM / F6KUF
-    loc: Talmont-Saint-Hilaire, Vendée
-    lat: 46.46806
-    lon: -1.61694
+  - label: Guy F4DAI / F6KUF
+    loc: Saint-Christophe-du-Ligneron, Vendée
+    lat: 46.82500
+    lon: -1.76194
   - label: Cap Town
     lat: -33.9249
     lon: 18.4241
@@ -94,11 +95,11 @@ sdr:
   # QRG d’enregistrement = 14135.0 kHz (pas de chasse USB sur le trafic programmé).
   sites:
     france:
-      # Talmont-Saint-Hilaire, Vendée — Philippe F4HWM / F6KUF (semaine du 21 sept. 2026)
-      # WGS84 46.46806°N 1.61694°W (Wikipedia, commune).
-      lat: 46.46806
-      lon: -1.61694
-      label: Philippe F4HWM / F6KUF
+      # Saint-Christophe-du-Ligneron, Vendée — Guy F4DAI / F6KUF.
+      # 46°49′30″ N, 1°45′43″ W (Wikipédia, commune).
+      lat: 46.82500
+      lon: -1.76194
+      label: Guy F4DAI / F6KUF
       radius_km: 1500
     cape:
       # Le Cap 33°55′30″S 18°25′27″E — recouvrement SA / début Indien

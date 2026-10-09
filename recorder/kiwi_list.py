@@ -364,7 +364,8 @@ _OMNI_MAX = 10
 _OMNI_DEFAULT = 5
 
 _SDR_SITE_DEFAULTS: dict[str, dict[str, Any]] = {
-    "france": {"label": "Philippe F4HWM / F6KUF", "lat": 46.46806, "lon": -1.61694, "radius_km": 1500.0},
+    # Saint-Christophe-du-Ligneron : 46°49′30″ N, 1°45′43″ W (Wikipédia).
+    "france": {"label": "Guy F4DAI / F6KUF", "lat": 46.82500, "lon": -1.76194, "radius_km": 1500.0},
     "cape": {"label": "Cap Town", "lat": -33.9249, "lon": 18.4241, "radius_km": 2000.0},
     "tahiti": {"label": "Michel FO5QB / F6KUF", "lat": -17.5350, "lon": -149.5697, "radius_km": 2500.0},
 }

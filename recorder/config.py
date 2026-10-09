@@ -52,6 +52,8 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
             cfg = _deep_merge(cfg, extra)
     if _migrate_drop_marine_ack(cfg):
         _strip_marine_ack_settings(cfg)
+    if _migrate_guy_qth(cfg):
+        _rewrite_guy_qth_settings(cfg)
     if _migrate_drop_buddy(cfg):
         # Réécrit settings sans clé buddy (skippers déjà dans fleet).
         path = _settings_file(cfg)
@@ -159,6 +161,81 @@ def _strip_marine_ack_settings(cfg: dict[str, Any]) -> None:
         if _beam_stale(sdr.get("beam")):
             sdr.pop("beam", None)
     path.write_text(json.dumps(extra, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+# Talmont-Saint-Hilaire, QTH Philippe F4HWM (semaine du 21 sept. 2026).
+_PHILIPPE_LAT = 46.46806
+_PHILIPPE_LON = -1.61694
+# Saint-Christophe-du-Ligneron : 46°49′30″ N, 1°45′43″ W (Wikipédia, commune).
+_GUY_LAT = 46.82500
+_GUY_LON = -1.76194
+_GUY_LABEL = "Guy F4DAI / F6KUF"
+_GUY_LOC = "Saint-Christophe-du-Ligneron, Vendée"
+
+
+def _is_philippe_qth(row: dict[str, Any]) -> bool:
+    """Ancien QTH France (Philippe / Talmont), pas un autre site posé à la main."""
+    label = str(row.get("label") or "")
+    loc = str(row.get("loc") or "")
+    if "F4HWM" in label or "Philippe" in label or "Talmont" in label or "Talmont" in loc:
+        return True
+    try:
+        lat = float(row["lat"])
+        lon = float(row["lon"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return abs(lat - _PHILIPPE_LAT) < 1e-4 and abs(lon - _PHILIPPE_LON) < 1e-4
+
+
+def _apply_guy_qth(row: dict[str, Any], *, with_loc: bool) -> None:
+    row["label"] = _GUY_LABEL
+    row["lat"] = _GUY_LAT
+    row["lon"] = _GUY_LON
+    if with_loc or "loc" in row:
+        row["loc"] = _GUY_LOC
+
+
+def _migrate_guy_qth(cfg: dict[str, Any]) -> bool:
+    """Philippe n’émet plus : le QTH France redevient Guy F4DAI."""
+    changed = False
+    sites = cfg.get("tx_sites")
+    if isinstance(sites, list):
+        for row in sites:
+            if isinstance(row, dict) and _is_philippe_qth(row):
+                _apply_guy_qth(row, with_loc=True)
+                changed = True
+    france = ((cfg.get("sdr") or {}).get("sites") or {}).get("france")
+    if isinstance(france, dict) and _is_philippe_qth(france):
+        _apply_guy_qth(france, with_loc=False)
+        changed = True
+    return changed
+
+
+def _rewrite_guy_qth_settings(cfg: dict[str, Any]) -> None:
+    """Réécrit settings.json si un QTH Philippe y était figé."""
+    path = _settings_file(cfg)
+    if not path.is_file():
+        return
+    try:
+        extra = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(extra, dict):
+        return
+    changed = False
+    sites = extra.get("tx_sites")
+    if isinstance(sites, list):
+        for row in sites:
+            if isinstance(row, dict) and _is_philippe_qth(row):
+                _apply_guy_qth(row, with_loc=True)
+                changed = True
+    sdr = extra.get("sdr")
+    france = (sdr.get("sites") or {}).get("france") if isinstance(sdr, dict) else None
+    if isinstance(france, dict) and _is_philippe_qth(france):
+        _apply_guy_qth(france, with_loc=False)
+        changed = True
+    if changed:
+        path.write_text(json.dumps(extra, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _migrate_drop_buddy(cfg: dict[str, Any]) -> bool:
@@ -499,4 +576,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
             return pkg_version("ggr-vacations")
         except PackageNotFoundError:
             cfg = cfg or {}
-            return str(cfg.get("version") or "2.1.0")
+            return str(cfg.get("version") or "2.1.1")

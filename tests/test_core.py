@@ -1270,6 +1270,74 @@ def test_qrg_context_includes_tx_sites():
     assert qrg["tx_sites"][0]["lon"] == -1.7888
 
 
+def test_philippe_qth_migrates_to_guy(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    (tmp_path / "settings.json").write_text(
+        json.dumps(
+            {
+                "tx_sites": [
+                    {
+                        "label": "Philippe F4HWM / F6KUF",
+                        "loc": "Talmont-Saint-Hilaire, Vendée",
+                        "lat": 46.46806,
+                        "lon": -1.61694,
+                    },
+                    {
+                        "label": "Michel FO5QB / F6KUF",
+                        "loc": "Tahiti",
+                        "lat": -17.5350,
+                        "lon": -149.5697,
+                    },
+                ],
+                "sdr": {
+                    "sites": {
+                        "france": {
+                            "label": "Philippe F4HWM / F6KUF",
+                            "lat": 46.46806,
+                            "lon": -1.61694,
+                            "radius_km": 1500,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    from recorder.config import load_config
+
+    cfg = load_config()
+    guy = cfg["tx_sites"][0]
+    assert guy["label"] == "Guy F4DAI / F6KUF"
+    assert guy["loc"] == "Saint-Christophe-du-Ligneron, Vendée"
+    assert guy["lat"] == 46.82500
+    assert guy["lon"] == -1.76194
+    assert cfg["tx_sites"][1]["label"] == "Michel FO5QB / F6KUF"
+    france = cfg["sdr"]["sites"]["france"]
+    assert france["label"] == "Guy F4DAI / F6KUF"
+    assert france["lat"] == 46.82500
+    assert france["lon"] == -1.76194
+    assert france["radius_km"] == 1500
+    saved = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
+    blob = json.dumps(saved)
+    assert "Philippe" not in blob
+    assert "F4HWM" not in blob
+    assert saved["tx_sites"][1]["lat"] == -17.5350
+
+
+def test_default_france_qth_is_guy(tmp_path, monkeypatch):
+    monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
+    from recorder.config import load_config
+
+    cfg = load_config()
+    france = cfg["sdr"]["sites"]["france"]
+    assert france["label"] == "Guy F4DAI / F6KUF"
+    assert france["lat"] == 46.82500
+    assert france["lon"] == -1.76194
+    assert cfg["tx_sites"][0]["label"] == "Guy F4DAI / F6KUF"
+
+
 def test_marine_ack_stripped_from_settings(tmp_path, monkeypatch):
     import json
 
