@@ -59,13 +59,6 @@ window.GgrMixer = (function () {
   const playBtn = document.getElementById("mix-play");
   const timeEl = document.getElementById("mix-time");
   const audioLoadEl = document.getElementById("mix-audio-load");
-  const audioLoadTxt = document.getElementById("mix-audio-load-txt") || audioLoadEl;
-  const audioLoadFill = document.getElementById("mix-audio-load-fill");
-  let audioWarming = false;
-  let audioLoadPoll = 0;
-  let readyFlashUntil = 0;
-  let readyFlashTid = 0;
-  let readyAnnounced = false;
   const seekEl = document.getElementById("mix-seek");
   const loopBtn = document.getElementById("mix-loop");
   const loopLab = document.getElementById("mix-loop-lab");
@@ -530,286 +523,46 @@ window.GgrMixer = (function () {
     updateHead();
   }
 
-  function bufferedPct(el) {
-    if (!el || !el.buffered || !el.buffered.length) return 0;
-    const dur = el.duration;
-    if (!Number.isFinite(dur) || dur <= 0) return 0;
-    try {
-      return Math.min(100, (el.buffered.end(el.buffered.length - 1) / dur) * 100);
-    } catch {
-      return 0;
-    }
-  }
-
-  /** Secondes de buffer déjà présentes après la tête de lecture. */
-  function bufferAheadSec(el) {
-    if (!el || !el.buffered || !el.buffered.length) return 0;
-    const cur = Number.isFinite(el.currentTime) ? el.currentTime : 0;
-    try {
-      for (let i = 0; i < el.buffered.length; i++) {
-        const a = el.buffered.start(i);
-        const b = el.buffered.end(i);
-        if (cur + 0.35 < a || cur - 0.35 > b) continue;
-        return Math.max(0, b - cur);
-      }
-    } catch {
-      /* ignore */
-    }
-    return 0;
-  }
-
-  /** Portion utile autour de currentTime (deep-link / seek milieu). */
-  function bufferAroundPct(el) {
-    if (!el) return 0;
-    const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
-    const need = Math.min(12, dur ? Math.max(4, dur * 0.02) : 8);
-    const ahead = bufferAheadSec(el);
-    if (ahead <= 0) return 0;
-    return Math.min(100, Math.round((ahead / need) * 100));
-  }
-
-  /**
-   * Jauge monotone : ne redescend jamais (sauf reset seek).
-   * 100 % uniquement si trackPlayable ; sinon plafond 99.
-   * Progression = max(buffer autour de la tête, % durée déjà reçue).
-   */
-  function trackLoadPct(tr) {
-    const el = tr && tr.el;
-    if (!el) return 0;
-    if (trackPlayable(tr)) return 100;
-    const prev = Math.min(99, Number(tr.loadPct) || 0);
-    const needSec = 8;
-    const fromBuf = Math.min(99, Math.round((bufferAheadSec(el) / needSec) * 100));
-    const fromDur = Math.min(99, Math.round(bufferedPct(el)));
-    let next = Math.max(prev, fromBuf, fromDur > 0 ? Math.max(fromDur, 5) : 0);
-    const rs = el.readyState || 0;
-    if (rs >= 1 && next < 8) next = Math.max(next, Math.min(8, prev + 0.3));
-    if (el.networkState === 2 && next < 95) next = Math.min(95, Math.max(next, prev) + 0.55);
-    return Math.min(99, Math.round(Math.max(prev, next)));
-  }
-
-  /** Estimation secondes restantes avant piste jouable (tampon navigateur). */
-  function bufferEtaSec(tr) {
-    const el = tr && tr.el;
-    if (!el || trackPlayable(tr)) return 0;
-    const need = 2.5;
-    const ahead = bufferAheadSec(el);
-    const left = Math.max(0.2, need - ahead);
-    const now = Date.now();
-    if (!tr._bufHist) tr._bufHist = [];
-    tr._bufHist.push({ t: now, ahead: ahead });
-    while (tr._bufHist.length > 25) tr._bufHist.shift();
-    let rate = 0;
-    if (tr._bufHist.length >= 3) {
-      const a = tr._bufHist[0];
-      const b = tr._bufHist[tr._bufHist.length - 1];
-      const dt = (b.t - a.t) / 1000;
-      if (dt >= 0.4) rate = (b.ahead - a.ahead) / dt;
-    }
-    if (rate > 0.08) return Math.max(1, Math.ceil(left / rate));
-    if (el.networkState === 2) return Math.max(2, Math.ceil(left / 0.6));
-    const pct = bufferedPct(el);
-    if (pct > 2 && pct < 100) {
-      const remainFrac = Math.max(0.05, (100 - pct) / 100);
-      return Math.max(2, Math.ceil(remainFrac * 25));
-    }
-    return Math.max(3, Math.ceil(left * 3));
-  }
-
-  function maxBufferEtaSec(rows) {
-    let m = 0;
-    rows.forEach((tr) => {
-      if (!trackPlayable(tr)) m = Math.max(m, bufferEtaSec(tr));
-    });
-    return m;
-  }
-
-  function bufferedAt(el, t) {
-    if (!el || !el.buffered || !el.buffered.length) return false;
-    const cur = Number.isFinite(t) ? t : Number.isFinite(el.currentTime) ? el.currentTime : 0;
-    try {
-      for (let i = 0; i < el.buffered.length; i++) {
-        const a = el.buffered.start(i);
-        const b = el.buffered.end(i);
-        if (a - 0.35 <= cur && cur + 1.2 <= b) return true;
-      }
-    } catch {
-      /* ignore */
-    }
-    return false;
-  }
-
-  function playheadCovered(tr) {
-    const el = tr && tr.el;
-    if (!el) return false;
-    const ahead = bufferAheadSec(el);
-    // Prêt = vraie avance derrière la tête, pas un readyState optimiste.
-    return ahead >= 2.5;
-  }
-
+  /** Prêt à lancer : metadata + un peu de données (pas de jauge tampon). */
   function trackPlayable(tr) {
     const el = tr && tr.el;
     if (!el) return false;
-    if ((el.readyState || 0) < 2) return false;
-    return playheadCovered(tr);
+    return (el.readyState || 0) >= 2;
+  }
+
+  function updateAudioLoad() {
+    /* jauges retraitées — plus d’UI tampon */
+  }
+
+  function setTrackLoad() {
+    /* no-op */
+  }
+
+  function setExtract(tr, _pct, done) {
+    if (!tr) return;
+    if (done) tr.extractBusy = false;
+    else tr.extractBusy = true;
   }
 
   function resetTrackLoad(tr) {
-    if (!tr) return;
-    tr.loadPct = 0;
-    if (!tr.extractBusy) setTrackLoad(tr, 1, { label: t("audio_load") });
-  }
-
-  function setAudioLoadPoll(on) {
-    if (on) {
-      if (audioLoadPoll) return;
-      audioLoadPoll = window.setInterval(updateAudioLoad, 100);
-      return;
-    }
-    if (!audioLoadPoll) return;
-    clearInterval(audioLoadPoll);
-    audioLoadPoll = 0;
+    if (tr) tr.loadPct = 0;
   }
 
   function hideGlobalAudioLoad() {
     if (!audioLoadEl) return;
     audioLoadEl.hidden = true;
-    if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = "";
-    else audioLoadEl.textContent = "";
-    if (audioLoadFill) audioLoadFill.style.width = "0%";
-    setAudioLoadPoll(false);
-  }
-
-  function flashReady(ready, n) {
-    if (!audioLoadEl || readyAnnounced) {
-      hideGlobalAudioLoad();
-      return;
-    }
-    readyAnnounced = true;
-    readyFlashUntil = Date.now() + 900;
-    if (readyFlashTid) clearTimeout(readyFlashTid);
-    const msg = t("audio_ready", { ready: ready, n: n });
-    audioLoadEl.hidden = false;
-    if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = msg;
-    else audioLoadEl.textContent = msg;
-    if (audioLoadFill) audioLoadFill.style.width = "100%";
-    audioLoadEl.title = msg;
-    readyFlashTid = window.setTimeout(() => {
-      readyFlashTid = 0;
-      readyFlashUntil = 0;
-      hideGlobalAudioLoad();
-    }, 950);
-  }
-
-  function updateAudioLoad() {
-    const live = tracks.filter((tr) => tr.el && !tr.dead && liveForPlay(tr));
-    const canPlay = live.filter((tr) => trackPlayable(tr)).length;
-    const seekGap = live.some((tr) => (tr.el.seeking || seekGate) && !playheadCovered(tr));
-    const starving = playing && live.some((tr) => !trackPlayable(tr));
-    const warmingGap = audioWarming && live.some((tr) => !trackPlayable(tr));
-    const busy = !!(live.length && (audioWarming || seekGap || starving || warmingGap));
-    const allReady = !!(live.length && live.every((tr) => trackPlayable(tr)));
-    const waiting = live.filter((tr) => !trackPlayable(tr));
-    const eta = maxBufferEtaSec(waiting);
-
-    if (audioWarming && !playing && allReady) {
-      audioWarming = false;
-    }
-
-    live.forEach((tr) => {
-      if (tr.extractBusy) return;
-      if (trackPlayable(tr) || tr.dead) {
-        setTrackLoad(tr, 100, { done: true });
-        return;
-      }
-      const pct = Math.max(1, Math.round(trackLoadPct(tr)));
-      tr.loadPct = pct;
-      const sec = bufferEtaSec(tr);
-      const label = seekGap && !audioWarming
-        ? t("audio_seek")
-        : t("audio_buf_track", { sec: sec });
-      setTrackLoad(tr, pct, { label: label });
-    });
-
-    if (!audioLoadEl) {
-      setAudioLoadPoll(busy || live.some((tr) => tr.extractBusy || !trackPlayable(tr)));
-      return;
-    }
-    if (!live.length) {
-      hideGlobalAudioLoad();
-      return;
-    }
-    if (allReady && !busy) {
-      audioWarming = false;
-      if (Date.now() < readyFlashUntil) {
-        setAudioLoadPoll(false);
-        return;
-      }
-      flashReady(canPlay, live.length);
-      if (live.some((tr) => tr.extractBusy)) setAudioLoadPoll(true);
-      return;
-    }
-    const stillLoading = waiting.length > 0;
-    if (!busy && !stillLoading) {
-      audioWarming = false;
-      flashReady(canPlay, live.length);
-      return;
-    }
-    if (busy || stillLoading) readyAnnounced = false;
-    const pcts = live.map((tr) => {
-      if (tr.extractBusy) return Number(tr.loadPct) || 0;
-      return trackPlayable(tr) ? 100 : trackLoadPct(tr);
-    });
-    const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
-    const shown = canPlay >= live.length ? 100 : Math.min(99, Math.max(1, avg));
-    let msg;
-    if (seekGap && shown < 5) msg = t("audio_seek");
-    else {
-      msg = t("audio_buf_eta", { pct: shown, ready: canPlay, n: live.length, sec: Math.max(1, eta) });
-      audioLoadEl.title = t("audio_why_browser");
-    }
-    audioLoadEl.hidden = false;
-    if (audioLoadTxt && audioLoadTxt !== audioLoadEl) audioLoadTxt.textContent = msg;
-    else audioLoadEl.textContent = msg;
-    if (audioLoadFill) {
-      audioLoadFill.style.width = Math.max(2, shown) + "%";
-    }
-    if (!audioLoadEl.title) audioLoadEl.title = msg;
-    setAudioLoadPoll(true);
   }
 
   function warmAudioAt(off) {
     const live = tracks.filter((tr) => tr.el && !tr.dead);
-    if (!live.length) return;
-    audioWarming = true;
-    readyAnnounced = false;
     live.forEach((tr) => {
-      resetTrackLoad(tr);
       try {
         tr.el.preload = "auto";
         if (!tr.el.getAttribute("src") && tr.src) tr.el.src = media(tr.src);
-        // Relance le buffer sans détruire le média déjà partiellement chargé.
-        if ((tr.el.readyState || 0) < 2) tr.el.load();
+        seekElTo(tr, off);
       } catch {
         /* ignore */
       }
-    });
-    updateAudioLoad();
-    Promise.all(live.map((tr) => waitSeek(tr, off))).then(() => {
-      const tid = window.setInterval(() => {
-        updateAudioLoad();
-        const ok = live.every((tr) => trackPlayable(tr));
-        if (ok || playing) {
-          clearInterval(tid);
-          if (!playing) audioWarming = false;
-          updateAudioLoad();
-        }
-      }, 200);
-      window.setTimeout(() => {
-        clearInterval(tid);
-        if (!playing) audioWarming = false;
-        updateAudioLoad();
-      }, 25000);
     });
   }
 
@@ -883,12 +636,10 @@ window.GgrMixer = (function () {
     const off = clampLoopTime(Math.max(0, offset || 0));
     t0 = off;
     playing = true;
-    seekGate = true;
+    seekGate = false;
     trLastTickT = null;
     noteReplayPlay();
     const all = tracks.filter((tr) => tr.el && !tr.dead);
-    const needWarm = all.some((tr) => !trackPlayable(tr));
-    audioWarming = needWarm;
     all.forEach((tr) => {
       try {
         tr.el.preload = "auto";
@@ -896,80 +647,38 @@ window.GgrMixer = (function () {
       } catch {
         /* ignore */
       }
-      // Débloquer l’autoplay sans laisser les pistes définitivement mutées.
-      applyGain(tr);
-      const silentWarm = !!(focusId && tr.id !== focusId) || !!tr.muted;
-      tr.el.muted = true;
-      const p = tr.el.play();
-      if (p && typeof p.then === "function") {
-        p.then(() => {
-          if (gen !== playGen) return;
-          if (!silentWarm) applyGain(tr);
-        }).catch(() => {
-          try {
-            if ((tr.el.readyState || 0) < 1) tr.el.load();
-          } catch {
-            /* ignore */
-          }
-        });
+      if (focusId && tr.id !== focusId) {
+        try {
+          tr.el.pause();
+        } catch {
+          /* ignore */
+        }
+        applyGain(tr);
+        return;
       }
+      seekElTo(tr, off);
+      applyGain(tr);
+      const kick = () => {
+        if (gen !== playGen || !playing) return;
+        applyGain(tr);
+        tr.el.play().catch(() => {});
+      };
+      tr.el.play().then(kick).catch(() => {
+        tr.el.addEventListener("canplay", kick, { once: true });
+        window.setTimeout(kick, 400);
+      });
     });
-    updateAudioLoad();
     setPlayUi(true);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
     updateHead();
-    const goPlay = () => {
-      if (gen !== playGen || !playing) return;
-      seekGate = false;
-      t0 = off;
-      all.forEach((tr) => {
-        if (focusId && tr.id !== focusId) {
-          try {
-            tr.el.pause();
-          } catch {
-            /* ignore */
-          }
-          applyGain(tr);
-          return;
-        }
-        seekElTo(tr, off);
-        applyGain(tr);
-        const kick = () => {
-          if (gen !== playGen || !playing) return;
-          applyGain(tr);
-          tr.el.play().catch(() => {});
-        };
-        tr.el.play().then(kick).catch(() => {
-          tr.el.addEventListener("canplay", kick, { once: true });
-          window.setTimeout(kick, 400);
-        });
-      });
-      // Garder le bandeau tant qu’une piste n’est pas réellement jouable.
-      audioWarming = all.some((tr) => !trackPlayable(tr));
-      updateAudioLoad();
-      tickTimer = setInterval(tick, 50);
-      raf = requestAnimationFrame(function loop() {
-        tick();
-        if (playing) raf = requestAnimationFrame(loop);
-      });
-    };
-    Promise.all(all.map((tr) => waitSeek(tr, off))).then(() => {
-      if (gen !== playGen || !playing) return;
-      const clock = clockTrack();
-      const cur = clock && clock.el && Number.isFinite(clock.el.currentTime) ? clock.el.currentTime : off;
-      const lp = loopOn ? loopBounds() : null;
-      if (lp && clock && clock.el && clock.el.readyState >= 1 && (cur < lp.a - 1 || cur >= lp.b - 0.02)) {
-        all.forEach((tr) => seekElTo(tr, off));
-        window.setTimeout(goPlay, 80);
-        return;
-      }
-      goPlay();
+    tickTimer = setInterval(tick, 50);
+    raf = requestAnimationFrame(function loop() {
+      tick();
+      if (playing) raf = requestAnimationFrame(loop);
     });
-    window.setTimeout(() => {
-      if (gen === playGen && seekGate) goPlay();
-    }, needWarm ? 1800 : 350);
   }
+
 
   function setPlayUi(on) {
     playBtn.setAttribute("aria-pressed", on ? "true" : "false");
@@ -994,53 +703,30 @@ window.GgrMixer = (function () {
   function pauseAt(t) {
     playGen += 1;
     seekGate = false;
-    audioWarming = false;
     t0 = Math.max(0, Math.min(duration || t, t));
     playing = false;
     tracks.forEach((tr) => {
       if (tr.el) tr.el.pause();
-      if (tr.extractBusy) return;
-      if (trackPlayable(tr) || tr.dead) setTrackLoad(tr, 100, { done: true });
-      else {
-        const pct = Math.round(trackLoadPct(tr));
-        tr.loadPct = pct;
-        if (pct > 0) setTrackLoad(tr, pct, { label: t("audio_load") });
-        else setTrackLoad(tr, 0, { done: true });
-      }
     });
     setPlayUi(false);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
     updateHead();
-    updateAudioLoad();
   }
+
 
   function tick() {
     if (!playing) return;
     if (seekGate) {
       updateHead();
-      updateAudioLoad();
       return;
     }
     const clock = clockTrack();
-    if (clock && clock.el && clock.el.readyState < 2) {
-      // Buffering : la tête reste, la jauge avance (creep).
-      updateHead();
-      updateAudioLoad();
-      return;
-    }
     const t = nowT();
-    // Si currentTime ne bouge plus alors qu’on joue → famine buffer.
     if (clock && clock.el && !clock.el.paused && Number.isFinite(clock.el.currentTime)) {
-      const cur = clock.el.currentTime;
-      if (trLastTickT == null) trLastTickT = cur;
-      if (Math.abs(cur - trLastTickT) < 0.001 && (clock.el.readyState || 0) < 3) {
-        updateAudioLoad();
-      }
-      trLastTickT = cur;
+      trLastTickT = clock.el.currentTime;
     }
     updateHead();
-    updateAudioLoad();
     const lp = loopOn ? loopBounds() : null;
     if (lp) {
       if (t >= lp.b - 0.02 || t < lp.a - 1) {
@@ -1050,6 +736,7 @@ window.GgrMixer = (function () {
     }
     if (duration && t >= duration - 0.03) pauseAt(duration);
   }
+
 
   function restartLoop(a) {
     tracks.forEach((tr) => {
@@ -1078,20 +765,19 @@ window.GgrMixer = (function () {
       });
       cancelAnimationFrame(raf);
       clearInterval(tickTimer);
+      setPlayUi(false);
     }
     tracks.forEach((tr) => {
       if (!tr.el) return;
-      resetTrackLoad(tr);
       try {
         tr.el.currentTime = t0;
       } catch {
         /* ignore */
       }
     });
-    audioWarming = true;
     updateHead();
-    updateAudioLoad();
   }
+
 
   function pointerTime(ev, canvas) {
     const rect = canvas.getBoundingClientRect();
@@ -1367,14 +1053,7 @@ window.GgrMixer = (function () {
           esc(qrg) +
           '"></canvas>' +
           '<p class="mix__wf-legend" hidden>USB 0 Hz (bas) → 2,7 kHz (haut) · noir/bleu = bruit · cyan/vert = signal · jaune/blanc = fort</p>' +
-          (tr.dead
-            ? ""
-            : '<div class="mix__wf-load" hidden>' +
-              '<i class="mix__wf-load-fill" aria-hidden="true"></i>' +
-              '<span class="mix__wf-load-txt">' +
-              t("audio_load") +
-              " · 0 %</span></div>") +
-          '<div class="mix__loop" hidden>' +
+                    '<div class="mix__loop" hidden>' +
           '<div class="mix__loop-dim mix__loop-dim--l"></div>' +
           '<div class="mix__loop-sel">' +
           '<button type="button" class="mix__loop-h mix__loop-h--a" aria-label="Borne A de la boucle"></button>' +
@@ -1393,7 +1072,6 @@ window.GgrMixer = (function () {
       tr.wave = el.querySelector("canvas.mix__wave");
       tr.legend = el.querySelector(".mix__wf-legend");
       tr.head = el.querySelector(".mix__head");
-      tr.loadEl = el.querySelector(".mix__wf-load");
       tr.loopEl = el.querySelector(".mix__loop");
       const muteBtn = el.querySelector('[data-act="mute"]');
       const vol = el.querySelector('[data-act="vol"]');
@@ -1432,15 +1110,10 @@ window.GgrMixer = (function () {
       pauseAt(nowT());
       return;
     }
-    const live = tracks.filter((tr) => tr.el && !tr.dead && liveForPlay(tr));
-    const waiting = live.filter((tr) => !trackPlayable(tr));
-    if (waiting.length) {
-      audioWarming = true;
-      readyAnnounced = false;
-      updateAudioLoad();
-    }
+    if (playBtn.disabled) return;
     startSources(clampLoopTime(duration && duration - t0 < 0.08 ? 0 : t0));
   }
+
 
   playBtn.addEventListener("click", playToggle, sig);
   if (loopBtn) {
@@ -1492,41 +1165,6 @@ window.GgrMixer = (function () {
     updateLoopUi();
   }
 
-  function setTrackLoad(tr, pct, opts) {
-    const el = tr && tr.loadEl;
-    if (!el) return;
-    const done = !!(opts && opts.done);
-    if (done || (tr && tr.dead)) {
-      el.hidden = true;
-      if (tr.dead || trackPlayable(tr)) tr.loadPct = 100;
-      else if (tr) tr.loadPct = Math.min(99, Number(tr.loadPct) || 0);
-      return;
-    }
-    const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
-    tr.loadPct = n;
-    el.hidden = false;
-    const fill = el.querySelector(".mix__wf-load-fill");
-    const txt = el.querySelector(".mix__wf-load-txt");
-    const label = (opts && opts.label) || t("audio_load");
-    if (fill) fill.style.width = n + "%";
-    if (txt) txt.textContent = label + " · " + n + " %";
-    else el.textContent = label + " · " + n + " %";
-  }
-
-  function setExtract(tr, pct, done) {
-    if (!tr) return;
-    if (done) {
-      tr.extractBusy = false;
-      setTrackLoad(tr, 100, { done: true });
-      // Réaffiche la jauge audio si le buffer n’est pas encore jouable.
-      updateAudioLoad();
-      return;
-    }
-    tr.extractBusy = true;
-    setTrackLoad(tr, pct, { label: t("audio_extract") });
-    setAudioLoadPoll(true);
-  }
-
   function attachAudio(tr) {
     if (tr.dead || !tr.src) {
       if (!tr.storedWf) bakeSpec(tr, false);
@@ -1535,7 +1173,7 @@ window.GgrMixer = (function () {
     }
     const url = media(tr.src);
     tr.el = new Audio(url);
-    // auto : stream immédiat (son + jauge buffer), sans attendre un prefetch blob.
+    // auto : stream HTML5 immédiat, sans jauge tampon.
     tr.el.preload = "auto";
     tr.el.controls = false;
     tr.el.hidden = true;
@@ -1806,6 +1444,12 @@ window.GgrMixer = (function () {
 
   async function load() {
     root.hidden = false;
+    const status =
+      (opts.status != null && String(opts.status)) ||
+      root.getAttribute("data-status") ||
+      "";
+    const recording = String(status).toLowerCase() === "running";
+
     spec.forEach((row, i) => {
       const src = row.src || "";
       const dead = !src || row.has_audio === false;
@@ -1833,11 +1477,16 @@ window.GgrMixer = (function () {
         loadPct: 0,
       });
     });
+
     if (!tracks.length) {
-      if (statusEl) statusEl.textContent = t("no_tracks");
+      if (statusEl) {
+        statusEl.hidden = false;
+        statusEl.textContent = recording ? t("mix_recording") : t("no_tracks");
+      }
       playBtn.disabled = true;
       return;
     }
+
     renderDesk();
     requestAnimationFrame(() => {
       tracks.forEach((tr) => {
@@ -1845,62 +1494,64 @@ window.GgrMixer = (function () {
         drawTrack(tr);
       });
     });
-    if (statusEl) statusEl.textContent = t("wf_loading");
-    playBtn.disabled = true;
-    // Affichage : PNG waterfall + peaks JSON précalculés serveur (pas de WAV).
-    await Promise.all(
+
+    const live = tracks.filter((tr) => !tr.dead).length;
+    if (recording && live === 0) {
+      if (statusEl) {
+        statusEl.hidden = false;
+        statusEl.textContent = t("mix_recording");
+      }
+      playBtn.disabled = true;
+      void Promise.all(
+        tracks.map(async (tr) => {
+          await Promise.all([loadStoredWf(tr), loadPeaks(tr)]);
+        })
+      );
+      return;
+    }
+
+    // Audio d’abord : play accessible sans attendre waterfall / peaks / tampon.
+    tracks.forEach(attachAudio);
+    playBtn.disabled = live === 0;
+    if (statusEl) {
+      statusEl.hidden = false;
+      statusEl.textContent = live
+        ? t("mix_ready", { live: live, n: tracks.length })
+        : recording
+          ? t("mix_recording")
+          : t("no_audio");
+    }
+    updateHead();
+    applyDeepFocus();
+    if (!deepTimePending) applyDeepTime();
+
+    void Promise.all(tracks.map((tr) => waitDuration(tr, deepTimePending ? 12000 : 20000))).then(() => {
+      if (deepTimePending) applyDeepTime();
+    });
+
+    // Waterfall + pics Audacity en parallèle (mixer + zoom).
+    void Promise.all(
       tracks.map(async (tr) => {
         await Promise.all([loadStoredWf(tr), loadPeaks(tr)]);
       })
-    );
-    const painted = tracks.filter((tr) => tr.storedWf).length;
-    tracks.forEach(attachAudio);
-    audioWarming = true;
-    readyAnnounced = false;
-    updateAudioLoad();
-    void Promise.all(tracks.map((tr) => waitDuration(tr, deepTimePending ? 12000 : 20000))).then(() => {
-      if (deepTimePending) applyDeepTime();
-      else {
-        audioWarming = false;
-        updateAudioLoad();
+    ).then(() => {
+      const withPeaks = tracks.filter((tr) => tr.peaks).length;
+      const withWf = tracks.filter((tr) => tr.storedWf).length;
+      if (statusEl && live && (withWf || withPeaks)) {
+        statusEl.textContent = t("mix_visual_ready", { live: live, n: tracks.length });
       }
     });
-    // Fallback : sessions sans PNG — calcul client une seule fois.
+
+    // Fallback anciennes sessions sans PNG serveur.
     tracks.forEach((tr) => {
       if (tr.storedWf || tr.dead) return;
       fetchWav(tr).then((wav) => paintSpec(tr, wav));
     });
-    const live = tracks.filter((tr) => !tr.dead).length;
-    const withPeaks = tracks.filter((tr) => tr.peaks).length;
-    const withWf = tracks.filter((tr) => tr.storedWf).length;
-    if (painted || live) {
-      playBtn.disabled = live === 0;
-      if (statusEl) {
-        if (withWf || withPeaks) {
-          statusEl.textContent = t("mix_visual_ready", { live: live, n: tracks.length });
-        } else {
-          statusEl.textContent = t("mix_ready", { live: live, n: tracks.length });
-        }
-      }
-      updateHead();
-      applyDeepFocus();
-      if (!deepTimePending) applyDeepTime();
-      return;
-    }
-    if (statusEl) statusEl.textContent = t("no_audio");
-    playBtn.disabled = true;
-    applyDeepFocus();
-    if (!deepTimePending) applyDeepTime();
   }
+
 
   function destroy() {
     playing = false;
-    audioWarming = false;
-    readyAnnounced = false;
-    if (readyFlashTid) clearTimeout(readyFlashTid);
-    readyFlashTid = 0;
-    readyFlashUntil = 0;
-    setAudioLoadPoll(false);
     cancelAnimationFrame(raf);
     clearInterval(tickTimer);
     tracks.forEach((tr) => {
@@ -1925,13 +1576,12 @@ window.GgrMixer = (function () {
     window.removeEventListener("resize", onResize);
     if (ro) ro.disconnect();
     ac.abort();
-    if (audioLoadEl) {
-      hideGlobalAudioLoad();
-    }
+    hideGlobalAudioLoad();
     const bin = document.getElementById("mix-audio-bin");
     if (bin) bin.remove();
     if (deskEl) deskEl.innerHTML = "";
   }
+
 
   load();
   return { destroy: destroy };
@@ -1945,7 +1595,13 @@ window.GgrMixer = (function () {
     const zoom = q.get("zoom") === "1" || q.get("zoom") === "true" || q.has("ch");
     const focus = q.get("ch") || q.get("focus") || (zoom ? "0" : "");
     const deepT = q.get("t") || q.get("at") || "";
-    mount({ root: root, zoom: zoom, focus: focus, t: deepT });
+    mount({
+      root: root,
+      zoom: zoom,
+      focus: focus,
+      t: deepT,
+      status: root.getAttribute("data-status") || "",
+    });
   }
 
   if (document.readyState === "loading") {
