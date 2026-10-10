@@ -176,6 +176,11 @@ _UNAVAILABLE_FALLBACK = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GGR Trafic — indisponible</title>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#061018">
 <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body class="globe-page kiwi-panel-off is-map-3d is-unavailable" data-ggr-force-wait="1">
@@ -311,6 +316,16 @@ def _bulletin_utc(cfg) -> datetime:
 async def health():
     # Léger : kubelet poll toutes les 5–15 s. L’état d’enregistrement est sur /api/recording.
     return {"ok": True, "version": version(CFG)}
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Icône d’onglet : le globe, servi aussi hors session (les navigateurs la demandent seuls)."""
+    return FileResponse(
+        ROOT / "static" / "favicon.ico",
+        media_type="image/x-icon",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 def _auth_next(request: Request, fallback: str | None = None) -> str:
