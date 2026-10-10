@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }} {{ version }}{% block title %}{% endblock %}</title>
+  {% include "_icon.html" %}
   <link rel="stylesheet" href="/static/css/app.css?v={{ version }}-kiwi85">
   {% block extra_head %}{% endblock %}
 </head>
@@ -29,14 +30,6 @@
       <span class="qrg__k">{{ t('tx', club=club_callsign) }}</span>
       <span class="qrg__v">{{ tx_mhz }} MHz USB</span>
       <span class="qrg__h">± {{ qrg_tolerance_khz }} kHz · {{ schedule_ident_short }} {{ time_utc }} TU</span>
-    </div>
-    <div class="qrg">
-      <span class="qrg__k">{{ t('ack_16') }}</span>
-      <span class="qrg__v">{{ ack1_mhz }} MHz USB</span>
-    </div>
-    <div class="qrg">
-      <span class="qrg__k">{{ t('ack_12') }}</span>
-      <span class="qrg__v">{{ ack2_mhz }} MHz USB</span>
     </div>
     <div class="qrg qrg--next">
       <span class="qrg__k">{{ t('next_bulletin') }}</span>

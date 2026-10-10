@@ -1,5 +1,48 @@
 # Journal des versions
 
+## 2.2.4 — 2026-10-10
+
+- Icône de l’application : la photo du globe (onglet, écran d’accueil, manifeste).
+
+## 2.2.3 — 2026-10-09
+
+- Globe : le libellé des glaces reste sur le parallèle 48° S. Au zoom ou après une rotation, la partie du cercle derrière le limbe n’entraînait plus les lettres vers le centre du disque.
+
+## 2.2.2 — 2026-10-09
+
+- Globe : le libellé des glaces suit le parallèle 48° S, lettre par lettre, comme les distances suivent leur trait.
+
+## 2.2.1 — 2026-10-09
+
+- Setup : les quatre choix d’un skipper sont Tête, centre, queue et none.
+
+## 2.2.0 — 2026-10-09
+
+- Globe : le parallèle 48° S porte le libellé complet, en français ou en anglais selon la langue. Les pointillés ont la même épaisseur que le cercle de la flotte.
+- Setup : chaque skipper peut être en tête, au centre, en queue, ou dans aucun groupe. Un seul groupe (ou des groupes à moins de 800 km) garde le faisceau de 4 à 6 Kiwi. Au-delà, 2 Kiwi par groupe, sans doubler le même récepteur, 6 au plus. Le screencast reste le plus proche du centre.
+
+## 2.1.4 — 2026-10-09
+
+- Condensé METAREA : le français couvre le synoptique Météo-France (flux, onde tropicale, ZCIT, visibilité) et le télégramme de la Marine brésilienne (METAREA V : vent, vagues, visibilité, fronts, avis). Les mots coupés en fin de ligne GTS sont recollés.
+
+## 2.1.3 — 2026-10-09
+
+- Globe : le libellé « ice » suit le parallèle 48° S, comme les distances sur les pointillés SDR. Le cercle a la même épaisseur (trait 2).
+
+## 2.1.2 — 2026-10-09
+
+- À propos : le faisceau affiché est celui visé selon la flotte (Guy en Atlantique). Cap Town ne s’active plus dès 35°W : seulement autour du cap (± 15°).
+
+## 2.1.1 — 2026-10-09
+
+- À propos et accueil : Guy F4DAI / F6KUF émet depuis Saint-Christophe-du-Ligneron. Philippe F4HWM (Talmont-Saint-Hilaire) n’émet plus.
+- Les Kiwi du bulletin sont décrits et visés selon la flotte (centroïde des skippers suivis). QTH France : 46°49′30″ N, 1°45′43″ W.
+
+## 2.1.0 — 2026-10-09
+
+- Bulletin uniquement sur **14.135 MHz USB** (bande 20 m). Plus d’enregistrement ni de réglage des QRG 12.418 et 16.551 MHz.
+- Faisceau d’émission : 4 à 6 KiwiSDR entre l’émetteur et la flotte. Priorité au plus proche des bateaux (screencast, qualité à bord). Les Canaries restent dans le cône quand F6KUF émet depuis la Vendée vers l’Atlantique (`min_along` 0,12 ; l’ancien seuil 0,75 les excluait). Le cône va un peu au-delà des bateaux : s’il n’y a pas de Kiwi en mer, le premier au Brésil sur le même azimut sert de référence « à bord ».
+
 ## 2.0.6 — 2026-10-09
 
 - Mixeur : les waterfalls ne sont plus en priorité haute. Les MP3 de lecture passent devant, Play ne reste plus plusieurs secondes à « — TU ».

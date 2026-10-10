@@ -37,17 +37,56 @@
     btn.disabled = on;
   };
 
+  const collectGroups = () => {
+    const groups = { tete: [], centre: [], queue: [] };
+    const selects = [...form.querySelectorAll('select[name="fleet_group"]')];
+    if (selects.length) {
+      selects.forEach((el) => {
+        const name = (el.getAttribute("data-skipper") || "").trim();
+        const key = el.value;
+        if (name && groups[key]) groups[key].push(name);
+      });
+    } else if (
+      form.elements.namedItem("fleet_group_centre") ||
+      form.elements.namedItem("fleet_group_tete") ||
+      form.elements.namedItem("fleet_group_queue")
+    ) {
+      ["tete", "centre", "queue"].forEach((key) => {
+        const el = form.elements.namedItem("fleet_group_" + key);
+        groups[key] = el
+          ? String(el.value || "")
+              .split("\n")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+      });
+    } else {
+      const skipperBoxes = [...form.querySelectorAll('input[name="fleet_skipper"]:checked')];
+      const skipperText = form.elements.namedItem("fleet_skippers_text");
+      groups.centre = skipperBoxes.length
+        ? skipperBoxes.map((el) => el.value)
+        : skipperText
+          ? String(skipperText.value || "")
+              .split("\n")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+    }
+    const seen = new Set();
+    ["tete", "centre", "queue"].forEach((key) => {
+      groups[key] = groups[key].filter((name) => {
+        const fold = name.toLocaleLowerCase();
+        if (seen.has(fold)) return false;
+        seen.add(fold);
+        return true;
+      });
+    });
+    return groups;
+  };
+
   const payload = () => {
-    const skipperBoxes = [...form.querySelectorAll('input[name="fleet_skipper"]:checked')];
-    const skipperText = form.elements.namedItem("fleet_skippers_text");
-    const skippers = skipperBoxes.length
-      ? skipperBoxes.map((el) => el.value)
-      : skipperText
-        ? String(skipperText.value || "")
-            .split("\n")
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : [];
+    const groups = collectGroups();
+    const skippers = groups.tete.concat(groups.centre, groups.queue);
     const tx_sites = [];
     for (let i = 0; i < 5; i++) {
       const labelEl = form.elements.namedItem("tx_label_" + i);
@@ -63,13 +102,12 @@
     }
     return {
       tx_khz: Number(form.elements.namedItem("tx_khz").value),
-      ack1_khz: Number(form.elements.namedItem("ack1_khz").value),
-      ack2_khz: Number(form.elements.namedItem("ack2_khz").value),
       qrg_tolerance_khz: Number(form.elements.namedItem("qrg_tolerance_khz").value),
       lead_minutes: Number(form.elements.namedItem("lead_minutes").value),
       duration_minutes: Number(form.elements.namedItem("duration_minutes").value),
       buddy_skippers: skippers,
       skippers: skippers,
+      groups: groups,
       tx_sites,
       display: {
         banner: !!(form.elements.namedItem("display_banner") && form.elements.namedItem("display_banner").checked),
@@ -127,8 +165,6 @@
         "save",
         t("saved_qrg", {
           tx: data.tx_mhz,
-          ack1: data.ack1_mhz,
-          ack2: data.ack2_mhz,
           n: (data.tx_sites || []).length,
         }),
         true

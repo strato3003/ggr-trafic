@@ -104,8 +104,8 @@ def prop_rings(
 ) -> dict[str, float]:
     """Rayons NVIS / zone morte / 1 saut / cercle max (km) pour une QRG.
 
-    Antennes flotte = omni. Midi TU (buddy 12:00) : D absorbe le 4 MHz.
-    Fin d’après-midi (ACK 18:00, bulletin 14.135) : 12–17 MHz plutôt 1 saut F.
+    Antennes flotte = omni. Midi TU : la couche D absorbe le 4 MHz.
+    Fin d’après-midi (bulletin 14.135 MHz à 18:00 TU) : la bande 20 m est plutôt en 1 saut F.
     """
     f = float(freq_khz)
     hour = float(hour_utc) % 24.0

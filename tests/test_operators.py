@@ -94,6 +94,7 @@ def test_google_whitelist_cases(tmp_path, monkeypatch):
 def test_public_paths_and_login_redirect(tmp_path, monkeypatch):
     monkeypatch.setenv("GGR_DATA_DIR", str(tmp_path))
     assert auth_google.is_public_path("/health")
+    assert auth_google.is_public_path("/favicon.ico")
     assert auth_google.is_public_path("/login/otp")
     assert auth_google.is_public_path("/auth/email/abc")
     assert auth_google.is_public_path("/auth/google")

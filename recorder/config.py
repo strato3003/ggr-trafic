@@ -50,8 +50,10 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
             extra = None
         if isinstance(extra, dict) and extra:
             cfg = _deep_merge(cfg, extra)
-    if _migrate_legacy_ack_qrg(cfg):
-        _write_settings_merge(cfg, {"radio": {"ack": list((cfg.get("radio") or {}).get("ack") or [])}})
+    if _migrate_drop_marine_ack(cfg):
+        _strip_marine_ack_settings(cfg)
+    if _migrate_guy_qth(cfg):
+        _rewrite_guy_qth_settings(cfg)
     if _migrate_drop_buddy(cfg):
         # Réécrit settings sans clé buddy (skippers déjà dans fleet).
         path = _settings_file(cfg)
@@ -94,36 +96,146 @@ def _write_settings_merge(cfg: dict[str, Any], patch: dict[str, Any]) -> None:
     path.write_text(json.dumps(merged, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-# Anciennes QRG : le « 5 » final était la tolérance ± 5 kHz, pas un demi-kilohertz.
-_LEGACY_ACK_KHZ = {16551.5: 16551.0, 12418.5: 12418.0}
-
-
-def ack_label(freq_khz: float) -> str:
-    return f"Accusé {fmt_mhz(freq_khz).replace('.', ',')} MHz"
-
-
-def _migrate_legacy_ack_qrg(cfg: dict[str, Any]) -> bool:
-    radio = cfg.get("radio")
-    if not isinstance(radio, dict):
-        return False
-    acks = radio.get("ack")
-    if not isinstance(acks, list):
-        return False
+def _migrate_drop_marine_ack(cfg: dict[str, Any]) -> bool:
+    """Plus d’écoute 12.418 / 16.551 MHz : seulement le bulletin 14.135 MHz."""
     changed = False
-    for row in acks:
-        if not isinstance(row, dict):
-            continue
-        try:
-            khz = round(float(row.get("freq_khz")), 4)
-        except (TypeError, ValueError):
-            continue
-        new_khz = _LEGACY_ACK_KHZ.get(khz)
-        if new_khz is None:
-            continue
-        row["freq_khz"] = new_khz
-        row["label"] = ack_label(new_khz)
+    radio = cfg.get("radio")
+    if isinstance(radio, dict) and "ack" in radio:
+        radio.pop("ack", None)
+        changed = True
+    sched = cfg.get("schedule")
+    if isinstance(sched, dict) and "ack_delay_minutes" in sched:
+        sched.pop("ack_delay_minutes", None)
+        changed = True
+    sdr = cfg.get("sdr")
+    if isinstance(sdr, dict):
+        if "ack_omni" in sdr:
+            sdr.pop("ack_omni", None)
+            changed = True
+        if "screencast_ack" in sdr:
+            sdr.pop("screencast_ack", None)
+            changed = True
+        beam = sdr.get("beam")
+        if _beam_stale(beam):
+            # count 0 ou min_along ≥ 0,7 : le cône était coupé ou excluait les Canaries.
+            sdr.pop("beam", None)
+            changed = True
+    return changed
+
+
+def _beam_stale(beam: Any) -> bool:
+    if not isinstance(beam, dict):
+        return False
+    try:
+        count = int(beam["count"]) if beam.get("count") is not None else -1
+    except (TypeError, ValueError):
+        count = -1
+    try:
+        along = float(beam["min_along"]) if beam.get("min_along") is not None else 0.0
+    except (TypeError, ValueError):
+        along = 0.0
+    return count == 0 or along >= 0.7
+
+
+def _strip_marine_ack_settings(cfg: dict[str, Any]) -> None:
+    """Retire les QRG marines d’un settings.json déjà écrit."""
+    path = _settings_file(cfg)
+    if not path.is_file():
+        return
+    try:
+        extra = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(extra, dict):
+        return
+    radio = extra.get("radio")
+    if isinstance(radio, dict):
+        radio.pop("ack", None)
+    sched = extra.get("schedule")
+    if isinstance(sched, dict):
+        sched.pop("ack_delay_minutes", None)
+    sdr = extra.get("sdr")
+    if isinstance(sdr, dict):
+        sdr.pop("ack_omni", None)
+        sdr.pop("screencast_ack", None)
+        if _beam_stale(sdr.get("beam")):
+            sdr.pop("beam", None)
+    path.write_text(json.dumps(extra, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+# Talmont-Saint-Hilaire, QTH Philippe F4HWM (semaine du 21 sept. 2026).
+_PHILIPPE_LAT = 46.46806
+_PHILIPPE_LON = -1.61694
+# Saint-Christophe-du-Ligneron : 46°49′30″ N, 1°45′43″ W (Wikipédia, commune).
+_GUY_LAT = 46.82500
+_GUY_LON = -1.76194
+_GUY_LABEL = "Guy F4DAI / F6KUF"
+_GUY_LOC = "Saint-Christophe-du-Ligneron, Vendée"
+
+
+def _is_philippe_qth(row: dict[str, Any]) -> bool:
+    """Ancien QTH France (Philippe / Talmont), pas un autre site posé à la main."""
+    label = str(row.get("label") or "")
+    loc = str(row.get("loc") or "")
+    if "F4HWM" in label or "Philippe" in label or "Talmont" in label or "Talmont" in loc:
+        return True
+    try:
+        lat = float(row["lat"])
+        lon = float(row["lon"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return abs(lat - _PHILIPPE_LAT) < 1e-4 and abs(lon - _PHILIPPE_LON) < 1e-4
+
+
+def _apply_guy_qth(row: dict[str, Any], *, with_loc: bool) -> None:
+    row["label"] = _GUY_LABEL
+    row["lat"] = _GUY_LAT
+    row["lon"] = _GUY_LON
+    if with_loc or "loc" in row:
+        row["loc"] = _GUY_LOC
+
+
+def _migrate_guy_qth(cfg: dict[str, Any]) -> bool:
+    """Philippe n’émet plus : le QTH France redevient Guy F4DAI."""
+    changed = False
+    sites = cfg.get("tx_sites")
+    if isinstance(sites, list):
+        for row in sites:
+            if isinstance(row, dict) and _is_philippe_qth(row):
+                _apply_guy_qth(row, with_loc=True)
+                changed = True
+    france = ((cfg.get("sdr") or {}).get("sites") or {}).get("france")
+    if isinstance(france, dict) and _is_philippe_qth(france):
+        _apply_guy_qth(france, with_loc=False)
         changed = True
     return changed
+
+
+def _rewrite_guy_qth_settings(cfg: dict[str, Any]) -> None:
+    """Réécrit settings.json si un QTH Philippe y était figé."""
+    path = _settings_file(cfg)
+    if not path.is_file():
+        return
+    try:
+        extra = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(extra, dict):
+        return
+    changed = False
+    sites = extra.get("tx_sites")
+    if isinstance(sites, list):
+        for row in sites:
+            if isinstance(row, dict) and _is_philippe_qth(row):
+                _apply_guy_qth(row, with_loc=True)
+                changed = True
+    sdr = extra.get("sdr")
+    france = (sdr.get("sites") or {}).get("france") if isinstance(sdr, dict) else None
+    if isinstance(france, dict) and _is_philippe_qth(france):
+        _apply_guy_qth(france, with_loc=False)
+        changed = True
+    if changed:
+        path.write_text(json.dumps(extra, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _migrate_drop_buddy(cfg: dict[str, Any]) -> bool:
@@ -154,7 +266,7 @@ def save_runtime_settings(patch: dict[str, Any], cfg: dict[str, Any] | None = No
 
 
 def parse_qrg_khz(value: float | int | str) -> float:
-    """14.135 → 14135 kHz ; 14135 → 14135 kHz ; 16.551 → 16551 kHz."""
+    """14.135 → 14135 kHz ; 14135 → 14135 kHz."""
     try:
         raw = float(value)
     except (TypeError, ValueError) as exc:
@@ -169,7 +281,7 @@ def parse_qrg_khz(value: float | int | str) -> float:
 
 
 def fmt_mhz(freq_khz: float) -> str:
-    """14135.0 → 14.135 ; 16551.0 → 16.551."""
+    """14135.0 → 14.135."""
     text = f"{float(freq_khz) / 1000.0:.4f}".rstrip("0").rstrip(".")
     return text or "0"
 
@@ -366,11 +478,8 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = cfg or load_config()
     radio = cfg.get("radio") or {}
     tx = radio.get("tx") or {}
-    acks = list(radio.get("ack") or [])
     sched = cfg.get("schedule") or {}
     tx_khz = float(tx.get("freq_khz") or 14135.0)
-    ack1 = float(acks[0]["freq_khz"]) if acks else 16551.0
-    ack2 = float(acks[1]["freq_khz"]) if len(acks) > 1 else 12418.0
     tol = float(tx.get("qrg_tolerance_khz") or 5.0)
     lead = int(sched.get("lead_minutes") or 1)
     duration = int(sched.get("duration_minutes") or 10)
@@ -380,11 +489,7 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     france_short = schedule_days_label(days, short=True)
     ctx = {
         "tx_khz": tx_khz,
-        "ack1_khz": ack1,
-        "ack2_khz": ack2,
         "tx_mhz": fmt_mhz(tx_khz),
-        "ack1_mhz": fmt_mhz(ack1),
-        "ack2_mhz": fmt_mhz(ack2),
         "qrg_tolerance_khz": tol,
         "schedule_lead": lead,
         "duration_minutes": duration,
@@ -397,8 +502,6 @@ def qrg_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
             f"F6KUF {france_short} · Michel tlj" if tahiti else france_short
         ),
         "tx_label": tx.get("label") or "Bulletin météo F6KUF",
-        "ack1_label": (acks[0].get("label") if acks else None) or ack_label(ack1),
-        "ack2_label": (acks[1].get("label") if len(acks) > 1 else None) or ack_label(ack2),
     }
     ctx.update(buddy_context(cfg))
     ctx["tx_sites"] = tx_sites_from_cfg(cfg)
@@ -430,9 +533,10 @@ def _hhmm(raw: str | None, default: str) -> str:
 
 def buddy_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     """Skippers du centroïde (plus de buddy call) — clés UI historiques conservées."""
-    from recorder.fleet import fleet_skippers
+    from recorder.fleet import fleet_groups, fleet_skippers
 
     cfg = cfg or load_config()
+    groups = fleet_groups(cfg)
     skippers = fleet_skippers(cfg)
     return {
         "buddy_enabled": False,
@@ -448,6 +552,7 @@ def buddy_context(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "buddy_main_label": "",
         "buddy_alt_label": "",
         "buddy_skippers": skippers,
+        "buddy_groups": groups,
         "buddy_include_fleet": False,
         "buddy_kiwi_count": 0,
         "buddy_skippers_short": ", ".join(skippers) if skippers else "aucun skipper",
@@ -473,4 +578,4 @@ def version(cfg: dict[str, Any] | None = None) -> str:
             return pkg_version("ggr-vacations")
         except PackageNotFoundError:
             cfg = cfg or {}
-            return str(cfg.get("version") or "2.0.6")
+            return str(cfg.get("version") or "2.2.4")

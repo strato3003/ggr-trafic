@@ -1,18 +1,18 @@
-# GGR Trafic 2.0.6
+# GGR Trafic 2.2.4
 
 Archives du **trafic HF** entre le radio-club **F6KUF** et les bateaux de la flotte **Golden Globe Race**.
 
-Le **lundi et le jeudi** à **18:00 TU**, F6KUF émet un bulletin météo sur **14.135 MHz USB** (VFO calé sur 14.135000 ; le test radio manuel peut encore chasser ± 5 kHz) et écoute les accusés de réception sur **16.551 MHz USB** et **12.418 MHz USB** (± 5 kHz). Cette semaine : **Philippe F4HWM / F6KUF** depuis **Talmont-Saint-Hilaire**. **Michel FO5QB / F6KUF** (Tahiti) émet **tous les jours** à **18:00 TU** sur la même QRG. Après le **cap de Bonne-Espérance** (34°21′26″S 18°28′24″E), l’émission 14.135 MHz suivie en priorité est celle de Michel, jusqu’au cap Horn. L’application choisit les [KiwiSDR](http://kiwisdr.com/) selon la position : **bulletin 14.135 MHz** d’abord comme si l’on était sur le bateau (Kiwi le plus proche du centroïde) et près de l’émetteur, plus jusqu’à 4 Kiwi de **portée 20 m** (jusqu’où ça porte) ; **ACK 12.418 / 16.551 MHz** sur **4 à 10 Kiwi omni** répartis autour du centroïde (NVIS / 1 saut selon la QRG, F10.7 et Kp NOAA s’ils sont dispo). Skippers du centroïde (défaut) : Damien Guillou, Etienne Messikommer, Louis Kerdelhue. Audio USB + **screencast** de l’interface SDR pour le replay. L’interface est **FR/EN**. Le condensé METAREA se lit à voix haute (carte son du navigateur → entrée DATA du TRX) et se télécharge en MP3.
+Le **lundi et le jeudi** à **18:00 TU**, **Guy F4DAI / F6KUF** émet le bulletin météo sur **14.135 MHz USB** depuis **Saint-Christophe-du-Ligneron** (VFO calé sur 14.135000 ; le test radio manuel peut encore chasser ± 5 kHz). **Michel FO5QB / F6KUF** (Tahiti) émet **tous les jours** à **18:00 TU** sur la même QRG. Après le **cap de Bonne-Espérance** (34°21′26″S 18°28′24″E), l’émission 14.135 MHz suivie en priorité est celle de Michel, jusqu’au cap Horn. Les [KiwiSDR](http://kiwisdr.com/) sont choisis selon la flotte : jusqu’à 6 récepteurs sur 14.135 MHz dans le faisceau vers le centroïde des skippers suivis, priorité au plus proche (qualité à bord, screencast). Skippers du centroïde (défaut) : Damien Guillou, Etienne Messikommer, Louis Kerdelhue. Audio USB + **screencast** de l’interface SDR pour le replay. L’interface est **FR/EN**. Le condensé METAREA se lit à voix haute (carte son du navigateur → entrée DATA du TRX) et se télécharge en MP3.
 
-Les trois QRG, la tolérance, l’avance et la durée se règlent dans l’UI (**Réglages**). Un **record immédiat** permet de tester le suivi ± 5 kHz sans attendre 18:00 TU.
+La QRG du bulletin, la tolérance, l’avance et la durée se règlent dans l’UI (**Réglages**). Un **record immédiat** permet de tester le suivi ± 5 kHz sans attendre 18:00 TU.
 
 ## Fonctionnement
 
 1. **Flotte** — centroïde des bateaux en course via le tracker Yellowbrick (`/BIN/ggr2026/AllPositions3`). Centroïde : skippers suivis (config `fleet.skippers`).
-2. **SDR** — bulletin : un Kiwi près de chaque émetteur encore audible (**Philippe / F6KUF** lun. et jeu., **Michel** tous les jours, **Cap Town** en zone SA) **et** un près de la flotte ; ACK : un Kiwi près de la flotte, un en France (≤ 1500 km de Talmont-Saint-Hilaire), un vers Tahiti / Papeete (≤ 2500 km).
-3. **Enregistrement** — 1 minute avant 18:00 TU, pendant 10 minutes (configurable) :
-   - VFO calé sur **14.135000 MHz USB** (pas de chasse sur le bulletin programmé) puis screencast Playwright près de l’émetteur ;
-   - WAV 12 kHz sur le bulletin (émetteur + flotte) **et** les deux QRG d’accusé **en même temps**, aux trois sites ;
+2. **SDR** — choisis selon la flotte : jusqu’à 6 Kiwi sur **14.135 MHz USB** dans le faisceau émetteur → centroïde. Le plus proche des bateaux est prioritaire.
+3. **Enregistrement** — 1 minute avant 18:00 TU, pendant 25 minutes (configurable) :
+   - VFO calé sur **14.135000 MHz USB** (pas de chasse sur le bulletin programmé) puis screencast Playwright sur le Kiwi le plus proche de la flotte ;
+   - WAV 12 kHz sur la même QRG, en parallèle, sur les autres Kiwi du faisceau ;
    - muxage ffmpeg → MP4 H.264 / AAC.
 4. **Replay** — interface web (français) : liste des trafics, lecteur vidéo, pistes audio.
 
@@ -72,7 +72,7 @@ curl -X POST -H "X-Admin-Token: …" \
   -d '{"freq_khz": 14.135, "duration_minutes": 2, "hunt": true}' \
   https://ggr-trafic.k3s.lpb.ovh/api/trafic/record
 
-# Trafic complet (bulletin + ACK flotte / France / Tahiti)
+# Trafic complet (bulletin 14.135 MHz, faisceau)
 curl -X POST -H "X-Admin-Token: …" \
   -H "Content-Type: application/json" \
   -d '{"duration_minutes": 10}' \
@@ -116,11 +116,10 @@ Défauts dans [`config/default.yaml`](config/default.yaml) ; overrides runtime d
 
 | Paramètre | Valeur |
 | --- | --- |
-| Bulletin | 14.135 MHz USB, QRG 14.135000 ; F6KUF lundi et jeudi 18:00 TU (cette semaine Philippe F4HWM, Talmont-Saint-Hilaire) ; Michel FO5QB tous les jours 18:00 TU |
-| Accusé | 16.551 MHz USB, 12.418 MHz USB (± 5 kHz ; flotte + France + Tahiti, en parallèle du bulletin) |
+| Bulletin | 14.135 MHz USB, QRG 14.135000 ; Guy F4DAI lundi et jeudi 18:00 TU (Saint-Christophe-du-Ligneron) ; Michel FO5QB tous les jours 18:00 TU ; Kiwi choisis selon la flotte (jusqu’à 6, priorité au plus proche du centroïde) |
 | Centroïde | Damien Guillou, Etienne Messikommer, Louis Kerdelhue (`fleet.skippers`) |
 | Avance | 1 min (début 17:59 TU) |
-| Durée | 10 min (fin 18:09 TU) |
+| Durée | 25 min (fin 18:24 TU) |
 | Tracker | `ggr2026` sur `cf.yb.tl` |
 | Rétention | 14 jours (PVC 5 Gio) |
 

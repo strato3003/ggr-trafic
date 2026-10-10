@@ -1,18 +1,19 @@
 # Configuration GGR Trafic — F6KUF / flotte Golden Globe Race
-version: "2.0.6"
+version: "2.2.4"
 
 club:
   callsign: F6KUF
   name: "Radio-club F6KUF"
 
 # QTH d’émission (max 5). Pointillé globe → centroïde des skippers suivis.
-# Semaine du 21 sept. 2026 : Philippe F4HWM / F6KUF depuis Talmont-Saint-Hilaire
-# (habituellement Guy F4DAI / F6KUF, Saint-Christophe-du-Ligneron).
+# France : Guy F4DAI / F6KUF, Saint-Christophe-du-Ligneron.
+# Commune : 46°49′30″ N, 1°45′43″ W (Wikipédia).
+# Philippe F4HWM (Talmont-Saint-Hilaire) n’émet plus le bulletin.
 tx_sites:
-  - label: Philippe F4HWM / F6KUF
-    loc: Talmont-Saint-Hilaire, Vendée
-    lat: 46.46806
-    lon: -1.61694
+  - label: Guy F4DAI / F6KUF
+    loc: Saint-Christophe-du-Ligneron, Vendée
+    lat: 46.82500
+    lon: -1.76194
   - label: Cap Town
     lat: -33.9249
     lon: 18.4241
@@ -29,10 +30,8 @@ schedule:
   tahiti_daily: true
   # Démarrer 1 min avant H (calage Kiwi / VFO).
   lead_minutes: 1
-  # Durée totale session (bulletin dès le début + ACK après H+10).
+  # Durée totale session : bulletin 14.135 MHz seulement.
   duration_minutes: 25
-  # Accusés seulement après la lecture du bulletin (H+10 TU).
-  ack_delay_minutes: 10
 
 radio:
   mode: usb
@@ -45,14 +44,6 @@ radio:
     qrg_tolerance_khz: 5.0
     label: "Bulletin météo F6KUF"
     zoom: 10
-  ack:
-    # Le « 5 » final des anciennes notations 16.5515 / 12.4185 était la tolérance ± 5 kHz.
-    - freq_khz: 16551.0
-      label: "Accusé 16,551 MHz"
-      zoom: 10
-    - freq_khz: 12418.0
-      label: "Accusé 12,418 MHz"
-      zoom: 10
 
 # Position moyenne de la flotte GGR (Yellowbrick)
 fleet:
@@ -62,6 +53,8 @@ fleet:
   # Ignorer les traces « fantômes » historiques (Moitessier, RKJ, etc.)
   skip_team_id_from: 900
   # Skippers suivis pour le centroïde d’écoute (bulletin) — noms Yellowbrick RaceSetup.
+  # Sans fleet.groups, cette liste est le centre. Groupes optionnels : tete, centre, queue.
+  # Moins de 800 km entre groupes : un seul faisceau (4 à 6 Kiwi). Au-delà : 2 Kiwi par groupe.
   skippers:
     - "Damien Guillou"
     - "Etienne Messikommer"
@@ -76,30 +69,27 @@ sdr:
   # Liste publique KiwiSDR (JS, virgules finales possibles)
   directory_url: "http://rx.linkfanel.net/kiwisdr_com.js"
   ident_user: ggr-trafic
-  # Places libres minimales pour le screencast TX (navigateur = 1 slot).
-  # Les ACK n’ont besoin que d’un flux SND (1 place).
+  # Places libres minimales pour le screencast du bulletin (navigateur = 1 slot).
   min_free_slots: 2
-  # Couverture HF nécessaire (Hz)
-  min_freq_hz: 12000000
-  max_freq_hz: 17000000
+  # Couverture du bulletin 14.135 MHz (bande 20 m, 14.000–14.350 MHz).
+  min_freq_hz: 14000000
+  max_freq_hz: 14350000
   screencast_tx: true
-  screencast_ack: false
-  # Bulletin 14.135 : un seul Kiwi près du centroïde (vérifier la diffusion) + screencast.
-  # Les faisceaux TX→flotte sont désactivés (count: 0) ; la portée se juge au centroïde.
+  # 4 à 6 Kiwi sur 14.135 MHz dans le faisceau TX → flotte.
+  # Le plus proche des bateaux est prioritaire (screencast, qualité à bord).
+  # min_along 0,12 : les Canaries restent dans le cône Vendée → Atlantique.
   beam:
-    count: 0
-    min_fleet_km: 800
+    count: 6
+    min_fleet_km: 0
     min_tx_km: 400
-    max_xt_km: 1500
-    max_daz_deg: 16
-    min_separation_km: 400
-    min_path_km: 1500
-    max_tx_km: 12000
-    min_along: 0.75
-  # ACK 12.418 / 16.551 : 4–5 Kiwi omni autour du centroïde (2 QRG / SDR).
-  ack_omni:
-    count: 5
-    min_separation_km: 400
+    max_xt_km: 1800
+    max_daz_deg: 22
+    min_separation_km: 350
+    min_path_km: 800
+    max_tx_km: 14000
+    min_along: 0.12
+    # 1,55 : inclut la première terre au-delà des bateaux (pas l’autre hémisphère).
+    max_along: 1.55
   viewport:
     width: 1280
     height: 800
@@ -107,11 +97,11 @@ sdr:
   # QRG d’enregistrement = 14135.0 kHz (pas de chasse USB sur le trafic programmé).
   sites:
     france:
-      # Talmont-Saint-Hilaire, Vendée — Philippe F4HWM / F6KUF (semaine du 21 sept. 2026)
-      # WGS84 46.46806°N 1.61694°W (Wikipedia, commune).
-      lat: 46.46806
-      lon: -1.61694
-      label: Philippe F4HWM / F6KUF
+      # Saint-Christophe-du-Ligneron, Vendée — Guy F4DAI / F6KUF.
+      # 46°49′30″ N, 1°45′43″ W (Wikipédia, commune).
+      lat: 46.82500
+      lon: -1.76194
+      label: Guy F4DAI / F6KUF
       radius_km: 1500
     cape:
       # Le Cap 33°55′30″S 18°25′27″E — recouvrement SA / début Indien
@@ -128,7 +118,7 @@ sdr:
 
 storage:
   data_dir: /data
-  # PVC 5 Gio : 10 min (screencast + bulletin + 2 QRG × 3 sites) ≈ 150–220 Mio → ~14 jours
+  # PVC 5 Gio : bulletin 14.135 MHz (screencast + audio) — rétention ~14 jours
   retention_days: 14
 
 web:

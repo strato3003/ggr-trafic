@@ -5,7 +5,7 @@
  * ou permission refusée, l’appli continue sans radio.
  *
  * Audio sortie : HTMLMediaElement.setSinkId (écoute via SCU-17).
- * Audio entrée : getUserMedia (enregistrement ACK depuis le TRX / beam).
+ * Audio entrée : getUserMedia (enregistrement depuis le TRX local).
  * CAT : navigator.serial (baud 38400 par défaut, commandes Yaesu ASCII « FA »).
  */
 window.GgrScu17 = (function () {
@@ -368,7 +368,7 @@ window.GgrScu17 = (function () {
   }
 
   /**
-   * Envoie l’ACK local vers le trafic (opérateur authentifié).
+   * Envoie l’audio du TRX local vers le trafic (opérateur authentifié).
    * @param {string} vacId
    * @param {Blob} blob
    */

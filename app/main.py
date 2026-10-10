@@ -20,19 +20,17 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import auth_email, auth_google, globe_tiles, i18n, metarea, operators, store, tts
-from recorder.config import ack_label, display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
+from recorder.config import display_defaults, fmt_khz, fmt_mhz, load_config, parse_display, parse_qrg_khz, parse_tx_sites, qrg_context, save_runtime_settings, tx_sites_aim, version
 from recorder.fleet import buddy_aim, fetch_fleet
 from recorder.kiwi_list import (
+    assign_vacation_kiwis,
     bulletin_beam_qth,
     bulletin_tx_label,
     bulletin_tx_qths,
     fetch_ranked_kiwis,
     kiwi_directory,
-    kiwi_key,
     map_kiwis,
-    pick_near_fleet_kiwis,
     read_directory_cache,
-    select_bulletin_beam_kiwis,
 )
 from recorder.scheduler import apply_vacation_schedule, build_scheduler
 from recorder.session import (
@@ -178,6 +176,11 @@ _UNAVAILABLE_FALLBACK = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GGR Trafic — indisponible</title>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#061018">
 <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body class="globe-page kiwi-panel-off is-map-3d is-unavailable" data-ggr-force-wait="1">
@@ -313,6 +316,16 @@ def _bulletin_utc(cfg) -> datetime:
 async def health():
     # Léger : kubelet poll toutes les 5–15 s. L’état d’enregistrement est sur /api/recording.
     return {"ok": True, "version": version(CFG)}
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Icône d’onglet : le globe, servi aussi hors session (les navigateurs la demandent seuls)."""
+    return FileResponse(
+        ROOT / "static" / "favicon.ico",
+        media_type="image/x-icon",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 def _auth_next(request: Request, fallback: str | None = None) -> str:
@@ -603,46 +616,39 @@ async def _globe_page(request: Request):
         aim = buddy_aim(fleet, cfg)
         kiwis = []
         beam_kiwis = []
-        beam_qth = None
         try:
             ranked = await fetch_ranked_kiwis(cfg, fleet["lat"], fleet["lon"], limit=0, min_free=1)
-            beam_qth = bulletin_beam_qth(
-                cfg,
-                float(aim["lat"]),
-                float(aim["lon"]),
-                boats=aim.get("skippers") or [],
-            )
-            beam_kiwis = select_bulletin_beam_kiwis(
+            roles = assign_vacation_kiwis(
                 ranked,
-                tx_lat=float(beam_qth["lat"]),
-                tx_lon=float(beam_qth["lon"]),
                 fleet_lat=float(aim["lat"]),
                 fleet_lon=float(aim["lon"]),
                 cfg=cfg,
+                boats=aim.get("skippers") or [],
+                when=datetime.now(timezone.utc),
             )
-            for i, kiwi in enumerate(beam_kiwis, start=1):
-                kiwi["site"] = f"tx_beam{i}"
-                kiwi["site_label"] = f"portée TX bulletin {i}"
-            used = {kiwi_key(k) for k in beam_kiwis}
-            kiwis = pick_near_fleet_kiwis(
-                ranked,
-                lat=float(aim["lat"]),
-                lon=float(aim["lon"]),
-                count=2,
-                radius_km=800.0,
-                exclude=used,
-            )
+            tx_kiwi = roles.get("tx")
+            kiwis = [tx_kiwi] if tx_kiwi else []
+            beam_kiwis = [roles[key] for key in sorted(roles) if str(key).startswith("tx_beam")]
         except Exception:
             log.exception("Liste KiwiSDR indisponible")
         now = datetime.now(timezone.utc)
+        skippers = aim.get("skippers") or []
         qths = bulletin_tx_qths(
             cfg,
             float(fleet.get("lat") or 0),
             float(fleet.get("lon") or 0),
-            boats=aim.get("skippers") or [],
+            boats=skippers,
             when=now,
         )
-        tahiti_tx = any(qth.get("id") == "tahiti" for qth in qths)
+        # Le faisceau des Kiwi part du QTH que la flotte entend (Guy en Atlantique),
+        # pas de chaque zone large (Cap Town dès 35°W).
+        beam = bulletin_beam_qth(
+            cfg,
+            float(aim.get("lat") or fleet.get("lat") or 0),
+            float(aim.get("lon") or fleet.get("lon") or 0),
+            skippers,
+        )
+        tahiti_tx = beam.get("id") == "tahiti"
     except Exception:
         log.exception("Page flotte")
         return render_unavailable(request, status_code=503)
@@ -659,6 +665,7 @@ async def _globe_page(request: Request):
         tx_sites=tx_sites_aim(cfg, fleet.get("lat"), fleet.get("lon")),
         boats=fleet.get("boats") or [],
         bulletin_tx_label=bulletin_tx_label(qths),
+        beam_tx_label=str(beam.get("label") or "F6KUF"),
         bulletin_tx_from_tahiti=tahiti_tx,
         bulletin_tx_overlap=len(qths) > 1,
         unavailable=bool((cfg.get("web") or {}).get("unavailable")) or wait_q in ("1", "true", "oui"),
@@ -887,8 +894,6 @@ async def api_settings_put(
     if not isinstance(body, dict):
         raise HTTPException(400, "JSON objet attendu")
     tx_khz = _khz_field(body, "tx_khz", "QRG TX")
-    ack1_khz = _khz_field(body, "ack1_khz", "QRG ACK 16 m")
-    ack2_khz = _khz_field(body, "ack2_khz", "QRG ACK 12 m")
     try:
         tol = round(float(body.get("qrg_tolerance_khz", 5.0)), 3)
         lead = int(body.get("lead_minutes", 1))
@@ -901,31 +906,34 @@ async def api_settings_put(
         raise HTTPException(400, "Avance hors plage (0–15 min)")
     if not (1 <= duration <= 45):
         raise HTTPException(400, "Durée hors plage (1–45 min)")
-    radio = cfg.get("radio") or {}
-    acks = [dict(row) for row in (radio.get("ack") or [])]
-    while len(acks) < 2:
-        acks.append({})
-    acks[0]["freq_khz"] = ack1_khz
-    acks[0]["label"] = ack_label(ack1_khz)
-    acks[1]["freq_khz"] = ack2_khz
-    acks[1]["label"] = ack_label(ack2_khz)
     patch = {
         "radio": {
             "tx": {"freq_khz": tx_khz, "qrg_tolerance_khz": tol},
-            "ack": acks[:2],
         },
         "schedule": {"lead_minutes": lead, "duration_minutes": duration},
     }
-    if "buddy_skippers" in body or "skippers" in body:
-        raw_skip = body.get("skippers", body.get("buddy_skippers"))
-        if isinstance(raw_skip, str):
-            names = [ln.strip() for ln in raw_skip.splitlines() if ln.strip()]
-        elif isinstance(raw_skip, list):
-            names = [str(x).strip() for x in raw_skip if str(x).strip()]
+    if "groups" in body or "buddy_skippers" in body or "skippers" in body:
+        from recorder.fleet import GROUP_KEYS, normalize_groups
+
+        if "groups" in body:
+            try:
+                groups = normalize_groups(body.get("groups"))
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
         else:
-            raise HTTPException(400, "Liste de skippers invalide")
+            raw_skip = body.get("skippers", body.get("buddy_skippers"))
+            if isinstance(raw_skip, str):
+                names = [ln.strip() for ln in raw_skip.splitlines() if ln.strip()]
+            elif isinstance(raw_skip, list):
+                names = [str(x).strip() for x in raw_skip if str(x).strip()]
+            else:
+                raise HTTPException(400, "Liste de skippers invalide")
+            # Ancien client : toute la liste est le centre.
+            groups = {"tete": [], "centre": names, "queue": []}
+        names = [n for key in GROUP_KEYS for n in groups[key]]
         fleet_cfg = dict(cfg.get("fleet") or {})
         fleet_cfg["skippers"] = names
+        fleet_cfg["groups"] = groups
         patch["fleet"] = fleet_cfg
     if "tx_sites" in body:
         try:

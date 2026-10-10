@@ -93,7 +93,52 @@
   const TOKEN_KEY = "ggr-admin-token";
   const token = () => localStorage.getItem(TOKEN_KEY) || "";
   const boats = (data.boats || []).filter((b) => Number.isFinite(b.lat) && Number.isFinite(b.lon));
-  const skippers = new Set(data.skippers || []);
+  const GROUP_KEYS = ["tete", "centre", "queue"];
+  const groups = { tete: new Set(), centre: new Set(), queue: new Set() };
+  const skippers = new Set();
+
+  function loadGroups(raw) {
+    GROUP_KEYS.forEach((k) => groups[k].clear());
+    const src = raw && typeof raw === "object" ? raw : null;
+    const explicit = !!(src && GROUP_KEYS.some((k) => Array.isArray(src[k])));
+    const seen = new Set();
+    const take = (key, name) => {
+      const text = String(name || "").trim();
+      if (!text || seen.has(text)) return;
+      seen.add(text);
+      groups[key].add(text);
+    };
+    if (explicit) {
+      GROUP_KEYS.forEach((k) => (src[k] || []).forEach((name) => take(k, name)));
+    } else {
+      (data.skippers || []).forEach((name) => take("centre", name));
+    }
+    skippers.clear();
+    GROUP_KEYS.forEach((k) => groups[k].forEach((n) => skippers.add(n)));
+  }
+  loadGroups(data.groups);
+
+  function groupOf(name) {
+    for (let i = 0; i < GROUP_KEYS.length; i++) {
+      if (groups[GROUP_KEYS[i]].has(name)) return GROUP_KEYS[i];
+    }
+    return "";
+  }
+
+  function setSkipperGroup(name, key) {
+    GROUP_KEYS.forEach((k) => groups[k].delete(name));
+    if (key && groups[key]) groups[key].add(name);
+    skippers.clear();
+    GROUP_KEYS.forEach((k) => groups[k].forEach((n) => skippers.add(n)));
+  }
+
+  function groupsPayload() {
+    return {
+      tete: [...groups.tete],
+      centre: [...groups.centre],
+      queue: [...groups.queue],
+    };
+  }
   const trafics = (data.trafics || data.vacations || []).filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lon));
   const TX_MAX = 5;
   let txSites = (data.tx_sites || []).filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon)).slice(0, TX_MAX);
@@ -351,6 +396,11 @@
     return boats.filter((b) => skippers.has(b.name));
   }
 
+  function boatsOf(key) {
+    const set = groups[key];
+    return boats.filter((b) => set && set.has(b.name));
+  }
+
   function sphericalCentroid(pts) {
     if (!pts.length) return null;
     let x = 0;
@@ -372,7 +422,9 @@
   }
 
   function fleetCenter() {
-    return sphericalCentroid(selectedBoats().map((b) => [b.lat, b.lon]));
+    const centre = boatsOf("centre");
+    const sel = centre.length ? centre : selectedBoats();
+    return sphericalCentroid(sel.map((b) => [b.lat, b.lon]));
   }
 
   function fleetRingKm(center) {
@@ -442,8 +494,188 @@
     return ang;
   }
 
+  function uprightDelta(ang) {
+    const n = ((ang % 360) + 360) % 360;
+    return n > 90 && n < 270 ? 180 : 0;
+  }
+
+  // Horizon : au zoom, une partie du parallèle est derrière le limbe.
+  // Sa projection revient vers le centre du disque. Sans ce test, le libellé
+  // quitte le cercle selon le zoom et la rotation.
+  function onVisibleDisc(lat, lon) {
+    if (mapMode === "2d") return true;
+    try {
+      if (
+        !globe ||
+        typeof globe.getCoords !== "function" ||
+        typeof globe.camera !== "function" ||
+        typeof globe.getGlobeRadius !== "function"
+      ) {
+        return true;
+      }
+      const p = globe.getCoords(lat, lon, 0);
+      const cam = globe.camera();
+      if (!p || !cam || !cam.position) return true;
+      const R = Number(globe.getGlobeRadius());
+      const cx = cam.position.x;
+      const cy = cam.position.y;
+      const cz = cam.position.z;
+      const clen = Math.hypot(cx, cy, cz);
+      const plen = Math.hypot(p.x, p.y, p.z);
+      if (!(R > 0) || !(plen > 0) || !(clen > R + 1)) return true;
+      const cos = (p.x * cx + p.y * cy + p.z * cz) / (plen * clen);
+      return cos > R / clen + 1e-4;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  // Échantillons du parallèle encore devant le limbe, tronçon qui contient l’ancre.
+  function parallelRun(lat, lon) {
+    const step = 0.45;
+    const half = 55;
+    const runs = [];
+    let cur = [];
+    function flush() {
+      if (cur.length >= 2) runs.push(cur);
+      cur = [];
+    }
+    for (let d = -half; d <= half + 1e-6; d += step) {
+      let L = lon + d;
+      if (L > 180) L -= 360;
+      if (L < -180) L += 360;
+      if (!onVisibleDisc(lat, L)) {
+        flush();
+        continue;
+      }
+      const p = projectLatLon(lat, L);
+      if (!p) {
+        flush();
+        continue;
+      }
+      if (cur.length) {
+        const prev = cur[cur.length - 1];
+        const jump = Math.hypot(p.x - prev.x, p.y - prev.y);
+        const ref =
+          cur.length >= 2
+            ? Math.hypot(prev.x - cur[cur.length - 2].x, prev.y - cur[cur.length - 2].y)
+            : jump;
+        if (jump > Math.max(90, ref * 4)) flush();
+      }
+      cur.push({ d: d, x: p.x, y: p.y });
+    }
+    flush();
+    for (let i = 0; i < runs.length; i++) {
+      const seg = runs[i];
+      if (seg.some(function (p) { return Math.abs(p.d) < step * 1.5; })) return seg;
+    }
+    return [];
+  }
+
+  function arcAlong(seg) {
+    const cum = [0];
+    for (let i = 1; i < seg.length; i++) {
+      cum.push(cum[i - 1] + Math.hypot(seg[i].x - seg[i - 1].x, seg[i].y - seg[i - 1].y));
+    }
+    let anchorS = null;
+    for (let i = 1; i < seg.length; i++) {
+      if (seg[i - 1].d <= 0 && seg[i].d >= 0) {
+        const spanD = seg[i].d - seg[i - 1].d || 1;
+        const t = (0 - seg[i - 1].d) / spanD;
+        anchorS = cum[i - 1] + t * (cum[i] - cum[i - 1]);
+        break;
+      }
+    }
+    if (anchorS == null) {
+      let best = 0;
+      let bestAbs = Infinity;
+      for (let i = 0; i < seg.length; i++) {
+        const ad = Math.abs(seg[i].d);
+        if (ad < bestAbs) {
+          bestAbs = ad;
+          best = i;
+        }
+      }
+      anchorS = cum[best];
+    }
+    function tangent(i0, i1) {
+      const dx = seg[i1].x - seg[i0].x;
+      const dy = seg[i1].y - seg[i0].y;
+      if (dx * dx + dy * dy < 1) return 0;
+      return (Math.atan2(dy, dx) * 180) / Math.PI;
+    }
+    function at(s) {
+      const last = cum[cum.length - 1];
+      if (s <= 0) return { x: seg[0].x, y: seg[0].y, ang: tangent(0, 1), inside: s >= -4 };
+      if (s >= last) {
+        const n = seg.length;
+        return { x: seg[n - 1].x, y: seg[n - 1].y, ang: tangent(n - 2, n - 1), inside: s <= last + 4 };
+      }
+      for (let i = 1; i < seg.length; i++) {
+        if (s <= cum[i]) {
+          const span = cum[i] - cum[i - 1] || 1;
+          const t = (s - cum[i - 1]) / span;
+          return {
+            x: seg[i - 1].x + t * (seg[i].x - seg[i - 1].x),
+            y: seg[i - 1].y + t * (seg[i].y - seg[i - 1].y),
+            ang: tangent(i - 1, i),
+            inside: true,
+          };
+        }
+      }
+      return { x: seg[0].x, y: seg[0].y, ang: 0, inside: false };
+    }
+    return { at: at, anchorS: anchorS };
+  }
+
+  // Libellé long : une lettre après l’autre sur le parallèle, tangente locale
+  // comme le libellé de distance sur son trait.
+  function applyAezCurve(row) {
+    const host = row.el;
+    const chars = host.children;
+    if (!chars.length) return;
+    const anchor = projectLatLon(row.lat, row.lon);
+    const seg = anchor ? parallelRun(row.lat, row.lon) : [];
+    if (!anchor || seg.length < 2) {
+      for (let i = 0; i < chars.length; i++) chars[i].style.visibility = "hidden";
+      return;
+    }
+    const arc = arcAlong(seg);
+    const widths = [];
+    let total = 0;
+    let pending = false;
+    for (let i = 0; i < chars.length; i++) {
+      const w = chars[i].getBoundingClientRect().width;
+      if (!(w > 0.5)) pending = true;
+      const use = w > 0.5 ? w : 7.2;
+      widths.push(use);
+      total += use;
+    }
+    const delta = uprightDelta(arc.at(arc.anchorS).ang);
+    let cursor = arc.anchorS - total / 2;
+    const ax = anchor.x;
+    const ay = anchor.y;
+    for (let i = 0; i < chars.length; i++) {
+      const mid = cursor + widths[i] / 2;
+      const p = arc.at(mid);
+      const ang = p.ang + delta;
+      chars[i].style.visibility = p.inside ? "visible" : "hidden";
+      chars[i].style.transform =
+        "translate(" + (p.x - ax) + "px," + (p.y - ay) + "px) translate(-50%,-50%) rotate(" + ang + "deg)";
+      cursor += widths[i];
+    }
+    if (pending && (row._layoutTries || 0) < 8) {
+      row._layoutTries = (row._layoutTries || 0) + 1;
+      scheduleKmAlign();
+    }
+  }
+
   function applyKmLabelAngle(row) {
     if (!row || !row.el) return;
+    if (row.kind === "aez") {
+      applyAezCurve(row);
+      return;
+    }
     const ang = screenAlongDeg(row.tanA, row.tanB, row.fallback);
     row.el.style.transform = "translate(-50%,-50%) rotate(" + ang + "deg)";
   }
@@ -553,10 +785,18 @@
     return rows;
   }
 
-  /** Libellé Ice Antarctic Exclusion Zone sur le parallèle 48° S. */
+  /** Libellé complet sur le parallèle 48° S. Les lettres suivent la courbe. */
   function aezLabelPoints() {
-    // Atlantique sud : lisible face à la flotte GGR actuelle.
-    return [{ lat: AEZ_LAT, lon: -20, lng: -20, kind: "aez", name: t("aez_label") }];
+    const lon = -20;
+    return [
+      {
+        lat: AEZ_LAT,
+        lon: lon,
+        lng: lon,
+        kind: "aez",
+        name: t("aez_label"),
+      },
+    ];
   }
 
   function fmtLatLon(lat, lon) {
@@ -664,6 +904,22 @@
       wrap.title = d.name || "";
       return wrap;
     }
+    if (d.kind === "aez") {
+      const host = document.createElement("span");
+      host.className = "globe-mark__aez-run";
+      Array.from(d.name || "").forEach(function (ch) {
+        const span = document.createElement("span");
+        span.className = "globe-mark__aez-ch";
+        span.textContent = ch;
+        host.appendChild(span);
+      });
+      wrap.appendChild(host);
+      wrap.title = d.name || "";
+      const row = { el: host, kind: "aez", lat: d.lat, lon: d.lon };
+      kmLabelNodes.push(row);
+      applyKmLabelAngle(row);
+      return wrap;
+    }
     if (d.kind === "link_km" || d.kind === "tx_km") {
       const km = document.createElement("span");
       km.className = "globe-mark__km";
@@ -687,17 +943,6 @@
       lab.textContent = d.name || "GGR 2026 — trafic HF";
       wrap.style.opacity = String(d.opacity != null ? d.opacity : 1);
       wrap.appendChild(lab);
-      return wrap;
-    }
-    if (d.kind === "aez") {
-      wrap.style.width = "auto";
-      wrap.style.height = "auto";
-      wrap.style.pointerEvents = "none";
-      const lab = document.createElement("span");
-      lab.className = "globe-mark__aez";
-      lab.textContent = d.name || "Ice Antarctic Exclusion Zone";
-      wrap.appendChild(lab);
-      wrap.title = d.name || "";
       return wrap;
     }
     const icon = document.createElement("span");
@@ -772,7 +1017,8 @@
       .concat(txLinkPaths());
   }
 
-  // Ice Antarctic Exclusion Zone GGR : parallèle 48° S (cercle pointillé).
+  // Ice Antarctic Exclusion Zone GGR : parallèle 48° S.
+  // stroke 1 : même épaisseur d’écran que le cercle de la flotte.
   const AEZ_LAT = -48;
   const AEZ_DASH_DEG = 2.8;
   const AEZ_GAP_DEG = 1.6;
@@ -790,7 +1036,7 @@
         ],
         color: "rgba(190, 220, 255, 0.7)",
         stroke: 1,
-        dash: true,
+        dash: false,
       });
       lon = b + AEZ_GAP_DEG;
     }
@@ -835,16 +1081,31 @@
     return out;
   }
 
+  const RING_COLOR = {
+    tete: "rgba(232,197,71,0.62)",
+    centre: "rgba(244,230,195,0.55)",
+    queue: "rgba(186,214,232,0.62)",
+  };
+
   function fleetRingPaths() {
-    const center = fleetCenter();
-    if (!center) return [];
-    return [
-      {
-        coords: circleCoords(center.lat, center.lon, fleetRingKm(center), 72),
-        color: "rgba(244,230,195,0.55)",
+    const out = [];
+    GROUP_KEYS.forEach((key) => {
+      const sel = boatsOf(key);
+      if (!sel.length) return;
+      const center = sphericalCentroid(sel.map((b) => [b.lat, b.lon]));
+      if (!center) return;
+      const maxD = Math.max.apply(
+        null,
+        sel.map((b) => haversineKm(center.lat, center.lon, b.lat, b.lon))
+      );
+      const km = Math.max(40, maxD * 1.15);
+      out.push({
+        coords: circleCoords(center.lat, center.lon, km, 72),
+        color: RING_COLOR[key] || RING_COLOR.centre,
         stroke: 1,
-      },
-    ];
+      });
+    });
+    return out;
   }
 
   // Tirets SDR : ~20 km / trou 16 km. pathStroke 2 = 2 px écran (Line2), pas arcStroke.
@@ -1168,20 +1429,27 @@
 
   function renderSkippers() {
     if (!skipEl) return;
-    skipEl.querySelectorAll('input[name="fleet_skipper"], input[name="buddy_skipper"], input[data-skipper]').forEach((inp) => {
-      const name = inp.value || inp.getAttribute("data-skipper");
-      if (name) inp.checked = boatInBuddy(name);
+    skipEl.querySelectorAll('select[name="fleet_group"]').forEach((sel) => {
+      const name = sel.getAttribute("data-skipper");
+      if (name) sel.value = groupOf(name);
     });
   }
 
   if (skipEl) {
     skipEl.addEventListener("change", (ev) => {
       const inp = ev.target;
-      if (!inp || inp.type !== "checkbox") return;
+      if (!inp) return;
+      if (inp.tagName === "SELECT" && inp.getAttribute("name") === "fleet_group") {
+        const name = inp.getAttribute("data-skipper");
+        if (!name) return;
+        setSkipperGroup(name, inp.value);
+        refreshGlobe();
+        return;
+      }
+      if (inp.type !== "checkbox") return;
       const name = inp.value || inp.getAttribute("data-skipper");
       if (!name) return;
-      if (inp.checked) skippers.add(name);
-      else skippers.delete(name);
+      setSkipperGroup(name, inp.checked ? "centre" : "");
       refreshGlobe();
     });
   }
@@ -1353,8 +1621,7 @@
       const btn = document.getElementById("globe-toggle-skip");
       if (btn) {
         btn.addEventListener("click", () => {
-          if (skippers.has(d.name)) skippers.delete(d.name);
-          else skippers.add(d.name);
+          setSkipperGroup(d.name, skippers.has(d.name) ? "" : "centre");
           renderSkippers();
           refreshGlobe();
           onPointClick({ ...d, inBuddy: skippers.has(d.name) });
@@ -2227,16 +2494,16 @@
         const lon = Number.isFinite(d.lon) ? d.lon : d.lng;
         if (!Number.isFinite(lon)) return;
         const boat = d.kind === "boat";
-        const aez = d.kind === "aez";
+        const alongLab = d.kind === "link_km" || d.kind === "tx_km" || d.kind === "aez";
         const node = markerEl(d);
         const m = L.marker([d.lat, lon], {
           icon: L.divIcon({
             className: "ggr-leaflet-icon",
             html: "",
-            iconSize: boat ? [22, 22] : d.kind === "kiwi_all" ? [4, 4] : aez ? [1, 1] : [12, 12],
-            iconAnchor: boat ? [11, 11] : d.kind === "kiwi_all" ? [2, 2] : aez ? [0, 0] : [6, 6],
+            iconSize: boat ? [22, 22] : d.kind === "kiwi_all" ? [4, 4] : [12, 12],
+            iconAnchor: boat ? [11, 11] : d.kind === "kiwi_all" ? [2, 2] : [6, 6],
           }),
-          interactive: d.kind !== "link_km" && d.kind !== "tx_km" && !aez,
+          interactive: !alongLab,
           keyboard: false,
         }).addTo(mapLayers);
         const mount = () => {
@@ -2619,13 +2886,12 @@
           headers: { "Content-Type": "application/json", "X-Admin-Token": tok },
           body: JSON.stringify({
             tx_khz: cur.tx_khz,
-            ack1_khz: cur.ack1_khz,
-            ack2_khz: cur.ack2_khz,
             qrg_tolerance_khz: cur.qrg_tolerance_khz,
             lead_minutes: cur.schedule_lead,
             duration_minutes: cur.duration_minutes,
             buddy_skippers: [...skippers],
             skippers: [...skippers],
+            groups: groupsPayload(),
           }),
         });
         const body = await res.json().catch(() => ({}));
@@ -2695,8 +2961,6 @@
           headers: { "Content-Type": "application/json", "X-Admin-Token": tok },
           body: JSON.stringify({
             tx_khz: cur.tx_khz,
-            ack1_khz: cur.ack1_khz,
-            ack2_khz: cur.ack2_khz,
             qrg_tolerance_khz: cur.qrg_tolerance_khz,
             lead_minutes: cur.schedule_lead,
             duration_minutes: cur.duration_minutes,

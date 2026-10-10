@@ -57,7 +57,7 @@ a:hover { text-decoration: underline; }
 
 .qrg-bar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 1px;
   background: var(--line);
   border-bottom: 1px solid var(--line);
@@ -1167,6 +1167,35 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   white-space: nowrap;
   pointer-events: none;
 }
+.globe-mark__aez-run {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  color: #f4e6c3;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: pre;
+  text-shadow:
+    0 0 3px #02050a,
+    0 0 6px #02050a,
+    1px 0 0 #02050a,
+    -1px 0 0 #02050a,
+    0 1px 0 #02050a,
+    0 -1px 0 #02050a;
+}
+.globe-mark__aez-ch {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: pre;
+  line-height: 1;
+}
 .globe-mark--link_km { pointer-events: none; }
 .globe-mark--tx_km { pointer-events: none; }
 .globe-mark--tx_km .globe-mark__km { color: #e8c547; }
@@ -1436,7 +1465,27 @@ body.kiwi-panel-off .kiwi-toggle__arr {
   padding: 0;
   list-style: none;
 }
-.skipper-list label { display: flex; gap: 0.4rem; align-items: center; }
+.skipper-list label {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  justify-content: space-between;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.92rem;
+  color: var(--foam);
+}
+.skipper-list select {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--foam);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 0.2rem 0.35rem;
+  max-width: 8.5rem;
+}
 .settings-msg {
   min-height: 1.4em;
   margin: 0.45rem 0 0;
